@@ -40,7 +40,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     private Exception? _lastError;
     private ApiEnvelope<MemoryTools.SearchResultList>? _lastSearchEnvelope;
     private JsonObject? _lastSearchJson;
-    private ApiEnvelope<CodeTools.CodeGetResult>? _lastCodeGetEnvelope;
+    private ApiEnvelope<EntryTools.GetEntryResult>? _lastCodeGetEnvelope;
     private string? _lastFilePath;
     private string? _manifestDir;
     private string? _rescanProbePath;
@@ -111,7 +111,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         _lastError = null;
         try
         {
-            _lastCodeGetEnvelope = await Ctx.CodeTools.CodeGet(projectId, hash);
+            _lastCodeGetEnvelope = await Ctx.EntryTools.GetEntry(projectId, hash);
         }
         catch (Exception ex)
         {
@@ -196,7 +196,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         return (await connection.QueryAsync<string>("SELECT name FROM sqlite_master WHERE type = 'table'")).ToList();
     }
 
-    // ── Rule: memory_search's kind parameter selects and shapes the response envelope ──
+    // ── Rule: query's kind parameter selects and shapes the response envelope ──
 
     [Given("^a project with memory entries and code chunks$")]
     public async Task GivenProjectWithMemoryAndCode()
@@ -213,13 +213,13 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     public Task GivenProjectWithCodeChunks() =>
         SeedCodeEntryAsync("code-hash-scope", "src/Scope.cs", $"sealed class ScopeToken {{ {_searchQuery} }}", 1, 2);
 
-    [When("^I call memory_search for the project without a kind$")]
+    [When("^I call query for the project without a kind$")]
     public Task WhenSearchWithoutKind() => RunSearchAsync(DefaultProject, _searchQuery);
 
-    [When("^I call memory_search for the project with kind \"([^\"]*)\"$")]
+    [When("^I call query for the project with kind \"([^\"]*)\"$")]
     public Task WhenSearchWithKind(string kind) => RunSearchAsync(DefaultProject, _searchQuery, kind: kind);
 
-    [When("^I call memory_search for the project with kind \"([^\"]*)\" and scope \"([^\"]*)\"$")]
+    [When("^I call query for the project with kind \"([^\"]*)\" and scope \"([^\"]*)\"$")]
     public Task WhenSearchWithKindAndScope(string kind, string scope) => RunSearchAsync(DefaultProject, _searchQuery, kind: kind, scope: scope);
 
     [Then("^the response contains a \"results\" key with the memory hits$")]
@@ -250,7 +250,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     [Then("^the tool errors with invalid-params naming the allowed kinds$")]
     public void ThenToolErrorsInvalidParamsNamingKinds()
     {
-        _lastError.ShouldNotBeNull("expected memory_search to refuse the invalid kind");
+        _lastError.ShouldNotBeNull("expected query to refuse the invalid kind");
         _lastError!.Message.ShouldContain("invalid-params");
         _lastError.Message.ShouldContain("memory");
         _lastError.Message.ShouldContain("code");
@@ -274,16 +274,16 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         _lastSearchJson["code"]!.AsArray().Count.ShouldBe(0);
     }
 
-    // ── Rule: code_get reads one code chunk's full source by content hash ──
+    // ── Rule: get_entry reads one code chunk's full source by content hash ──
 
     [Given("^a code chunk ingested with a known content hash$")]
     public Task GivenCodeChunkWithKnownHash() =>
         SeedCodeEntryAsync("code-hash-known", "src/Known.cs", "sealed class KnownChunk { }", 4, 7);
 
-    [When("^I call code_get for the project on that hash$")]
+    [When("^I call get_entry for the project on that hash$")]
     public Task WhenCodeGetOnKnownHash() => RunCodeGetAsync(DefaultProject, "code-hash-known");
 
-    [When("^I call code_get for the project on a hash nothing was ingested under$")]
+    [When("^I call get_entry for the project on a hash nothing was ingested under$")]
     public Task WhenCodeGetOnUnknownHash() => RunCodeGetAsync(DefaultProject, "no-such-hash");
 
     [Then("^the response contains the chunk's value, path, and line range$")]
@@ -333,7 +333,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         _lastFilePath = filePath;
     }
 
-    [When("^I call memory_watch_add for the project on path \"([^\"]*)\"$")]
+    [When("^I call add_watch for the project on path \"([^\"]*)\"$")]
     public async Task WhenCallWatchAddForProject(string virtualPath)
     {
         _lastError = null;
@@ -356,7 +356,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         }
     }
 
-    [When("^I call memory_watch_add for the project on path \"([^\"]*)\" again$")]
+    [When("^I call add_watch for the project on path \"([^\"]*)\" again$")]
     public async Task WhenCallWatchAddForProjectAgain(string virtualPath)
     {
         _lastError = null;
@@ -371,7 +371,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         }
     }
 
-    [When("^I call memory_ingest_directory for the project on path \"([^\"]*)\"$")]
+    [When("^I call ingest_directory for the project on path \"([^\"]*)\"$")]
     public async Task WhenCallIngestDirectory(string virtualPath)
     {
         _lastError = null;
@@ -388,7 +388,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
 
     private int _lastIngestIndexed;
 
-    [When("^I call memory_ingest_file for the project on path \"([^\"]*)\"$")]
+    [When("^I call ingest_file for the project on path \"([^\"]*)\"$")]
     public async Task WhenCallIngestFile(string virtualPath)
     {
         _lastError = null;
@@ -619,7 +619,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         _lastError!.Message.ShouldContain("model code set local");
     }
 
-    [Then("^memory_search with kind \"([^\"]*)\" for the same project still succeeds$")]
+    [Then("^query with kind \"([^\"]*)\" for the same project still succeeds$")]
     public async Task ThenSearchWithKindStillSucceeds(string kind)
     {
         var envelope = await Ctx.MemoryTools.Search(DefaultProject, _searchQuery, sessionId: "sess-test", kind: kind);
@@ -748,10 +748,10 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         // Deliberately never runs the reindex job here -- rows stay pending, simulating the drain window.
     }
 
-    [When("^memory_search is called for the project with kind \"([^\"]*)\"$")]
+    [When("^query is called for the project with kind \"([^\"]*)\"$")]
     public Task WhenMemorySearchIsCalledForProjectWithKind(string kind) => RunSearchAsync(DefaultProject, _searchQuery, kind: kind);
 
-    [When("^I call memory_search for the project with kind \"([^\"]*)\" with session \"([^\"]*)\"$")]
+    [When("^I call query for the project with kind \"([^\"]*)\" with session \"([^\"]*)\"$")]
     public Task WhenSearchWithKindAndSession(string kind, string session) =>
         RunSearchAsync(DefaultProject, _searchQuery, kind: kind, sessionId: session);
 

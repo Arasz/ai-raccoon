@@ -278,7 +278,7 @@ def test_default_pair_off_marker_leak_raises(runner, tmp_path, monkeypatch) -> N
 
 
 def test_scoping_calls_carry_query_project_id(runner, corpus_path) -> None:
-    """Every built memory_search call carries the query's OWN projectId (research
+    """Every built query call carries the query's OWN projectId (research
     record §3: cross-project scoping silently serves 0/8 overlap)."""
     queries = runner.load_corpus(corpus_path)
     calls = runner.build_search_calls(queries)
@@ -286,7 +286,7 @@ def test_scoping_calls_carry_query_project_id(runner, corpus_path) -> None:
         ["jsaa", "ai-raccoon", "hermes-default"]
     assert [call["arguments"]["query"] for call in calls] == [q.query for q in queries]
     assert all(call["arguments"]["limit"] == runner.SEARCH_LIMIT for call in calls)
-    assert all(call["name"] == "memory_search" for call in calls)
+    assert all(call["name"] == "query" for call in calls)
     assert all(call["arguments"]["sessionId"] for call in calls)
 
 

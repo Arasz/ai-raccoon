@@ -2,7 +2,7 @@ namespace AiRaccoon.Tools;
 
 /// <summary>
 ///     The MCP tool surface generated from this assembly's `[McpServerTool]` methods. Infrastructure
-///     cannot see these types, so `memory_performance` passes the inventory in as data.
+///     cannot see these types, so `get_engine_statistics` passes the inventory in as data.
 /// </summary>
 public static class McpToolInventory
 {

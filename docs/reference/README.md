@@ -26,7 +26,7 @@ packaging metadata. Filenames are bare nouns.
 - [`releases-and-publishing.md`](releases-and-publishing.md): how a GitHub release
   tag relates to (and doesn't guarantee) a nuget.org package, and how to check what's
   actually installable.
-- [`search-parameters.md`](search-parameters.md): every `memory_search` tuning
+- [`search-parameters.md`](search-parameters.md): every `query` tuning
   parameter, its settings-table key, its CLI verb, and its default, with the
   precedence order between them.
 - [`whats-new-history.md`](whats-new-history.md): archived release highlights,

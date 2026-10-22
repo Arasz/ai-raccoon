@@ -26,7 +26,7 @@ public sealed class PromotionQueueServicePromoteRaceTests
         var queue = new RaceyQueueStore();
         queue.Rows.Add(new PromotionQueueRow("acme", "h1", "h1.md", "fact one", null, 5.0, [], 0, 0));
         queue.Rows.Add(new PromotionQueueRow("acme", "h2", "h2.md", "fact two", null, 3.0, [], 0, 0));
-        // Simulates memory_promotion_discard("acme", "h1") winning the race between this
+        // Simulates delete_memory_from_ranking("acme", "h1") winning the race between this
         // PromoteAsync's ListAsync snapshot and the moment it reaches h1's turn to drain.
         queue.AlreadyGoneHashes.Add("h1");
 

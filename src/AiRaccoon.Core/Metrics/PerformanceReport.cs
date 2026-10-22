@@ -21,7 +21,7 @@ public sealed record ToolPerformanceSeries(
     double? Max,
     IReadOnlyList<PerformanceBucket> Buckets);
 
-/// <summary>The `memory_performance` report: one series per tool on the derived inventory.</summary>
+/// <summary>The `get_engine_statistics` report: one series per tool on the derived inventory.</summary>
 public sealed record PerformanceReport(
     DateTimeOffset GeneratedAt,
     TimeSpan Window,

@@ -20,7 +20,7 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 namespace AiRaccoon.Tests.Integration.Mcp;
 
 /// <summary>
-///     memory_search ranking end to end over a real bank and the bundled embedding model: which rows
+///     query ranking end to end over a real bank and the bundled embedding model: which rows
 ///     survive the absolute relevance floor, which row a file#section anchor puts first, and what
 ///     the same-source boost may not overtake.
 /// </summary>

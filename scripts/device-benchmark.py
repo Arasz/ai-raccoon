@@ -393,7 +393,7 @@ class Session:
         # Warm-up: one search builds the engine (sessions are created lazily, on first embed).
         ready_start = time.time()
         compiler_before = _compiler_cpu()
-        server.client.memory_search(WARMUP_PROJECT_ID, "warm up the embedding engine", limit=1)
+        server.client.query(WARMUP_PROJECT_ID, "warm up the embedding engine", limit=1)
         deadline = time.time() + 60
         provider = protocol.provider_from_log(log_path.read_text(errors="replace"))
         while provider is None and time.time() < deadline:
@@ -470,11 +470,11 @@ class Session:
             return {"search_latency_ms": None, "search_p50_ms": None, "search_p95_ms": None}
         queries = protocol.derive_search_queries(self.corpus, self.args.search_queries)
         for _ in range(SEARCH_WARMUP_RUNS):
-            server.client.memory_search(PROJECT_ID, SEARCH_WARMUP_QUERY, limit=SEARCH_LIMIT)
+            server.client.query(PROJECT_ID, SEARCH_WARMUP_QUERY, limit=SEARCH_LIMIT)
         latencies = []
         for query in queries:
             start = time.perf_counter()
-            server.client.memory_search(PROJECT_ID, query, limit=SEARCH_LIMIT)
+            server.client.query(PROJECT_ID, query, limit=SEARCH_LIMIT)
             latencies.append((time.perf_counter() - start) * 1000.0)
         return result.search_latency_fields(latencies)
 

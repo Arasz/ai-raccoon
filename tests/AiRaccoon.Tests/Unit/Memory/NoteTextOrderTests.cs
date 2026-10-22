@@ -13,7 +13,7 @@ public sealed class NoteTextOrderTests
 
     private static readonly string NotePath = $"{ContentHash.OfValue(Note)}.md";
 
-    /// <summary>The note as memory_write stores it: chunked with an overlay, so neighbouring rows repeat text.</summary>
+    /// <summary>The note as add_memory stores it: chunked with an overlay, so neighbouring rows repeat text.</summary>
     private static IReadOnlyList<string> Chunks()
     {
         var chunks = TestData.RealMarkdownChunker().Chunk(Note, 96, 24);
@@ -61,7 +61,7 @@ public sealed class NoteTextOrderTests
         Values(NoteTextOrder.Find(NotePath, Rows(chunks, idOrder, positionOrder))).ShouldBe(chunks);
     }
 
-    /// <summary>memory_write names the path after the body as sent, but the chunker stores it with \n line endings,
+    /// <summary>add_memory names the path after the body as sent, but the chunker stores it with \n line endings,
     /// so a body written with \r\n (or a lone \r) joins back only once those endings are restored.</summary>
     [Theory]
     [InlineData("\r\n")]

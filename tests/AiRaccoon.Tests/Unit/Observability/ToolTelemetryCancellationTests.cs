@@ -23,12 +23,12 @@ public sealed class ToolTelemetryCancellationTests
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
         await Should.ThrowAsync<TaskCanceledException>(() =>
-            ToolTelemetry.RecordAsync(metrics, "memory_search", Arguments("acme-cancel-probe"),
+            ToolTelemetry.RecordAsync(metrics, "query", Arguments("acme-cancel-probe"),
                 _ => ValueTask.FromException<CallToolResult>(new TaskCanceledException()),
                 CancellationToken.None).AsTask());
 
         var recorded = collector.GetMeasurementSnapshot().ShouldHaveSingleItem();
-        recorded.Tags["tool"].ShouldBe("memory_search");
+        recorded.Tags["tool"].ShouldBe("query");
         recorded.Tags["result"].ShouldBe("error");
         recorded.Tags["error.type"].ShouldBe("TaskCanceledException");
         recorded.Tags["project_id"].ShouldBe(ToolTelemetry.RefusedProjectId);

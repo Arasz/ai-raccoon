@@ -55,16 +55,16 @@ public sealed class CwdDefaultProjectIdE2ETests : IAsyncLifetime
         // and write the scope row for a NON-guid project id, proving stored ids flow verbatim.
         await SeedScopeAsync(ProjectId, [Directory.GetCurrentDirectory()]);
 
-        var write = await CallAsync("memory_write", ("projectId", ProjectId),
+        var write = await CallAsync("add_memory", ("projectId", ProjectId),
             ("content", "cwd default resolution fact xyzzy"));
         Text(write).ShouldContain("\"hash\"");
 
         // No projectId argument at all — the server resolves laneA from the cwd's scope row.
-        var search = await CallAsync("memory_search", ("query", "cwd default resolution fact xyzzy"), ("sessionId", "sess-e2e"));
+        var search = await CallAsync("query", ("query", "cwd default resolution fact xyzzy"), ("sessionId", "sess-e2e"));
         Text(search).ShouldContain("cwd default resolution fact xyzzy");
 
         // The resolved id is laneA on a second tool too — stats is scoped to the resolved project.
-        var stats = await CallAsync("memory_stats");
+        var stats = await CallAsync("get_store_statistics");
         Text(stats).ShouldContain("project:laneA");
     }
 
@@ -73,7 +73,7 @@ public sealed class CwdDefaultProjectIdE2ETests : IAsyncLifetime
     {
         // The factory seeds ingest.scope.global (TempPath + DataRoot), but the resolver skips the
         // global key, and no watch rows exist: no project surface contains the cwd.
-        var result = await _client.CallToolAsync("memory_stats", new Dictionary<string, object?>(),
+        var result = await _client.CallToolAsync("get_store_statistics", new Dictionary<string, object?>(),
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Cwd-tolerant: assert the stable prefix + tail around the probed working directory.
@@ -81,7 +81,7 @@ public sealed class CwdDefaultProjectIdE2ETests : IAsyncLifetime
         text.ShouldStartWith(
             "invalid-params: projectId is required (no registered project's scope contains cwd ");
         text.ShouldContain(
-            "; pass projectId explicitly, or register this directory with memory_watch_add / settings ingest scope add)");
+            "; pass projectId explicitly, or register this directory with add_watch / settings ingest scope add)");
     }
 
     /// <summary>
@@ -97,7 +97,7 @@ public sealed class CwdDefaultProjectIdE2ETests : IAsyncLifetime
     {
         await SeedFinishedMarkerAsync();
 
-        var result = await CallAsync("memory_write", ("projectId", "laneA-typo"),
+        var result = await CallAsync("add_memory", ("projectId", "laneA-typo"),
             ("content", "this typo must not become a project"));
 
         RefusalText(result).ShouldStartWith("project-not-registered:");

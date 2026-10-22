@@ -14,6 +14,6 @@ public sealed record PromotionMeta(
     /// </summary>
     public double? OldestWaitSeconds { get; init; }
 
-    /// <summary>Correlation id linking this search response to its quality record; set only on memory_search.</summary>
+    /// <summary>Correlation id linking this search response to its quality record; set only on query.</summary>
     public string? CorrelationId { get; init; }
 }

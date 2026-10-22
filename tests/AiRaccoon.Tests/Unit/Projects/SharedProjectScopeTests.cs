@@ -105,8 +105,8 @@ public sealed class SharedProjectScopeTests
             new MemoryWriteRequest("shared", "note")))
             .Message.ShouldBe("shared-project-unsupported: note writes requires an ordinary project; shared supports document ingestion and watches.");
         Should.NotThrow(() => _scope.EnsureCanExecuteInSharedScope(new MemoryWriteRequest("acme", "note")));
-        Should.Throw<ArgumentException>(() => _scope.EnsureCanExecuteInSharedScope("shared", "memory_write"))
-            .Message.ShouldBe("shared-project-unsupported: memory_write requires an ordinary project; shared supports document ingestion and watches.");
+        Should.Throw<ArgumentException>(() => _scope.EnsureCanExecuteInSharedScope("shared", "add_memory"))
+            .Message.ShouldBe("shared-project-unsupported: add_memory requires an ordinary project; shared supports document ingestion and watches.");
         Should.Throw<ArgumentException>(() => _scope.EnsureCanExecuteInSharedScope(
             new SearchQuery("shared", "example", Scope: SearchScope.Project)))
             .Message.ShouldBe("shared-project-unsupported: search shared with scope all or shared, without a workspace or label.");

@@ -448,10 +448,10 @@ public sealed class WatchDigestExecutorTests
     // Digest_ExplicitMemoryIngestFile_OfAnIgnoredPath_Unaffected_IgnoreAppliesOnlyToTheWatchPath
     // removed (B2 finding, small item 3): it set no ignore rules and exercised WatchDigestExecutor
     // (the watch pipeline, which already resolves its own correct watch-scoped ignore root) rather
-    // than the explicit `memory_ingest_file` pipeline its name and comment described — so it could
+    // than the explicit `ingest_file` pipeline its name and comment described — so it could
     // never fail on the contract it claimed to pin, and that claimed contract (explicit
-    // memory_ingest_file bypassing a watch's ignore rules) is exactly what §2.1/B2 forbids: ignore
-    // now wins for BOTH pipelines. The correct-contract witness for explicit memory_ingest_file
+    // ingest_file bypassing a watch's ignore rules) is exactly what §2.1/B2 forbids: ignore
+    // now wins for BOTH pipelines. The correct-contract witness for explicit ingest_file
     // honoring ignore rules lives with FileIngestor, which owns that pipeline:
     // FileIngestorCodeRoutingTests.IngestFileAsync_ExplicitlyIgnoredMemoryFile_UnderWatchRoot_ReturnsZeroChunks.
 

@@ -10,7 +10,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
-///     project_id_get looks an id up by its exact name: one match is returned, none or several
+///     get_project_id looks an id up by its exact name: one match is returned, none or several
 ///     refuse, and it never registers anything or asks the registration gate about a caller id.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
@@ -78,7 +78,7 @@ public sealed class ProjectIdGetToolTests
         var envelope = await _tools.FindByName("acme", TestContext.Current.CancellationToken);
 
         envelope.Data!.ProjectId.ShouldBe(First);
-        await _gate.Received(1).RequireBankAvailableAsync("project_id_get", Arg.Any<CancellationToken>());
+        await _gate.Received(1).RequireBankAvailableAsync("get_project_id", Arg.Any<CancellationToken>());
         await _gate.DidNotReceiveWithAnyArgs().RequireAsync(default, default, default!, TestContext.Current.CancellationToken);
     }
 

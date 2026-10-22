@@ -8,7 +8,7 @@ namespace AiRaccoon.Tests.Unit.Memory;
 
 /// <summary>
 ///     Combines the tiered guard's verdict, the always-on length verdict and the corpus engine
-///     notes into the one caller-visible warning string memory_search returns (docs/adr/0040,
+///     notes into the one caller-visible warning string query returns (docs/adr/0040,
 ///     docs/adr/0071, F6). Pulled out of MemoryTools so the tool method calls one pure function
 ///     instead of holding the combining logic itself (ToolMethodSizeTests: a tool composes
 ///     services, it does not hold logic).

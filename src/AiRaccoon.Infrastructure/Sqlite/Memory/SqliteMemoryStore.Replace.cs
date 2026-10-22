@@ -74,7 +74,7 @@ public sealed partial class SqliteMemoryStore
     ///     path is a leftover of a previous chunking and is pruned.
     ///     <para>
     ///         Ingest-then-prune, not delete-then-ingest: a blanket delete rewrites every row of an
-    ///         UNCHANGED file and re-queues its embeddings, and `memory_ingest_directory` walks per
+    ///         UNCHANGED file and re-queues its embeddings, and `ingest_directory` walks per
     ///         file, so a no-op directory re-ingest would demote the whole tree in hybrid search
     ///         until it drained.
     ///     </para>

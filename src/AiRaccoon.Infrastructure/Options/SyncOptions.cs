@@ -46,7 +46,7 @@ public static class SyncProviderParser
     }
 }
 
-/// <summary>Sync settings resolved per memory_sync call from the sync.* settings rows.</summary>
+/// <summary>Sync settings resolved per sync_to_cloud call from the sync.* settings rows.</summary>
 public sealed record SyncOptions
 {
     public SyncProvider Provider { get; init; } = SyncProvider.S3;

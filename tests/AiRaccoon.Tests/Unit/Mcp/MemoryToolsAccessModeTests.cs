@@ -75,7 +75,7 @@ public sealed class MemoryToolsAccessModeTests
 
         var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
             _tools.Delete("acme-web", "h1", TestContext.Current.CancellationToken));
-        ex.Message.ShouldContain("memory_delete requires mode full (current rw)");
+        ex.Message.ShouldContain("delete_entry requires mode full (current rw)");
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public sealed class MemoryToolsAccessModeTests
 
         var writeEx = await Should.ThrowAsync<AccessDeniedException>(() =>
             _tools.Write("acme-web", "content", cancellationToken: TestContext.Current.CancellationToken));
-        writeEx.Message.ShouldContain("memory_write requires mode rw (current ro)");
+        writeEx.Message.ShouldContain("add_memory requires mode rw (current ro)");
 
         var results = await _tools.Search("acme-web", "query", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
         results.Data!.Results.Count.ShouldBe(1);
@@ -188,7 +188,7 @@ public sealed class MemoryToolsAccessModeTests
         var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
             _tools.Write("other-app", "content", cancellationToken: TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("memory_write requires mode rw (current ro)");
+        ex.Message.ShouldContain("add_memory requires mode rw (current ro)");
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public sealed class MemoryToolsAccessModeTests
         var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
             _sweep.Sweep("acme-web", false, TestContext.Current.CancellationToken));
 
-        ex.Message.ShouldContain("memory_sweep requires mode full (current rw)");
+        ex.Message.ShouldContain("trigger_memory_cleanup requires mode full (current rw)");
     }
 
     [Fact]
@@ -226,7 +226,7 @@ public sealed class MemoryToolsAccessModeTests
 
         var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
             _promotion.Discard("acme-web", "h1", TestContext.Current.CancellationToken));
-        ex.Message.ShouldContain("memory_promotion_discard requires mode rw (current ro)");
+        ex.Message.ShouldContain("delete_memory_from_ranking requires mode rw (current ro)");
     }
 
     [Theory]

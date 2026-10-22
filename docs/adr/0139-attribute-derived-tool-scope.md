@@ -2,6 +2,18 @@
 
 **This document records a decision. It does not describe the running system.**
 
+Amended 2026-10-22 — **the tool names this record names no longer exist.** Version 2.0.0 renamed
+the whole MCP tool surface, with no aliases: `memory_workspace_*` became
+`initialize_workspace` / `get_workspace_status` / `close_workspace` / `discard_workspace`,
+`memory_promotion_*` became `get_memories_sharing_ranking` / `delete_memory_from_ranking`, and
+the prefix families this record argued against are gone from the names as well as from the
+classification. The decision itself stands and its mechanism is unchanged: every tool still
+declares its scope with `[McpToolScope(...)]`, a method without one is still a build error
+(AIRGEN002), and the classification is still compiled from the declarations rather than kept
+as a second list. The Context's reference to ADR-0137's prefix families is now history: the
+reserved `shared` target's ordinary-only set is named by the tools' own declarations, and
+`get_entry` — the one tool that reads both corpora — declares the `All` scope.
+
 Date: 2026-10-21
 
 Status: Accepted

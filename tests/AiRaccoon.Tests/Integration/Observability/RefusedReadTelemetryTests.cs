@@ -43,10 +43,10 @@ public sealed class RefusedReadTelemetryTests
             try
             {
                 await using var client = await TelemetryServerHost.ConnectAsync(lease.Port, ct);
-                var search = await client.CallToolAsync("memory_search",
+                var search = await client.CallToolAsync("query",
                     new Dictionary<string, object?> { ["projectId"] = refusedId, ["query"] = "x", ["sessionId"] = "sess-refused" },
                     cancellationToken: ct);
-                var stats = await client.CallToolAsync("memory_stats",
+                var stats = await client.CallToolAsync("get_store_statistics",
                     new Dictionary<string, object?> { ["projectId"] = refusedId }, cancellationToken: ct);
                 refused.AddRange([search.IsError, stats.IsError]);
             }
@@ -58,8 +58,8 @@ public sealed class RefusedReadTelemetryTests
             }
 
             measurements.ShouldNotContain(m => m.ProjectId == refusedId);
-            measurements.ShouldContain(m => m.Name == "memory_search" && m.ProjectId == "refused");
-            measurements.ShouldContain(m => m.Name == "memory_stats" && m.ProjectId == "refused");
+            measurements.ShouldContain(m => m.Name == "query" && m.ProjectId == "refused");
+            measurements.ShouldContain(m => m.Name == "get_store_statistics" && m.ProjectId == "refused");
             (await QualityRowsAsync(dataRoot, refusedId, ct)).ShouldBe(0);
             refused.ShouldAllBe(isError => isError == true);
         }

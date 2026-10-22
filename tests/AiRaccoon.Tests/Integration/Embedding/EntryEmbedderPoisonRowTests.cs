@@ -234,7 +234,7 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
             .ShouldBeFalse();
     }
 
-    /// <summary>The structure heal behind memory_embed_pending must not let one unembeddable heading fail every call.</summary>
+    /// <summary>The structure heal behind embed_deferred_entries must not let one unembeddable heading fail every call.</summary>
     [RetryFact]
     public async Task StructureHeal_OnePoisonHeading_HealsTheOthersAndStopsRetryingIt()
     {

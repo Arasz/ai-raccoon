@@ -22,7 +22,7 @@ namespace AiRaccoon.Tests.Integration.Metrics;
 
 /// <summary>
 ///     WP3 AC4 and G4 (reshaped, ruling 2): the `metrics` row count must be unchanged when
-///     memory_search returns, flusher paused
+///     query returns, flusher paused
 ///     (docs/plans/2026-08-15-performance-metrics-implementation.md).
 ///
 ///     WP10 wired <see cref="IMeasurementRecorder" /> into <c>MemoryTools.Search</c> itself — the
@@ -86,7 +86,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
         await _tools.Search("acme", "chassis", sessionId: "sess-test", cancellationToken: TestContext.Current.CancellationToken);
 
         var after = await CountMetricsRowsAsync();
-        after.ShouldBe(before, "no measurement may be written on the caller's thread during memory_search");
+        after.ShouldBe(before, "no measurement may be written on the caller's thread during query");
     }
 
     /// <summary>
@@ -114,7 +114,7 @@ public sealed class SearchMetricsIsolationTests : IDisposable
     }
 
     /// <summary>
-    ///     AC1: a memory_search results in ten series measurements (nine phases plus the measured
+    ///     AC1: a query results in ten series measurements (nine phases plus the measured
     ///     total) — enqueued synchronously (G4 forbids only the *table* write, never enqueueing) and
     ///     reaching the `metrics` table once flushed, each carrying the query hash and this call's
     ///     own correlation id, and no query text anywhere in the row (SqliteMetricsStore's save-time

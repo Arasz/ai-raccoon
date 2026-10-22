@@ -6,7 +6,7 @@ using static AiRaccoon.Infrastructure.Sqlite.Sql;
 namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>
-///     The delete family: <see cref="DeleteAsync" /> (memory_delete's whole-write reach, N7/F26),
+///     The delete family: <see cref="DeleteAsync" /> (delete_entry's whole-write reach, N7/F26),
 ///     the sweep's <see cref="DeleteInScopeAsync" />, <see cref="DeleteContextAsync" />,
 ///     <see cref="DeleteSourcePathAsync" />, and the tombstone-then-delete core they share
 ///     (ADR-0035/WP5a). WP8's write/ingest seam
@@ -30,7 +30,7 @@ public sealed partial class SqliteMemoryStore
     ///     The sweep's own delete (H2): restricted to the one scope it enumerated, so a
     ///     project-scoped pass cannot also remove a sibling row that shares this hash in another
     ///     scope or workspace — hash alone is not a unique row (ContentHash.Of has no scope
-    ///     input). Unlike <see cref="DeleteAsync" />/memory_delete, which targets a hash wherever
+    ///     input). Unlike <see cref="DeleteAsync" />/delete_entry, which targets a hash wherever
     ///     it lives; this is a narrower, internal verb, not a public tool.
     /// </summary>
     public async Task<bool> DeleteInScopeAsync(string projectId, string hash, string scope,

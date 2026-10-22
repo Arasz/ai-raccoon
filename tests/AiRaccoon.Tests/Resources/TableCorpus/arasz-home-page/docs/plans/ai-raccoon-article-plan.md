@@ -72,7 +72,7 @@ Each section: **Hook** (the sentence that opens it) · **Angle** (one line) · *
 
 ### S3 — Isolation: projects, a shared tier, and workspace sandboxes
 - **Hook:** "Memory that every project can read is noise; memory that no other project can read is amnesia."
-- **Angle:** three native isolation mechanisms doing three different jobs — `project:<id>` partitioning inside one bank, the flat `shared` promotion tier (via `memory_share`, exempt from degradation sweeps), and `workspace_id` sandboxes (outbox semantics: notes never enter committed memory until `memory_workspace_consolidate`; discard is free).
+- **Angle:** three native isolation mechanisms doing three different jobs — `project:<id>` partitioning inside one bank, the flat `shared` promotion tier (via `share_memory`, exempt from degradation sweeps), and `workspace_id` sandboxes (outbox semantics: notes never enter committed memory until `close_workspace`; discard is free).
 - **Must include:** the context-partitioning table (shared / project / workspace / custom — scope, synced?, swept?) from `docs/explanation/architecture.md`; the CHECK constraint that enforces workspace↔scope exclusivity (one line, not DDL); workspace lifecycle (begin → status → consolidate/discard, crash-safe `Active` row).
 - **Acceptance criteria:**
   - [ ] The 4-context table carries `<!-- caption: -->` and matches architecture.md's table.
@@ -128,7 +128,7 @@ Each section: **Hook** (the sentence that opens it) · **Angle** (one line) · *
 
 ### S9 — Cloud sync: S3 and Azure Blob
 - **Hook:** "Sync is the correlation point between your machine-wide memory and a project's — and it's off until you turn it on."
-- **Angle:** opt-in `memory_sync` pushes/pulls VACUUM-INTO snapshots with If-Match conflict detection (last-writer-wins with a guard, not a merge protocol); provider-selected via `sync add s3|azure`; credential modes table (prompted keys vs `--cli` chains); Azure needs the container pre-created; sync show redacts secrets.
+- **Angle:** opt-in `sync_to_cloud` pushes/pulls VACUUM-INTO snapshots with If-Match conflict detection (last-writer-wins with a guard, not a merge protocol); provider-selected via `sync add s3|azure`; credential modes table (prompted keys vs `--cli` chains); Azure needs the container pre-created; sync show redacts secrets.
 - **Must include:** the credential-modes table from README (4 rows: Azure conn-string / az CLI / S3 keys / AWS chain — what's stored vs credential source) with caption; the "workspace and shared contexts sync; workspace scratch never does" nuance if it fits in one line.
 - **Acceptance criteria:**
   - [ ] If-Match conflict description is accurate (guard, not merge; verify `SyncService` behavior in code or ADR docs before writing "last-writer-wins").

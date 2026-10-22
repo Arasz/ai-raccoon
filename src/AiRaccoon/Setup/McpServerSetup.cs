@@ -127,7 +127,7 @@ internal static partial class McpServerSetup
                 .AddMcpServer()
                 .ConfigureMcpTransport()
                 .WithTools<MemoryTools>()
-                .WithTools<CodeTools>()
+                .WithTools<EntryTools>()
                 .WithTools<ShareTools>()
                 .WithTools<WorkspaceTools>()
                 .WithTools<SweepTools>()

@@ -3,7 +3,7 @@ using AiRaccoon.Core.Memory.Fusion;
 namespace AiRaccoon.Core.SearchQuality;
 
 /// <summary>
-///     Records memory_search quality signals: search event, follow-through (did the agent use the
+///     Records query quality signals: search event, follow-through (did the agent use the
 ///     result?), and usefulness grade. All three signals land on the same row, keyed by
 ///     <see cref="RecordSearchAsync" />'s <c>correlationId</c>.
 ///     See docs/plans/2026-08-11-search-quality-metric-plan.md.
@@ -11,7 +11,7 @@ namespace AiRaccoon.Core.SearchQuality;
 public interface ISearchQualityService
 {
     /// <summary>
-    ///     Creates a quality record for a memory_search call. Called alongside (not inside) the
+    ///     Creates a quality record for a query call. Called alongside (not inside) the
     ///     search — fire-and-forget from the tool layer. <paramref name="sessionId" /> is the
     ///     calling agent's session id, stored verbatim; every agent has a session, so it is
     ///     required — never null, never blank (the tool boundary rejects blank fail-fast).

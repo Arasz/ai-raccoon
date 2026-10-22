@@ -27,10 +27,10 @@
     "scope": {
         "in": [
             "A second, code-only corpus in the same memory.db: code_entries + code_fts (FTS5) + vec_code (vec0, float[768] fresh-bank default, distance_metric=cosine; reconciled to the active code engine's dimension per ADR-0093)",
-            "memory_search gains kind: memory (default) | code | both; envelope keys 'results' + 'code', kind=memory byte-shape-unchanged (no 'code' key)",
-            "code_get(projectId, hash) mirrors memory_get; unknown hash refused",
+            "query gains kind: memory (default) | code | both; envelope keys 'results' + 'code', kind=memory byte-shape-unchanged (no 'code' key)",
+            "get_entry(projectId, hash) reads the code corpus; unknown hash refused",
             "One watch row serves both corpora — no digest-level classification; each ingestor self-filters by its own file-extension matcher",
-            "ai-raccoon.ignore: one file per watch/tree root, gitignore-subset syntax, filters BOTH pipelines (watch catch-up scans and memory_ingest_directory/memory_ingest_file); ignore wins over an explicit single-file ingest; editing the ignore file triggers a full re-scan",
+            "ai-raccoon.ignore: one file per watch/tree root, gitignore-subset syntax, filters BOTH pipelines (watch catch-up scans and ingest_directory/ingest_file); ignore wins over an explicit single-file ingest; editing the ignore file triggers a full re-scan",
             "Overlapping watch containment: broader watch wins and prunes contained watches (one transaction); narrower-inside-broader is rejected naming the covering watch; equal-path re-add is idempotent",
             "Repo-watch-by-default applies containment to every watch inside the registered root, then catch-up scans the whole repo; hidden directories and a built-in dependency-tree deny set are skipped for repo-root watches",
             "Always-ingest: code files are chunked and stored pending even with no code engine configured; kind=code degrades to FTS5-only with a warning until an engine embeds them",

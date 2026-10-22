@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace AiRaccoon.Core.Memory.QueryGuard;
 
 /// <summary>
-///     Detects a memory_search query that is itself machine output rather than a question
+///     Detects a query query that is itself machine output rather than a question
 ///     (docs/adr/0040). Pure string/regex checks only — no embedding, no I/O — so this runs before
 ///     the 14.6-26.5 ms embedding cost a real query would otherwise pay.
 /// </summary>

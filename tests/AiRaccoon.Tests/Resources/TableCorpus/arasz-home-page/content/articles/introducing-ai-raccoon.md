@@ -48,13 +48,13 @@ Nineteen MCP tools (16 memory, 3 file-watcher) plus 2 agent prompts; every tool 
 
 | Tool | What it does |
 |---|---|
-| `memory_write` | Store a note, returns its content hash |
-| `memory_search` | Hybrid FTS5 + vector search, scoped to project/shared/all |
-| `memory_share` | Promote a hash into the cross-project `shared` tier |
-| `memory_workspace_begin` / `memory_workspace_consolidate` | Open a sandbox, then promote the durable parts |
-| `memory_sweep` | List or run degradation candidates (dry-run by default) |
-| `memory_sync` | Push/pull snapshots to S3 or Azure Blob |
-| `memory_watch_add` | Mirror a path into memory (opt-in) |
+| `add_memory` | Store a note, returns its content hash |
+| `query` | Hybrid FTS5 + vector search, scoped to project/shared/all |
+| `share_memory` | Promote a hash into the cross-project `shared` tier |
+| `initialize_workspace` / `close_workspace` | Open a sandbox, then promote the durable parts |
+| `trigger_memory_cleanup` | List or run degradation candidates (dry-run by default) |
+| `sync_to_cloud` | Push/pull snapshots to S3 or Azure Blob |
+| `add_watch` | Mirror a path into memory (opt-in) |
 
 <!-- caption: The AiRaccoon MCP tools I use most -->
 
@@ -81,7 +81,7 @@ dotnet tool install -g ai-raccoon
 
 Memory that every project can read is noise; memory that no other project can read is amnesia. AiRaccoon has three isolation mechanisms for three different jobs.
 
-`project:<id>` partitioning keeps one project's committed knowledge out of another's search results while sharing a single bank. The flat `shared` tier is the promotion path for cross-project knowledge: `memory_share` moves a hash in, and shared entries are exempt from degradation sweeps, so curated knowledge stays put. Workspaces are sandboxes for in-flight work: `memory_workspace_begin` mints a `workspace_id` whose notes stay in an outbox, invisible to normal searches, until `memory_workspace_consolidate` promotes the keepers and deletes the rest. Discard is free, which makes the workspace the right place for an agent's exploratory notes.
+`project:<id>` partitioning keeps one project's committed knowledge out of another's search results while sharing a single bank. The flat `shared` tier is the promotion path for cross-project knowledge: `share_memory` moves a hash in, and shared entries are exempt from degradation sweeps, so curated knowledge stays put. Workspaces are sandboxes for in-flight work: `initialize_workspace` mints a `workspace_id` whose notes stay in an outbox, invisible to normal searches, until `close_workspace` promotes the keepers and deletes the rest. Discard is free, which makes the workspace the right place for an agent's exploratory notes.
 
 <!-- DIAGRAM: ai-raccoon-contexts -->
 <!-- kind: flowchart -->
@@ -91,7 +91,7 @@ Memory that every project can read is noise; memory that no other project can re
 <!-- node: project:project:<id> -->
 <!-- node: workspace:workspace:<id> (outbox) -->
 <!-- node: custom:custom (docs:api, ...) -->
-<!-- edge: bank->shared:memory_share only -->
+<!-- edge: bank->shared:share_memory only -->
 <!-- edge: bank->project:plain writes -->
 <!-- edge: bank->workspace:workspace_begin -->
 <!-- edge: bank->custom:context label -->
@@ -100,14 +100,14 @@ The four contexts have different lifecycles:
 
 | Context | Scope | Synced? | Swept? |
 |---|---|---|---|
-| `shared` | curated, via `memory_share` only | yes | exempt |
+| `shared` | curated, via `share_memory` only | yes | exempt |
 | `project:<id>` | committed project memory | yes | yes |
 | `workspace:<id>` | sandbox outbox | never | no |
 | custom (`docs:api`, …) | user-defined labels | yes | never |
 
 <!-- caption: Context partitioning: what each partition is for, and whether sync and degradation sweeps touch it -->
 
-A CHECK constraint keeps a row in exactly one world: a committed entry has a scope and no workspace id; a workspace entry has a workspace id and no scope. The lifecycle is crash-safe, too: `memory_workspace_begin` inserts an `Active` row that survives a crash, so an abandoned sandbox stays traceable instead of leaking silently.
+A CHECK constraint keeps a row in exactly one world: a committed entry has a scope and no workspace id; a workspace entry has a workspace id and no scope. The lifecycle is crash-safe, too: `initialize_workspace` inserts an `Active` row that survives a crash, so an abandoned sandbox stays traceable instead of leaking silently.
 
 ## Search: hybrid, structure-aware, and measured
 
@@ -226,7 +226,7 @@ The threat model in [SECURITY.md](https://github.com/Arasz/ai-raccoon/blob/main/
 
 ## Access control: ro, rw, full
 
-> **Warning:** The table below understates what `full` allowed. Until 1.13.0, a caller at `full` could delete another project's memory. The delete path kept its own copy of the context-to-rows mapping, a thousand lines away in another file, and that copy had no scope check. `memory_delete_context` with `context: "project:victim"` bound the project id from the caller-supplied string instead of the caller's own, so it deleted the victim's rows; `context: "shared"` carried no project predicate at all and wiped the cross-project tier. A 2026-08-14 adversarial review ran both against a real server. The precondition held in production, because the deployed bank's global mode is `full` and `memory_sweep` requires it. The gate itself was never bypassed: at the default `rw` the same calls were correctly refused. What was broken is that the rule had been ratified and tested on the write side only. AiRaccoon 1.13.0 fixes it. One function, `ContextScope.RequireWithinProject`, decides whether a context stays inside the caller's project, and every path that accepts an untrusted context now calls it, so `memory_delete_context` refuses a foreign `project:` context and refuses `shared` at every access mode. Read [ADR-0051](https://github.com/Arasz/ai-raccoon/blob/main/docs/adr/0051-a-context-never-names-another-project.md) for the exploit trace and for what the fix deliberately does not cover: access mode still resolves the mode of the project the caller names, with no caller identity anywhere, so it is not an authorization boundary against a caller free to name any project it likes.
+> **Warning:** The table below understates what `full` allowed. Until 1.13.0, a caller at `full` could delete another project's memory. The delete path kept its own copy of the context-to-rows mapping, a thousand lines away in another file, and that copy had no scope check. `delete_context` with `context: "project:victim"` bound the project id from the caller-supplied string instead of the caller's own, so it deleted the victim's rows; `context: "shared"` carried no project predicate at all and wiped the cross-project tier. A 2026-08-14 adversarial review ran both against a real server. The precondition held in production, because the deployed bank's global mode is `full` and `trigger_memory_cleanup` requires it. The gate itself was never bypassed: at the default `rw` the same calls were correctly refused. What was broken is that the rule had been ratified and tested on the write side only. AiRaccoon 1.13.0 fixes it. One function, `ContextScope.RequireWithinProject`, decides whether a context stays inside the caller's project, and every path that accepts an untrusted context now calls it, so `delete_context` refuses a foreign `project:` context and refuses `shared` at every access mode. Read [ADR-0051](https://github.com/Arasz/ai-raccoon/blob/main/docs/adr/0051-a-context-never-names-another-project.md) for the exploit trace and for what the fix deliberately does not cover: access mode still resolves the mode of the project the caller names, with no caller identity anywhere, so it is not an authorization boundary against a caller free to name any project it likes.
 
 Not every tool that can reach the bank should be able to delete it.
 
@@ -244,7 +244,7 @@ The global default is `rw`; per-project overrides beat it, and a project-specifi
 
 Sync is the correlation point between your machine-wide memory and a project's, and it is off until you turn it on.
 
-`memory_sync` pushes and pulls VACUUM INTO snapshots of the bank's committed contexts (shared plus every project) to one cloud object store. Conflict handling is If-Match, not blind last-writer-wins: a push only lands if the remote has not changed since your last pull, and when it has, the sync re-pulls and re-merges the remote rows and tries again. Workspace scratch never syncs; workspace rows are stripped before the snapshot leaves the bank.
+`sync_to_cloud` pushes and pulls VACUUM INTO snapshots of the bank's committed contexts (shared plus every project) to one cloud object store. Conflict handling is If-Match, not blind last-writer-wins: a push only lands if the remote has not changed since your last pull, and when it has, the sync re-pulls and re-merges the remote rows and tries again. Workspace scratch never syncs; workspace rows are stripped before the snapshot leaves the bank.
 
 Four authentication modes, two per backend:
 

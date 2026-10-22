@@ -218,7 +218,7 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
                 .ShouldBeTrue("P3 arms on the job's finished row — earned, never hand-stamped");
 
             var gate = NewRealGate();
-            (await gate.RequireAsync(Loser, AccessRequirement.Write, "memory_write", ct))
+            (await gate.RequireAsync(Loser, AccessRequirement.Write, "add_memory", ct))
                 .ShouldBe(Winner, "E-AC2: a stale-config write under the retired loser folds through to the winner");
 
             var tools = NewRealTools(gate);
@@ -233,7 +233,7 @@ public sealed class ProjectIdsConvergenceTests : IAsyncLifetime
                 .ShouldBe(0, "nothing resurrects the retired loser key");
 
             var refusal = await Should.ThrowAsync<RetiredProjectException>(() =>
-                gate.RequireAsync(Dropped, AccessRequirement.Write, "memory_write", ct));
+                gate.RequireAsync(Dropped, AccessRequirement.Write, "add_memory", ct));
             refusal.Message.ShouldContain(Dropped);
             refusal.Message.ShouldContain("repair");
             (await CountAsync(connection, "SELECT count(*) FROM entries WHERE project_id = @id",

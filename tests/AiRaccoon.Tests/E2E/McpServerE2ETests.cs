@@ -48,13 +48,13 @@ public class McpServerE2ETests : IAsyncLifetime
     [RetryFact]
     public async Task Save_WriteThenStats_ReportsCommittedEntry()
     {
-        var write = await CallAsync("memory_write", ("projectId", "acme"), ("content", "E2E durable fact"));
+        var write = await CallAsync("add_memory", ("projectId", "acme"), ("content", "E2E durable fact"));
 
         var writeText = Text(write);
         writeText.ShouldContain("\"context\":\"project:acme\"");
         writeText.ShouldContain("\"hash\"");
 
-        var stats = await CallAsync("memory_stats", ("projectId", "acme"));
+        var stats = await CallAsync("get_store_statistics", ("projectId", "acme"));
         var statsText = Text(stats);
         statsText.ShouldContain("\"entries\":1");
         statsText.ShouldContain("project:acme");
@@ -63,51 +63,51 @@ public class McpServerE2ETests : IAsyncLifetime
     [RetryFact]
     public async Task Isolation_WorkspaceWrite_IsNotVisibleInProjectScope()
     {
-        var begin = await CallAsync("memory_workspace_begin", ("projectId", "acme"));
+        var begin = await CallAsync("initialize_workspace", ("projectId", "acme"));
         var wsId = JsonDocument.Parse(Text(begin)).RootElement.GetProperty("data").GetProperty("workspaceId").GetString()!;
 
-        await CallAsync("memory_write",
+        await CallAsync("add_memory",
             ("projectId", "acme"),
             ("content", "workspace secret"),
             ("workspaceId", wsId));
 
-        var status = await CallAsync("memory_workspace_status",
+        var status = await CallAsync("get_workspace_status",
             ("projectId", "acme"), ("workspaceId", wsId));
         Text(status).ShouldContain("workspace secret");
 
         // stats counts only committed project entries, so an un-consolidated workspace write
         // must not appear.
-        var stats = await CallAsync("memory_stats", ("projectId", "acme"));
+        var stats = await CallAsync("get_store_statistics", ("projectId", "acme"));
         Text(stats).ShouldContain("\"entries\":0");
     }
 
     [RetryFact]
     public async Task Worktree_BeginStatusConsolidate_EndsWithCommittedEntry()
     {
-        var begin = await CallAsync("memory_workspace_begin",
+        var begin = await CallAsync("initialize_workspace",
             ("projectId", "acme"), ("name", "feature-x"));
         var workspaceId = JsonDocument.Parse(Text(begin)).RootElement.GetProperty("data").GetProperty("workspaceId").GetString();
         workspaceId.ShouldNotBeNullOrWhiteSpace();
 
-        await CallAsync("memory_write",
+        await CallAsync("add_memory",
             ("projectId", "acme"),
             ("content", "durable from worktree"),
             ("workspaceId", workspaceId));
 
-        var status = await CallAsync("memory_workspace_status",
+        var status = await CallAsync("get_workspace_status",
             ("projectId", "acme"), ("workspaceId", workspaceId));
         Text(status).ShouldContain("durable from worktree");
 
-        var consolidate = await CallAsync("memory_workspace_consolidate",
+        var consolidate = await CallAsync("close_workspace",
             ("projectId", "acme"), ("workspaceId", workspaceId), ("keep", new[] { "all" }));
         Text(consolidate).ShouldContain("\"promoted\":1");
 
-        var stats = await CallAsync("memory_stats", ("projectId", "acme"));
+        var stats = await CallAsync("get_store_statistics", ("projectId", "acme"));
         Text(stats).ShouldContain("\"entries\":1");
 
         // Consolidating removes the workspace, so status must say so rather than report an empty
         // outbox — an agent polling for completion has to tell "finished" from "never existed".
-        var statusAfter = await CallAsync("memory_workspace_status",
+        var statusAfter = await CallAsync("get_workspace_status",
             ("projectId", "acme"), ("workspaceId", workspaceId));
         RefusalText(statusAfter).ShouldStartWith("unknown-workspace:");
     }
@@ -115,38 +115,38 @@ public class McpServerE2ETests : IAsyncLifetime
     [RetryFact]
     public async Task Worktree_Discard_RemovesTheOutbox()
     {
-        var begin = await CallAsync("memory_workspace_begin", ("projectId", "acme"));
+        var begin = await CallAsync("initialize_workspace", ("projectId", "acme"));
         var workspaceId = JsonDocument.Parse(Text(begin)).RootElement.GetProperty("data").GetProperty("workspaceId").GetString()!;
 
-        await CallAsync("memory_write",
+        await CallAsync("add_memory",
             ("projectId", "acme"),
             ("content", "to be discarded"),
             ("workspaceId", workspaceId));
 
-        var discard = await CallAsync("memory_workspace_discard",
+        var discard = await CallAsync("discard_workspace",
             ("projectId", "acme"), ("workspaceId", workspaceId));
         Text(discard).ShouldContain("\"discarded\":1");
 
         // Discarding removes the workspace, so status refuses rather than reporting an empty outbox.
-        var status = await CallAsync("memory_workspace_status",
+        var status = await CallAsync("get_workspace_status",
             ("projectId", "acme"), ("workspaceId", workspaceId));
         RefusalText(status).ShouldStartWith("unknown-workspace:");
 
-        var stats = await CallAsync("memory_stats", ("projectId", "acme"));
+        var stats = await CallAsync("get_store_statistics", ("projectId", "acme"));
         Text(stats).ShouldContain("\"entries\":0");
     }
 
     [RetryFact]
     public async Task MoveToShared_PromotesEntry_AndAppearsInSharedScope()
     {
-        var write = await CallAsync("memory_write",
+        var write = await CallAsync("add_memory",
             ("projectId", "acme"), ("content", "cross project convention"));
         var hash = JsonDocument.Parse(Text(write)).RootElement.GetProperty("data").GetProperty("hash").GetString()!;
 
-        var share = await CallAsync("memory_share", ("projectId", "acme"), ("hash", hash));
+        var share = await CallAsync("share_memory", ("projectId", "acme"), ("hash", hash));
         Text(share).ShouldContain("shared");
 
-        var stats = await CallAsync("memory_stats", ("projectId", "acme"));
+        var stats = await CallAsync("get_store_statistics", ("projectId", "acme"));
         var statsText = Text(stats);
         statsText.ShouldContain("\"entries\":1");
         statsText.ShouldContain("shared");
@@ -158,7 +158,7 @@ public class McpServerE2ETests : IAsyncLifetime
         // No AIRACCOON_SQLITECLOUD_* env in the test process: the sync tool must surface
         // the not-configured error as an MCP error rather than crash the server.
         var result = await _client.CallToolAsync(
-            "memory_sync",
+            "sync_to_cloud",
             new Dictionary<string, object?> { ["projectId"] = "acme" },
             null,
             null,
@@ -169,20 +169,20 @@ public class McpServerE2ETests : IAsyncLifetime
     [RetryFact]
     public async Task Embeddings_WithoutConfiguration_WritesStayDeferred_AndKeywordSearchStillWorks()
     {
-        // FR-NM-3 s4 (see docs/work/features-native-memory/native-memory.feature): no engine configured → the write lands pending, memory_embed_pending
+        // FR-NM-3 s4 (see docs/work/features-native-memory/native-memory.feature): no engine configured → the write lands pending, embed_deferred_entries
         // reports zero processed, and the interim FTS5 search still finds the row by keyword.
-        await CallAsync("memory_write",
+        await CallAsync("add_memory",
             ("projectId", "acme"), ("content", "semantic e2e fact"));
 
-        var embed = await CallAsync("memory_embed_pending", ("projectId", "acme"));
+        var embed = await CallAsync("embed_deferred_entries", ("projectId", "acme"));
         var embedText = Text(embed);
         embedText.ShouldContain("\"processed\":0");
         embedText.ShouldContain("\"pending\":1");
 
-        var stats = await CallAsync("memory_stats", ("projectId", "acme"));
+        var stats = await CallAsync("get_store_statistics", ("projectId", "acme"));
         Text(stats).ShouldContain("\"pending\":1");
 
-        var search = await CallAsync("memory_search",
+        var search = await CallAsync("query",
             ("projectId", "acme"), ("query", "semantic e2e"), ("scope", "project"), ("sessionId", "sess-e2e"));
         Text(search).ShouldContain("semantic e2e fact");
     }
@@ -194,10 +194,10 @@ public class McpServerE2ETests : IAsyncLifetime
         // removed by the single-channel ruling); the running server hot-reloads the row.
         await RunConfigCliAsync("model", "embedding", "set", "local");
 
-        await CallAsync("memory_write",
+        await CallAsync("add_memory",
             ("projectId", "acme"), ("content", "locally embedded e2e fact"));
 
-        var stats = await CallAsync("memory_stats", ("projectId", "acme"));
+        var stats = await CallAsync("get_store_statistics", ("projectId", "acme"));
         Text(stats).ShouldContain("\"pending\":0");
     }
 
@@ -208,7 +208,7 @@ public class McpServerE2ETests : IAsyncLifetime
         await RunConfigCliAsync("model", "embedding", "set", "openai", "nomic-embed-text", _openAi.BaseUrl,
             "--api-key", "test-key-123");
 
-        await CallAsync("memory_write",
+        await CallAsync("add_memory",
             ("projectId", "acme"), ("content", "routed e2e fact"));
 
         // The claim under test is routing (model, endpoint, api key), not how many requests the
@@ -221,7 +221,7 @@ public class McpServerE2ETests : IAsyncLifetime
         request.Model.ShouldBe("nomic-embed-text");
         request.Authorization.ShouldBe("Bearer test-key-123");
 
-        var stats = await CallAsync("memory_stats", ("projectId", "acme"));
+        var stats = await CallAsync("get_store_statistics", ("projectId", "acme"));
         Text(stats).ShouldContain("\"pending\":0");
     }
 
@@ -229,17 +229,17 @@ public class McpServerE2ETests : IAsyncLifetime
     public async Task Embeddings_EmbedPending_ProcessesTheQueueAfterConfiguration()
     {
         // FR-NM-3 s5 (see docs/work/features-native-memory/native-memory.feature): deferred writes embed once an engine exists.
-        await CallAsync("memory_write",
+        await CallAsync("add_memory",
             ("projectId", "acme"), ("content", "queued e2e fact"));
 
         await RunConfigCliAsync("model", "embedding", "set", "local");
 
-        var embed = await CallAsync("memory_embed_pending", ("projectId", "acme"));
+        var embed = await CallAsync("embed_deferred_entries", ("projectId", "acme"));
         var embedText = Text(embed);
         embedText.ShouldContain("\"processed\":1");
         embedText.ShouldContain("\"pending\":0");
 
-        var stats = await CallAsync("memory_stats", ("projectId", "acme"));
+        var stats = await CallAsync("get_store_statistics", ("projectId", "acme"));
         Text(stats).ShouldContain("\"pending\":0");
     }
 

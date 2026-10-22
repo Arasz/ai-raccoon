@@ -16,7 +16,7 @@ internal static class McpServerInstructions
         "write, and over the project's own source code. Search it before web search, repo search, or " +
         "asking the user; every call is scoped to a projectId.\n\n" +
         "Memory and code have independent embedding engines, and a fresh install has neither. When a " +
-        "memory_search result carries the warning \"" + SearchWarnings.EngineNotConfiguredPrefix + "\", " +
+        "query result carries the warning \"" + SearchWarnings.EngineNotConfiguredPrefix + "\", " +
         "the memory section came from keyword matching alone: semantic memory matches are missing, not " +
         "absent. Tell the user once, verbatim, to run '" + EmbeddingEngineSetup.DefaultModelCommand + "' " +
         "— it activates the embedding model bundled with the tool — and say that memory results " +

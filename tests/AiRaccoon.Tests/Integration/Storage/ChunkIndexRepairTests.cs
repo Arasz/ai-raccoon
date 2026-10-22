@@ -531,7 +531,7 @@ public sealed class ChunkIndexRepairTests : IDisposable
                 new { sourceFile }))
             .ToDictionary(r => r.Value, r => r.ChunkIndex, StringComparer.Ordinal);
 
-    /// <summary>A memory_write note row whose source_file cites <paramref name="sourceFile" />.</summary>
+    /// <summary>A add_memory note row whose source_file cites <paramref name="sourceFile" />.</summary>
     private static Task InsertNoteAsync(SqliteConnection connection, string sourceFile, string value, int chunkIndex)
     {
         const string notePath = "notes/review.md";

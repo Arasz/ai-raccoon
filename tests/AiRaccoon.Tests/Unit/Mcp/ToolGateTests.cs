@@ -35,7 +35,7 @@ public sealed class ToolGateTests
         migrations.HasOpen = true;
 
         var ex = await Should.ThrowAsync<ModelMigrationInProgressException>(() =>
-            gate.RequireAsync("acme", AccessRequirement.Write, "memory_write",
+            gate.RequireAsync("acme", AccessRequirement.Write, "add_memory",
                 TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("model migration");
@@ -48,10 +48,10 @@ public sealed class ToolGateTests
         var (guard, _, migrations, _, gate) = NewStack();
         migrations.HasOpen = false;
 
-        await gate.RequireAsync("acme", AccessRequirement.Write, "memory_write",
+        await gate.RequireAsync("acme", AccessRequirement.Write, "add_memory",
             TestContext.Current.CancellationToken);
 
-        guard.Calls.ShouldBe([("acme", AccessRequirement.Write, "memory_write")]);
+        guard.Calls.ShouldBe([("acme", AccessRequirement.Write, "add_memory")]);
     }
 
     [Theory]
@@ -63,7 +63,7 @@ public sealed class ToolGateTests
         var (guard, _, _, _, gate) = NewStack();
 
         var ex = await Should.ThrowAsync<McpException>(() =>
-            gate.RequireAsync(projectId, AccessRequirement.Write, "memory_write",
+            gate.RequireAsync(projectId, AccessRequirement.Write, "add_memory",
                 TestContext.Current.CancellationToken));
 
         // Cwd-tolerant: the enriched refusal names the probed working directory (Unit runs beside
@@ -78,10 +78,10 @@ public sealed class ToolGateTests
     {
         var (guard, _, _, _, gate) = NewStack();
 
-        await gate.RequireAsync("acme", AccessRequirement.Destructive, "memory_delete",
+        await gate.RequireAsync("acme", AccessRequirement.Destructive, "delete_entry",
             TestContext.Current.CancellationToken);
 
-        guard.Calls.ShouldBe([("acme", AccessRequirement.Destructive, "memory_delete")]);
+        guard.Calls.ShouldBe([("acme", AccessRequirement.Destructive, "delete_entry")]);
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public sealed class ToolGateTests
         queue.LastMetaProject.ShouldBe("acme");
     }
 
-    /// <summary>memory_promotion_list is the one tool that may name no project; its meta stays
+    /// <summary>get_memories_sharing_ranking is the one tool that may name no project; its meta stays
     /// bank-wide (a scalar count), because that call deliberately spans every queue.</summary>
     [Fact]
     public async Task WrapAsync_PassesNullThrough_WhenTheCallNamedNoProject()
@@ -137,7 +137,7 @@ public sealed class ToolGateTests
     {
         var (_, _, _, registration, gate) = NewStack();
 
-        await gate.RequireAsync("{ACME}", requirement, "memory_write", TestContext.Current.CancellationToken);
+        await gate.RequireAsync("{ACME}", requirement, "add_memory", TestContext.Current.CancellationToken);
 
         // "{ACME}" is not a guid, so ProjectId.TryCanonicalize passes it through unchanged.
         registration.Calls.ShouldBe([("{ACME}", requirement)]);
@@ -152,7 +152,7 @@ public sealed class ToolGateTests
         guard.Refuse = true;
 
         await Should.ThrowAsync<AccessDeniedException>(() =>
-            gate.RequireAsync("acme", AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
+            gate.RequireAsync("acme", AccessRequirement.Write, "add_memory", TestContext.Current.CancellationToken));
 
         registration.Calls.ShouldBeEmpty();
     }
@@ -164,9 +164,9 @@ public sealed class ToolGateTests
         registration.Refuse = true;
 
         await Should.ThrowAsync<UnregisteredProjectException>(() =>
-            gate.RequireAsync("acme", AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
+            gate.RequireAsync("acme", AccessRequirement.Write, "add_memory", TestContext.Current.CancellationToken));
 
-        guard.Calls.ShouldBe([("acme", AccessRequirement.Write, "memory_write")],
+        guard.Calls.ShouldBe([("acme", AccessRequirement.Write, "add_memory")],
             "access passed first; only then did the registration refusal fire");
     }
 
@@ -184,10 +184,10 @@ public sealed class ToolGateTests
         var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(), registration, TestData.ScopeCheck);
 
         var canonical = await gate.RequireAsync("job-search-ai-assistant", AccessRequirement.Write,
-            "memory_write", TestContext.Current.CancellationToken);
+            "add_memory", TestContext.Current.CancellationToken);
 
         canonical.ShouldBe("job-search-ai-assistant");
-        guard.Calls.ShouldBe([("job-search-ai-assistant", AccessRequirement.Write, "memory_write")]);
+        guard.Calls.ShouldBe([("job-search-ai-assistant", AccessRequirement.Write, "add_memory")]);
         registration.Calls.ShouldBe([("job-search-ai-assistant", AccessRequirement.Write)]);
     }
 
@@ -206,7 +206,7 @@ public sealed class ToolGateTests
                 [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa")], ["jsaa"], []));
 
             var canonical = await gate.RequireAsync("job-search-ai-assistant", AccessRequirement.Read,
-                "memory_search", TestContext.Current.CancellationToken);
+                "query", TestContext.Current.CancellationToken);
 
             canonical.ShouldBe("jsaa");
             registration.Calls.ShouldBe([("jsaa", AccessRequirement.Read)]);
@@ -228,9 +228,9 @@ public sealed class ToolGateTests
             ProjectIdAliasMap.ReplaceDefault(new ProjectIdAliasMap(
                 [new ProjectIdAliasEntry("old-project", "winner")], ["winner"], []));
             var error = await Should.ThrowAsync<ArgumentException>(() =>
-                gate.RequireAsync("old-project", AccessRequirement.Read, "memory_search", TestContext.Current.CancellationToken));
-            error.Message.ShouldBe("shared-project-unsupported: memory_search requires an ordinary project; shared supports document ingestion and watches.");
-            scope.Calls.ShouldBe([("winner", "memory_search")]);
+                gate.RequireAsync("old-project", AccessRequirement.Read, "query", TestContext.Current.CancellationToken));
+            error.Message.ShouldBe("shared-project-unsupported: query requires an ordinary project; shared supports document ingestion and watches.");
+            scope.Calls.ShouldBe([("winner", "query")]);
         }
         finally
         {
@@ -248,7 +248,7 @@ public sealed class ToolGateTests
         var registration = new RecordingRegistrationGuard { Refuse = !accessRefuses };
         var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), registration, scope);
         var error = await Record.ExceptionAsync(() =>
-            gate.RequireAsync("shared", AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
+            gate.RequireAsync("shared", AccessRequirement.Write, "add_memory", TestContext.Current.CancellationToken));
         if (accessRefuses)
         {
             error.ShouldBeOfType<AccessDeniedException>();

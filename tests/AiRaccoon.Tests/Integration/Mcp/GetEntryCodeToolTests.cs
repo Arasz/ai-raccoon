@@ -16,17 +16,17 @@ using xRetry.v3;
 namespace AiRaccoon.Tests.Integration.Mcp;
 
 /// <summary>
-///     WP6-T08/T09/T07 — code_get mirrors memory_get: known-hash round-trip, unknown-hash refusal
+///     WP6-T08/T09/T07 — get_entry reads the code corpus: known-hash round-trip, unknown-hash refusal
 ///     (the same UnknownHashException family, so ToolRefusals' type-based mapping already covers
-///     it), and the access gate (Read -- allowed in every mode, exactly like memory_get).
+///     it), and the access gate (Read -- allowed in every mode, exactly like get_entry).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
-public sealed class CodeGetToolTests : IAsyncLifetime
+public sealed class GetEntryCodeToolTests : IAsyncLifetime
 {
     private readonly string _dataRoot = TestData.CreateTempRoot("airaccoon-code-get-tests");
     private SqliteConnectionFactory _factory = null!;
-    private CodeTools _tools = null!;
+    private EntryTools _tools = null!;
 
     public async ValueTask InitializeAsync()
     {
@@ -36,7 +36,7 @@ public sealed class CodeGetToolTests : IAsyncLifetime
         var settings = new SqliteSettingsStore(_factory);
         var access = new MemoryAccessGuard(new SettingsOnlyStore(settings));
         var gate = new ToolGate(access, new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck);
-        _tools = new CodeTools(codeSearch, gate);
+        _tools = new EntryTools(new EmptyStore(), codeSearch, gate);
         await using var warm = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
     }
 
@@ -47,12 +47,12 @@ public sealed class CodeGetToolTests : IAsyncLifetime
     }
 
     [RetryFact]
-    public async Task CodeGet_KnownHash_ReturnsFullSourceWithPathAndRange()
+    public async Task GetEntry_KnownHash_ReturnsFullSourceWithPathAndRange()
     {
         await SeedAsync(id: 1, projectId: "acme", path: "src/Bar.cs", value: "sealed class NarwhalTusk { }",
             lineStart: 5, lineEnd: 9);
 
-        var envelope = await _tools.CodeGet("acme", "hash-1", TestContext.Current.CancellationToken);
+        var envelope = await _tools.GetEntry("acme", "hash-1", TestContext.Current.CancellationToken);
 
         envelope.Data!.Hash.ShouldBe("hash-1");
         envelope.Data!.Value.ShouldBe("sealed class NarwhalTusk { }");
@@ -62,44 +62,44 @@ public sealed class CodeGetToolTests : IAsyncLifetime
     }
 
     [RetryFact]
-    public async Task CodeGet_UnknownHash_ThrowsUnknownHashException()
+    public async Task GetEntry_UnknownHash_ThrowsUnknownHashException()
     {
         var ex = await Should.ThrowAsync<UnknownHashException>(() =>
-            _tools.CodeGet("acme", "does-not-exist", TestContext.Current.CancellationToken));
+            _tools.GetEntry("acme", "does-not-exist", TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("does-not-exist");
         ex.Message.ShouldContain("acme");
     }
 
     [RetryFact]
-    public async Task CodeGet_KnownHashInAnotherProject_IsRefused_NeverLeaksAcrossProjects()
+    public async Task GetEntry_KnownHashInAnotherProject_IsRefused_NeverLeaksAcrossProjects()
     {
         await SeedAsync(id: 1, projectId: "other", path: "src/Bar.cs", value: "class X { }", lineStart: 1, lineEnd: 1);
 
         await Should.ThrowAsync<UnknownHashException>(() =>
-            _tools.CodeGet("acme", "hash-1", TestContext.Current.CancellationToken));
+            _tools.GetEntry("acme", "hash-1", TestContext.Current.CancellationToken));
     }
 
     [RetryTheory]
     [InlineData("ro")]
     [InlineData("rw")]
     [InlineData("full")]
-    public async Task CodeGet_SucceedsInEveryAccessMode(string mode)
+    public async Task GetEntry_SucceedsInEveryAccessMode(string mode)
     {
         await SeedAsync(id: 1, projectId: "acme", path: "src/Bar.cs", value: "class X { }", lineStart: 1, lineEnd: 1);
         var settings = new SqliteSettingsStore(_factory);
         await settings.SetSettingAsync(AccessModePolicy.ProjectSettingKey("acme"), mode, TestContext.Current.CancellationToken);
 
-        var envelope = await _tools.CodeGet("acme", "hash-1", TestContext.Current.CancellationToken);
+        var envelope = await _tools.GetEntry("acme", "hash-1", TestContext.Current.CancellationToken);
 
         envelope.Data!.Hash.ShouldBe("hash-1");
     }
 
     [RetryFact]
-    public async Task CodeGet_BlankProjectId_IsRefused()
+    public async Task GetEntry_BlankProjectId_IsRefused()
     {
         var ex = await Should.ThrowAsync<McpException>(() =>
-            _tools.CodeGet("", "hash-1", TestContext.Current.CancellationToken));
+            _tools.GetEntry("", "hash-1", TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("projectId is required (no registered project's scope contains cwd");
     }
@@ -116,7 +116,19 @@ public sealed class CodeGetToolTests : IAsyncLifetime
             cancellationToken: TestContext.Current.CancellationToken));
     }
 
-    /// <summary>MemoryAccessGuard only needs settings reads; every other IMemoryStore member is unused by CodeTools.</summary>
+    /// <summary>
+    ///     The merged get_entry reads the memory corpus before the code corpus, so the code-side
+    ///     test needs a memory store that owns nothing — every hash it is asked for is the code
+    ///     corpus's.
+    /// </summary>
+    private sealed class EmptyStore : FakeMemoryStore
+    {
+        public override Task<MemoryEntry?> GetAsync(string projectId, string hash,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<MemoryEntry?>(null);
+    }
+
+    /// <summary>MemoryAccessGuard only needs settings reads; every other IMemoryStore member is unused by the gate.</summary>
     private sealed class SettingsOnlyStore(SqliteSettingsStore settings) : FakeMemoryStore
     {
         public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>

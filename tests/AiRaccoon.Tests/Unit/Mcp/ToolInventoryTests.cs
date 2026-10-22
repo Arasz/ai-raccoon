@@ -29,33 +29,33 @@ public class ToolInventoryTests
             .Select(x => x.Attr.Name)
             .ToList();
 
-        tools.ShouldContain("memory_write");
-        tools.ShouldContain("memory_get");
-        tools.ShouldContain("memory_search");
-        tools.ShouldContain("memory_list");
-        tools.ShouldContain("memory_stats");
-        tools.ShouldContain("memory_share");
-        tools.ShouldContain("memory_share_extract");
-        tools.ShouldContain("memory_delete");
-        tools.ShouldContain("memory_delete_context");
-        tools.ShouldContain("memory_ingest_file");
-        tools.ShouldContain("memory_ingest_directory");
-        tools.ShouldContain("memory_embed_pending");
-        tools.ShouldContain("memory_workspace_begin");
-        tools.ShouldContain("memory_workspace_status");
-        tools.ShouldContain("memory_workspace_consolidate");
-        tools.ShouldContain("memory_workspace_discard");
-        tools.ShouldContain("memory_sweep");
-        tools.ShouldContain("memory_set_ttl");
-        tools.ShouldContain("memory_sync");
-        tools.ShouldContain("memory_promotion_list");
-        tools.ShouldContain("memory_promotion_discard");
-        tools.ShouldContain("memory_watch_add");
-        tools.ShouldContain("memory_watch_status");
-        tools.ShouldContain("memory_watch_remove");
-        tools.ShouldContain("memory_record_followthrough");
-        tools.ShouldContain("memory_record_grade");
-        tools.ShouldContain("memory_performance");
+        tools.ShouldContain("add_memory");
+        tools.ShouldContain("get_entry");
+        tools.ShouldContain("query");
+        tools.ShouldContain("get_index");
+        tools.ShouldContain("get_store_statistics");
+        tools.ShouldContain("share_memory");
+        tools.ShouldContain("trigger_memory_sharing");
+        tools.ShouldContain("delete_entry");
+        tools.ShouldContain("delete_context");
+        tools.ShouldContain("ingest_file");
+        tools.ShouldContain("ingest_directory");
+        tools.ShouldContain("embed_deferred_entries");
+        tools.ShouldContain("initialize_workspace");
+        tools.ShouldContain("get_workspace_status");
+        tools.ShouldContain("close_workspace");
+        tools.ShouldContain("discard_workspace");
+        tools.ShouldContain("trigger_memory_cleanup");
+        tools.ShouldContain("set_memory_ttl");
+        tools.ShouldContain("sync_to_cloud");
+        tools.ShouldContain("get_memories_sharing_ranking");
+        tools.ShouldContain("delete_memory_from_ranking");
+        tools.ShouldContain("add_watch");
+        tools.ShouldContain("get_watch_status");
+        tools.ShouldContain("remove_watch");
+        tools.ShouldContain("set_memory_usage_record");
+        tools.ShouldContain("set_query_result_grade");
+        tools.ShouldContain("get_engine_statistics");
     }
 
     /// <summary>Assert that every [McpServerTool].Name has a matching Tn const in its own class.</summary>
@@ -101,7 +101,7 @@ public class ToolInventoryTests
 
     /// <summary>
     ///     Re-derived (ADR-0089 6b): a `projectId`/`projectIds` parameter is required exactly on a
-    ///     tool whose body gates via <c>gate.RequireAsync</c> — <c>project_id_token_get</c> mints an
+    ///     tool whose body gates via <c>gate.RequireAsync</c> — <c>save_project_id_token</c> mints an
     ///     id and has none, so "every tool names it" is false on its own. Reads the body from source
     ///     the way <c>Unit.Layering.ToolMethodSizeTests</c> does, so this also catches the opposite
     ///     bug: a tool that names the parameter but never gates on it.
@@ -179,10 +179,13 @@ public class ToolInventoryTests
     public void PackagedReadme_ToolsTable_ListsExactlyTheRegisteredTools()
     {
         var readme = File.ReadAllText(RepoFile("docs/reference/agent-memory-server.md"));
-        // memory_* (10 memory tools et al.) plus code_* (WP6, the code corpus's own tool family
-        // -- code_\w+, not a hardcoded code_get, so a second code tool doesn't need this regex
-        // edited too; integration review small item 1) plus project_* (ADR-0089 6b, same reason).
-        var documentedTools = Regex.Matches(readme, @"^\|\s*`(memory_\w+|code_\w+|project_\w+)`", RegexOptions.Multiline)
+        // The tools table only: the names are no longer prefixed by family (2.0.0 dropped the
+        // memory_/code_/project_ prefixes), so the match is scoped to the table's own section
+        // rather than to a name prefix -- a prefix would go stale with the next rename, and the
+        // table is the thing that must list the registry exactly.
+        var toolsSection = readme[readme.IndexOf("## Tools (", StringComparison.Ordinal)..];
+        toolsSection = toolsSection[..toolsSection.IndexOf("\n## ", StringComparison.Ordinal)];
+        var documentedTools = Regex.Matches(toolsSection, @"^\|\s*`([a-z][a-z0-9_]*)`", RegexOptions.Multiline)
             .Select(m => m.Groups[1].Value)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();

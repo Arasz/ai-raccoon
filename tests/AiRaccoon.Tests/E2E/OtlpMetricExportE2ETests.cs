@@ -67,7 +67,7 @@ public sealed class OtlpMetricExportE2ETests : IAsyncLifetime
         var client = await _factory.CreateClientAsync();
         try
         {
-            await client.CallToolAsync("memory_stats", new Dictionary<string, object?> { ["projectId"] = "acme" },
+            await client.CallToolAsync("get_store_statistics", new Dictionary<string, object?> { ["projectId"] = "acme" },
                 null, null, TestContext.Current.CancellationToken);
 
             _factory.Services.GetRequiredService<MeterProvider>().ForceFlush();

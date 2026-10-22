@@ -9,7 +9,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
-///     project_id_token_get mints a guidv7, registers it, and returns it (ADR-0089 decision 4). It
+///     save_project_id_token mints a guidv7, registers it, and returns it (ADR-0089 decision 4). It
 ///     is the one tool that gates via RequireBankAvailableAsync instead of RequireAsync — there is
 ///     no project yet to resolve an access mode for.
 /// </summary>
@@ -105,7 +105,7 @@ public sealed class ProjectTokenToolTests
 
         public Task<string> RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
             CancellationToken cancellationToken) =>
-            throw new NotSupportedException("project_id_token_get never resolves an access mode.");
+            throw new NotSupportedException("save_project_id_token never resolves an access mode.");
 
         public Task<ApiEnvelope<T>> WrapAsync<T>(string? projectId, T data, CancellationToken cancellationToken) =>
             Task.FromResult(new ApiEnvelope<T>(data, new PromotionMeta(0, null)));

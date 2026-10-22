@@ -52,12 +52,12 @@ public sealed class ToolGateRetiredIdTests
             ProjectIdAliasMap.ReplaceDefault(FixtureMap());
 
             var ex = await Should.ThrowAsync<RetiredProjectException>(() =>
-                gate.RequireAsync(Dropped, requirement, "memory_write",
+                gate.RequireAsync(Dropped, requirement, "add_memory",
                     TestContext.Current.CancellationToken));
 
             ex.Message.ShouldContain(Dropped);
             ex.Message.ShouldContain("repair");
-            guard.Calls.ShouldBe([(Dropped, requirement, "memory_write")],
+            guard.Calls.ShouldBe([(Dropped, requirement, "add_memory")],
                 "access is enforced before the retired refusal, so an unauthorized caller cannot learn the id is retired");
             registration.Calls.ShouldBeEmpty("the dropped refusal wins over project-not-registered");
         }
@@ -79,12 +79,12 @@ public sealed class ToolGateRetiredIdTests
             ProjectIdAliasMap.ReplaceDefault(FixtureMap());
 
             var ex = await Should.ThrowAsync<RetiredProjectException>(() =>
-                gate.RequireAsync(Dropped, AccessRequirement.Read, "memory_search",
+                gate.RequireAsync(Dropped, AccessRequirement.Read, "query",
                     TestContext.Current.CancellationToken));
 
             ex.Message.ShouldContain("Calls under a retired id are refused");
             ex.Message.ShouldNotContain("Writes under");
-            guard.Calls.ShouldBe([(Dropped, AccessRequirement.Read, "memory_search")]);
+            guard.Calls.ShouldBe([(Dropped, AccessRequirement.Read, "query")]);
             registration.Calls.ShouldBeEmpty();
         }
         finally
@@ -104,7 +104,7 @@ public sealed class ToolGateRetiredIdTests
             ProjectIdAliasMap.ReplaceDefault(FixtureMap());
 
             var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
-                gate.RequireAsync(Dropped, AccessRequirement.Destructive, "memory_delete",
+                gate.RequireAsync(Dropped, AccessRequirement.Destructive, "delete_entry",
                     TestContext.Current.CancellationToken));
 
             ex.Message.ShouldNotContain("retired");
@@ -126,11 +126,11 @@ public sealed class ToolGateRetiredIdTests
         {
             ProjectIdAliasMap.ReplaceDefault(FixtureMap());
 
-            var canonical = await gate.RequireAsync(Loser, AccessRequirement.Write, "memory_write",
+            var canonical = await gate.RequireAsync(Loser, AccessRequirement.Write, "add_memory",
                 TestContext.Current.CancellationToken);
 
             canonical.ShouldBe(Winner);
-            guard.Calls.ShouldBe([(Winner, AccessRequirement.Write, "memory_write")]);
+            guard.Calls.ShouldBe([(Winner, AccessRequirement.Write, "add_memory")]);
             registration.Calls.ShouldBe([(Winner, AccessRequirement.Write)]);
         }
         finally
@@ -152,7 +152,7 @@ public sealed class ToolGateRetiredIdTests
             ProjectIdAliasMap.ReplaceDefault(FixtureMap());
 
             await Should.ThrowAsync<RetiredProjectException>(() =>
-                gate.RequireAsync(Dropped, requirement, "memory_search",
+                gate.RequireAsync(Dropped, requirement, "query",
                     TestContext.Current.CancellationToken));
         }
         finally

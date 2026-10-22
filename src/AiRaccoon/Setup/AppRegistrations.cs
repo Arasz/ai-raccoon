@@ -111,7 +111,7 @@ public static partial class AppRegistrations
             // docs/adr/0067: composes the store and the queue here — PromotionQueueService
             // already takes IMemoryStore, so the store itself cannot own this without a cycle.
             services.AddRequiredSingleton<IMemoryWriteService, MemoryWriteService>();
-            // memory_search's kind dispatch (which legs run, the code-scope rule, the
+            // query's kind dispatch (which legs run, the code-scope rule, the
             // search_quality exclusion) lives here, off the tool layer (mcp.instructions.md).
             services.AddRequiredSingleton<ISearchDispatcher, SearchDispatcher>();
         }

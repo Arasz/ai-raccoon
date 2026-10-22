@@ -44,7 +44,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     [RetryFact]
     public async Task GetReportAsync_NoWindowOrBucket_DefaultsToThreeHoursIn180Buckets()
     {
-        var report = await _service.GetReportAsync("acme", ["memory_search"], window: null, bucket: null,
+        var report = await _service.GetReportAsync("acme", ["query"], window: null, bucket: null,
             TestContext.Current.CancellationToken);
 
         report.Window.ShouldBe(TimeSpan.FromHours(3));
@@ -60,7 +60,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     [RetryFact]
     public async Task GetReportAsync_QuietBank_ReturnsEmptySeriesWithoutError()
     {
-        var report = await _service.GetReportAsync("acme", ["memory_search", "memory_write"],
+        var report = await _service.GetReportAsync("acme", ["query", "add_memory"],
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
 
         report.Series.Count.ShouldBe(2 + SearchTimings.SeriesNames.Count);
@@ -71,14 +71,14 @@ public sealed class MetricsReportServiceTests : IDisposable
     [RetryFact]
     public async Task GetReportAsync_TwoProjects_ReportShowsOnlyTheCallingProject()
     {
-        await SeedAsync("memory_search", 10, FixedNow - TimeSpan.FromMinutes(5), "acme");
-        await SeedAsync("memory_search", 20, FixedNow - TimeSpan.FromMinutes(4), "acme");
-        await SeedAsync("memory_search", 999, FixedNow - TimeSpan.FromMinutes(3), "other-project");
+        await SeedAsync("query", 10, FixedNow - TimeSpan.FromMinutes(5), "acme");
+        await SeedAsync("query", 20, FixedNow - TimeSpan.FromMinutes(4), "acme");
+        await SeedAsync("query", 999, FixedNow - TimeSpan.FromMinutes(3), "other-project");
 
-        var report = await _service.GetReportAsync("acme", ["memory_search"],
+        var report = await _service.GetReportAsync("acme", ["query"],
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
 
-        var series = report.Series.Single(s => s.Tool == "memory_search");
+        var series = report.Series.Single(s => s.Tool == "query");
         series.Count.ShouldBe(2, "only acme's two rows belong to this report");
         series.Max.ShouldBe(20.0, "other-project's 999 must never leak in");
     }
@@ -102,12 +102,12 @@ public sealed class MetricsReportServiceTests : IDisposable
     [RetryFact]
     public async Task GetReportAsync_SampleOutsideTheWindow_IsExcluded()
     {
-        await SeedAsync("memory_search", 10, FixedNow - TimeSpan.FromHours(2), "acme");
+        await SeedAsync("query", 10, FixedNow - TimeSpan.FromHours(2), "acme");
 
-        var report = await _service.GetReportAsync("acme", ["memory_search"],
+        var report = await _service.GetReportAsync("acme", ["query"],
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
 
-        report.Series.Single(s => s.Tool == "memory_search").Count.ShouldBe(0);
+        report.Series.Single(s => s.Tool == "query").Count.ShouldBe(0);
     }
 
     /// <summary>
@@ -118,12 +118,12 @@ public sealed class MetricsReportServiceTests : IDisposable
     [RetryFact]
     public async Task GetReportAsync_OldestMeasurementIs21DaysOld_WindowOf28Days_ReportCoversIt()
     {
-        await SeedAsync("memory_search", 42, FixedNow - TimeSpan.FromDays(21), "acme");
+        await SeedAsync("query", 42, FixedNow - TimeSpan.FromDays(21), "acme");
 
-        var report = await _service.GetReportAsync("acme", ["memory_search"],
+        var report = await _service.GetReportAsync("acme", ["query"],
             TimeSpan.FromDays(28), TimeSpan.FromDays(28), TestContext.Current.CancellationToken);
 
-        report.Series.Single(s => s.Tool == "memory_search").Count.ShouldBe(1, "a 21-day-old row is inside a 28-day window");
+        report.Series.Single(s => s.Tool == "query").Count.ShouldBe(1, "a 21-day-old row is inside a 28-day window");
     }
 
     /// <summary>
@@ -141,14 +141,14 @@ public sealed class MetricsReportServiceTests : IDisposable
     [RetryFact]
     public async Task GetReportAsync_BankHolding40DaysOfMeasurements_WindowOf40Days_ReportCoversAll40Days()
     {
-        await SeedAsync("memory_search", 1, FixedNow - TimeSpan.FromDays(40), "acme");
-        await SeedAsync("memory_search", 2, FixedNow - TimeSpan.FromDays(20), "acme");
-        await SeedAsync("memory_search", 3, FixedNow - TimeSpan.FromDays(1), "acme");
+        await SeedAsync("query", 1, FixedNow - TimeSpan.FromDays(40), "acme");
+        await SeedAsync("query", 2, FixedNow - TimeSpan.FromDays(20), "acme");
+        await SeedAsync("query", 3, FixedNow - TimeSpan.FromDays(1), "acme");
 
-        var report = await _service.GetReportAsync("acme", ["memory_search"],
+        var report = await _service.GetReportAsync("acme", ["query"],
             TimeSpan.FromDays(40), TimeSpan.FromDays(40), TestContext.Current.CancellationToken);
 
-        report.Series.Single(s => s.Tool == "memory_search").Count.ShouldBe(3,
+        report.Series.Single(s => s.Tool == "query").Count.ShouldBe(3,
             "a bank holding more than four weeks is within contract, not over it — the four-week limit is best effort");
     }
 
@@ -162,7 +162,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     {
         await SeedAsync("metrics.dropped", 7, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
 
-        var report = await _service.GetReportAsync("acme", ["memory_search"],
+        var report = await _service.GetReportAsync("acme", ["query"],
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
 
         report.Series.ShouldNotContain(s => s.Tool == "metrics.dropped",
@@ -211,7 +211,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     {
         await SeedAsync("job.pending-embed.duration_ms", 42, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
 
-        var report = await _service.GetReportAsync("acme", ["memory_search"],
+        var report = await _service.GetReportAsync("acme", ["query"],
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
 
         report.Series.ShouldNotContain(s => s.Tool == "job.pending-embed.duration_ms");
@@ -240,7 +240,7 @@ public sealed class MetricsReportServiceTests : IDisposable
     {
         await SeedAsync("drain.code.rows", 12, FixedNow - TimeSpan.FromMinutes(1), MetricsConfigKeys.SelfMetricsProjectId);
 
-        var report = await _service.GetReportAsync("acme", ["memory_search"],
+        var report = await _service.GetReportAsync("acme", ["query"],
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
 
         report.Series.ShouldNotContain(s => s.Tool == "drain.code.rows");
@@ -320,14 +320,14 @@ public sealed class MetricsReportServiceTests : IDisposable
     [RetryFact]
     public async Task GetReportAsync_PhaseMeasurements_AppearAsSeriesAlongsideTools()
     {
-        await SeedAsync("memory_search", 10, FixedNow - TimeSpan.FromMinutes(5), "acme");
+        await SeedAsync("query", 10, FixedNow - TimeSpan.FromMinutes(5), "acme");
         await SeedAsync("search.fts", 3, FixedNow - TimeSpan.FromMinutes(4), "acme");
         await SeedAsync("search.fts", 7, FixedNow - TimeSpan.FromMinutes(3), "acme");
 
-        var report = await _service.GetReportAsync("acme", ["memory_search"],
+        var report = await _service.GetReportAsync("acme", ["query"],
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
 
-        report.Series.ShouldContain(s => s.Tool == "memory_search" && s.Count == 1);
+        report.Series.ShouldContain(s => s.Tool == "query" && s.Count == 1);
         var fts = report.Series.Single(s => s.Tool == "search.fts");
         fts.Count.ShouldBe(2);
         fts.Max.ShouldBe(7.0);

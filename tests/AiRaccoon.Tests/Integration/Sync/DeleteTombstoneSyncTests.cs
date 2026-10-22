@@ -63,7 +63,7 @@ public sealed class DeleteTombstoneSyncTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     /// <summary>
-    ///     F29: memory_delete_context wrote no tombstone, so the next sync re-inserted the row the
+    ///     F29: delete_context wrote no tombstone, so the next sync re-inserted the row the
     ///     remote already held. Red before P2.1: the row count is 1 after the second sync.
     /// </summary>
     [RetryFact]

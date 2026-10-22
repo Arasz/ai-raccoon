@@ -350,13 +350,13 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     public async Task GetAsync_ReturnsFullValue_ForAKnownHash()
     {
         var entry = await _store.WriteAsync(
-            new MemoryWriteRequest("acme", "the full content memory_get must return"),
+            new MemoryWriteRequest("acme", "the full content get_entry must return"),
             TestContext.Current.CancellationToken);
 
         var fetched = await _store.GetAsync("acme", entry.Hash, TestContext.Current.CancellationToken);
 
         fetched.ShouldNotBeNull();
-        fetched.Value.ShouldBe("the full content memory_get must return");
+        fetched.Value.ShouldBe("the full content get_entry must return");
         fetched.Hash.ShouldBe(entry.Hash);
         fetched.Path.ShouldBe(entry.Path);
         fetched.Context.ShouldBe("project:acme");
@@ -430,7 +430,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
     /// <summary>
     ///     N7 (owner ruling, F26): one multi-chunk write creates N rows under one path, and
-    ///     memory_delete on the returned hash must remove the whole write — not 1 of N — and
+    ///     delete_entry on the returned hash must remove the whole write — not 1 of N — and
     ///     report the true row count. Positive control: an unrelated write sharing nothing with
     ///     the deleted one must survive.
     /// </summary>
@@ -453,7 +453,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
 
         deleted.ShouldBe((int)rowsBefore, "the response must report the true row count, not 1");
         (await CountRowsForPathAsync(entry.Path)).ShouldBe(0,
-            "memory_delete must remove the whole write, not one of its N rows");
+            "delete_entry must remove the whole write, not one of its N rows");
         (await ReadRowAsync(unrelated.Hash)).ShouldNotBeNull(
             "an unrelated write sharing nothing with the deleted one must survive");
     }

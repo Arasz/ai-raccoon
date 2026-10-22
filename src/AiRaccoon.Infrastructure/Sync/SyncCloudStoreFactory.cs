@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace AiRaccoon.Infrastructure.Sync;
 
 /// <summary>
-///     Resolves the cloud store per memory_sync call from the current settings rows:
+///     Resolves the cloud store per sync_to_cloud call from the current settings rows:
 ///     sync add/remove write the rows, and the store is rebuilt on every call — never
 ///     constructed once at startup.
 /// </summary>

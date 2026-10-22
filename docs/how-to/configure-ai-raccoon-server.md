@@ -316,7 +316,7 @@ ai-raccoon noise entries              # summarize what has been rejected — rea
 
 ### Read-path query guard
 
-Refuses a `memory_search` query that is itself machine output, and annotates one that merely
+Refuses a `query` query that is itself machine output, and annotates one that merely
 contains log-like content ([ADR-0040](../adr/0040-read-path-query-guard.md)). Armed by default.
 
 ```bash
@@ -511,7 +511,7 @@ ai-raccoon repair chunk-index --apply    # performs the repair
 rewrite your bank — you choose when it runs, and the default is a report.
 
 It is **UPDATE-only**: it never inserts or deletes a row. A file's own rows take their document
-positions; a `memory_write` note that cites the file keeps its place after them, and every row's
+positions; a `add_memory` note that cites the file keeps its place after them, and every row's
 `total_chunks` becomes the number of rows sharing that file. Where a file row's position genuinely
 cannot be known (the source file has been moved or deleted, or the row's text is no longer where its
 position puts it) it sets `chunk_index = -1`, meaning *position unknown*, rather than guessing. The
@@ -577,7 +577,7 @@ cheap (a pure `UPDATE`) and fixes every row it can. Reach for `repair reingest` 
 `repair chunk-index`'s dry run left at `-1`, or when you want every chunk cut by the current
 chunker rather than kept in an older chunker's order. It targets exactly that subset: a source
 file that still exists on disk with at least one stored row the current chunker cannot reproduce by
-hash. A `memory_write` entry that merely cites a file as its source, and a row whose source file is
+hash. A `add_memory` entry that merely cites a file as its source, and a row whose source file is
 gone, are never touched — there is nothing to re-ingest from either.
 
 **Per-row metadata is discarded for every row it replaces, on purpose.** Re-ingesting deletes a
@@ -590,7 +590,7 @@ before it happens.
 **Cost.** Re-ingesting re-embeds every affected chunk. On a large bank this can be thousands of
 chunks; the dry run reports the scale (files, rows, chunks to embed) before you commit to it.
 Embedding is left pending after `--apply` commits, the same way the file watcher's own replace does —
-run `memory_embed_pending` afterward rather than holding the bank's write lock through the embedding
+run `embed_deferred_entries` afterward rather than holding the bank's write lock through the embedding
 engine.
 
 ## Related documentation

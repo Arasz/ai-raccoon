@@ -8,7 +8,7 @@ namespace AiRaccoon.Settings;
 
 /// <summary>
 ///     Serves `watch add|remove|status` (ADR-0075 amendment): the same <see cref="IToolGate" /> and
-///     <see cref="IWatchService" /> as memory_watch_add/remove/status, so the CLI gets the tools'
+///     <see cref="IWatchService" /> as add_watch/remove/status, so the CLI gets the tools'
 ///     guards and results. A mapped refusal answers 422 problem details (RFC 9457) carrying <c>kind</c> and, for an overlap, <c>coveringPath</c>; guarded by <see cref="McpTokenGate" />.
 /// </summary>
 internal static class WatchEndpoint
@@ -20,7 +20,7 @@ internal static class WatchEndpoint
             webApplication.MapPost(WatchProtocol.Path,
                 (WatchAddRequest request, IToolGate gate, IWatchService watch, CancellationToken ctx) => RefusingAsync(async () =>
                 {
-                    var canonical = await gate.RequireAsync(request.ProjectId, AccessRequirement.Write, WatchTools.TnWatchAdd, ctx);
+                    var canonical = await gate.RequireAsync(request.ProjectId, AccessRequirement.Write, WatchTools.TnAddWatch, ctx);
                     var outcome = await watch.AddAsync(canonical, request.Path, ctx);
                     return Results.Ok(new WatchAddResponse(canonical, request.Path, outcome.Pruned, outcome.AbsorbedBy));
                 }));
@@ -29,7 +29,7 @@ internal static class WatchEndpoint
                 ([FromQuery] string projectId, [FromQuery] string path, IToolGate gate, IWatchService watch, CancellationToken ctx) =>
                     RefusingAsync(async () =>
                     {
-                        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, WatchTools.TnWatchRemove, ctx);
+                        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, WatchTools.TnRemoveWatch, ctx);
                         var removed = await watch.RemoveAsync(canonical, path, ctx);
                         return Results.Ok(new WatchRemoveResponse(canonical, path, removed));
                     }));
@@ -43,7 +43,7 @@ internal static class WatchEndpoint
                         return Results.Ok(new WatchStatusResponse(await AllStatusesAsync(watch, registered, ctx)));
                     }
 
-                    var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, WatchTools.TnWatchStatus, ctx);
+                    var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, WatchTools.TnGetWatchStatus, ctx);
                     return Results.Ok(new WatchStatusResponse(await watch.StatusAsync(canonical, ctx)));
                 }));
         }

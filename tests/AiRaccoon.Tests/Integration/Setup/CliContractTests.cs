@@ -73,7 +73,7 @@ public sealed class CliContractTests : IAsyncLifetime
         new(["settings", "sweep", "bogus"], 11, "",
             "Required command was not provided.\nUnrecognized command or argument 'bogus'.\n\n" +
             "Description:\n" +
-            "  Background reaper configuration: the kill switch, the cadence and the rating threshold it deletes below. The reaper is ON by default — 'sweep disable' is how you disarm it. Per-entry TTLs are data, set by the memory_set_ttl tool, not configured here.\n\n" +
+            "  Background reaper configuration: the kill switch, the cadence and the rating threshold it deletes below. The reaper is ON by default — 'sweep disable' is how you disarm it. Per-entry TTLs are data, set by the set_memory_ttl tool, not configured here.\n\n" +
             "Usage:\n" +
             "  AiRaccoon settings sweep [command] [options]\n\n" +
             "Options:\n" +

@@ -24,7 +24,7 @@ normally, code results are keyword-only, and the response carries the warning.
 
 ## What gets indexed
 
-Any file watched via `memory_watch_add` whose extension is in the code registry is
+Any file watched via `add_watch` whose extension is in the code registry is
 automatically ingested into the code corpus. The 37 supported extensions:
 
 `.cs` `.fs` `.fsx` `.py` `.ts` `.tsx` `.js` `.jsx` `.mjs` `.cjs` `.go` `.rs` `.java` `.kt` `.kts`
@@ -96,7 +96,7 @@ normal and the code section is keyword-only (FTS5) with a warning.
 ## Reading a full code chunk
 
 Search results return snippets. To read the full source of a code hit, call
-`code_get` with the `hash` from the search result:
+`get_entry` with the `hash` from the search result:
 
 ```json
 {
@@ -121,11 +121,11 @@ workspace's project scope.
 |---|---|---|
 | `code-engine-unloadable` warning | Manifest or model files missing/corrupt | `ai-raccoon model code set local <dir>` or `ai-raccoon settings model code reset` |
 | No code results, warning about missing engine | No code engine configured | `ai-raccoon model code set default` |
-| Code results are FTS5-only (no vector hits) | Engine configured but embedding pending | Wait for the maintenance embed-drain to finish, or check `memory_performance` |
+| Code results are FTS5-only (no vector hits) | Engine configured but embedding pending | Wait for the maintenance embed-drain to finish, or check `get_engine_statistics` |
 
 ## See also
 
 - [Configure embedding engines](configure-embedding-engines.md) — switch or download models
 - [Code corpus feature spec](../features/code-corpus/) — behavioral contract
 - [ADR-0085: A second code-only corpus in the same bank](../adr/0085-a-second-code-only-corpus-in-the-same-bank.md)
-- [Tool contract reference](../reference/agent-memory-server.md) — full `memory_search` and `code_get` parameter docs
+- [Tool contract reference](../reference/agent-memory-server.md) — full `query` and `get_entry` parameter docs

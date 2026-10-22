@@ -10,7 +10,7 @@ namespace AiRaccoon.Tests.Unit.Sync;
 
 /// <summary>
 ///     Per-call cloud-store resolution: the store is rebuilt from the CURRENT settings rows
-///     on every memory_sync call, so `sync add/remove` take effect without a restart. Secrets
+///     on every sync_to_cloud call, so `sync add/remove` take effect without a restart. Secrets
 ///     come from the settings table, not the environment.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]

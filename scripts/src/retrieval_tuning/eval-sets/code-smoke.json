@@ -1,6 +1,6 @@
 {
-  "_description": "A SMALL smoke eval-set for the code corpus (kind=code), plan docs/work/2026-08-21-code-search-implementation-plan.md §12.2 H8/WP8. Queries target THIS repo's own src/ tree as the corpus — run memory_watch_add or memory_ingest_directory on this repo's src/ against a scratch bank, then drive scripts/src/retrieval_tuning/evaluate.py with ScratchServer.search(entry) for entry in this file's 'queries' list; each entry's 'kind': 'code' reaches memory_search's code section (mcp.py/server.py plumbing, this same task).",
-  "_purpose": "Sanity check ONLY: does memory_search kind=code return the right file for an obvious query on a small, always-available corpus. NOT a tuning or gate corpus — 8 queries is far too few to adjudicate a chunker or model arm (ADR-0056's failure mode).",
+  "_description": "A SMALL smoke eval-set for the code corpus (kind=code), plan docs/work/2026-08-21-code-search-implementation-plan.md §12.2 H8/WP8. Queries target THIS repo's own src/ tree as the corpus — run add_watch or ingest_directory on this repo's src/ against a scratch bank, then drive scripts/src/retrieval_tuning/evaluate.py with ScratchServer.search(entry) for entry in this file's 'queries' list; each entry's 'kind': 'code' reaches query's code section (mcp.py/server.py plumbing, this same task).",
+  "_purpose": "Sanity check ONLY: does query kind=code return the right file for an obvious query on a small, always-available corpus. NOT a tuning or gate corpus — 8 queries is far too few to adjudicate a chunker or model arm (ADR-0056's failure mode).",
   "_deferred": "The full multi-repo eval-set (2-3 permissive-license repos incl. a mandatory Python one, plan §3.9/§12.4 OQ5) is DEFERRED pending owner approval of the specific repos — it is NOT this file, and this file does not become it by growing. Do NOT vendor external repos here.",
   "_scoring": "expectedHash is intentionally null on every entry — the code corpus has not been ingested anywhere yet, so no chunk hash exists to pin. scoring.py's resolve_gain falls back to expectedSource (source_file suffix match), which is all these entries rely on.",
   "queries": [
@@ -103,7 +103,7 @@
     {
       "id": "CS-07",
       "category": "Code (MCP tool)",
-      "query": "the kind parameter on memory_search that selects memory, code, or both corpora",
+      "query": "the kind parameter on query that selects memory, code, or both corpora",
       "expectedSource": "src:AiRaccoon:Tools:MemoryTools.cs",
       "expectedHash": null,
       "answerSpan": "Which corpus to search: memory (default",
@@ -119,10 +119,10 @@
     {
       "id": "CS-08",
       "category": "Code (MCP tool)",
-      "query": "reading one code chunk's full source by its content hash, mirrors memory_get",
-      "expectedSource": "src:AiRaccoon:Tools:CodeTools.cs",
+      "query": "reading one entry's full content by its content hash, whichever corpus owns it",
+      "expectedSource": "src:AiRaccoon:Tools:EntryTools.cs",
       "expectedHash": null,
-      "answerSpan": "Reads one code chunk's full source by its content hash",
+      "answerSpan": "Reads one entry's full content by its content hash",
       "targetProjectId": "ai-raccoon",
       "targetScope": "project",
       "kind": "code",

@@ -26,12 +26,12 @@ public class ToolCallMetricsTests
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
-        metrics.RecordInvocation("memory_write", "acme", TimeSpan.FromMilliseconds(42), false);
+        metrics.RecordInvocation("add_memory", "acme", TimeSpan.FromMilliseconds(42), false);
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);
         measurements[0].Value.ShouldBe(1);
-        measurements[0].Tags["tool"].ShouldBe("memory_write");
+        measurements[0].Tags["tool"].ShouldBe("add_memory");
         measurements[0].Tags["result"].ShouldBe("success");
     }
 
@@ -41,12 +41,12 @@ public class ToolCallMetricsTests
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
-        metrics.RecordInvocation("memory_sync", "acme", TimeSpan.FromMilliseconds(500), true, "SyncConflictException");
+        metrics.RecordInvocation("sync_to_cloud", "acme", TimeSpan.FromMilliseconds(500), true, "SyncConflictException");
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);
         measurements[0].Value.ShouldBe(1);
-        measurements[0].Tags["tool"].ShouldBe("memory_sync");
+        measurements[0].Tags["tool"].ShouldBe("sync_to_cloud");
         measurements[0].Tags["result"].ShouldBe("error");
         measurements[0].Tags["error.type"].ShouldBe("SyncConflictException");
     }
@@ -57,12 +57,12 @@ public class ToolCallMetricsTests
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.ToolDuration);
 
-        metrics.RecordInvocation("memory_search", "acme", TimeSpan.FromMilliseconds(250), false);
+        metrics.RecordInvocation("query", "acme", TimeSpan.FromMilliseconds(250), false);
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);
         measurements[0].Value.ShouldBe(0.25, 0.001);
-        measurements[0].Tags["tool"].ShouldBe("memory_search");
+        measurements[0].Tags["tool"].ShouldBe("query");
         measurements[0].Tags["result"].ShouldBe("success");
     }
 
@@ -72,12 +72,12 @@ public class ToolCallMetricsTests
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.ToolDuration);
 
-        metrics.RecordInvocation("memory_sync", "acme", TimeSpan.FromMilliseconds(1500), true, "SyncConflictException");
+        metrics.RecordInvocation("sync_to_cloud", "acme", TimeSpan.FromMilliseconds(1500), true, "SyncConflictException");
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);
         measurements[0].Value.ShouldBe(1.5, 0.001);
-        measurements[0].Tags["tool"].ShouldBe("memory_sync");
+        measurements[0].Tags["tool"].ShouldBe("sync_to_cloud");
         measurements[0].Tags["result"].ShouldBe("error");
         measurements[0].Tags["error.type"].ShouldBe("SyncConflictException");
     }
@@ -95,16 +95,16 @@ public class ToolCallMetricsTests
         listener.ActivityStopped = _ => { };
         ActivitySource.AddActivityListener(listener);
 
-        using var activity = metrics.ActivitySource.StartActivity("memory_write");
+        using var activity = metrics.ActivitySource.StartActivity("add_memory");
         activity.ShouldNotBeNull();
-        activity.OperationName.ShouldBe("memory_write");
+        activity.OperationName.ShouldBe("add_memory");
 
-        activity.SetTag("tool", "memory_write");
+        activity.SetTag("tool", "add_memory");
         activity.SetTag("project_id", "test-project");
         activity.Stop();
 
         started.Count.ShouldBeGreaterThanOrEqualTo(1, "ActivityListener may fire multiple times across parallel tests");
-        started[0].TagObjects.ShouldContain(t => t.Key == "tool" && (string)t.Value! == "memory_write");
+        started[0].TagObjects.ShouldContain(t => t.Key == "tool" && (string)t.Value! == "add_memory");
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public class ToolCallMetricsTests
         listener.ActivityStopped = activity => stoppedActivity = activity;
         ActivitySource.AddActivityListener(listener);
 
-        var activity = metrics.ActivitySource.StartActivity("memory_sync");
+        var activity = metrics.ActivitySource.StartActivity("sync_to_cloud");
         activity.ShouldNotBeNull();
         activity.SetStatus(ActivityStatusCode.Error, "sync conflict");
         activity.SetTag("error_type", "SyncConflictException");
@@ -139,7 +139,7 @@ public class ToolCallMetricsTests
         metrics.Meter.Name.ShouldBe(OtlpNames.MemoryToolsScope);
 
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
-        metrics.RecordInvocation("memory_stats", "acme", TimeSpan.FromMilliseconds(10), false);
+        metrics.RecordInvocation("get_store_statistics", "acme", TimeSpan.FromMilliseconds(10), false);
         collector.GetMeasurementSnapshot().Count.ShouldBe(1);
     }
 
@@ -149,7 +149,7 @@ public class ToolCallMetricsTests
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
 
-        metrics.RecordInvocation("memory_write", "jsaa", TimeSpan.FromMilliseconds(42), false);
+        metrics.RecordInvocation("add_memory", "jsaa", TimeSpan.FromMilliseconds(42), false);
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);
@@ -162,7 +162,7 @@ public class ToolCallMetricsTests
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.ToolDuration);
 
-        metrics.RecordInvocation("memory_write", "jsaa", TimeSpan.FromMilliseconds(42), false);
+        metrics.RecordInvocation("add_memory", "jsaa", TimeSpan.FromMilliseconds(42), false);
 
         var measurements = collector.GetMeasurementSnapshot();
         measurements.Count.ShouldBe(1);

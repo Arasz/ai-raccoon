@@ -454,7 +454,7 @@ Base path for all edits: `.ai-badger/worktrees/opt-skills/` (repo root: `/Users/
 
 2. **What moves where:** nothing.
 
-3. **New sections:** `## When NOT to Use` (after the title intro, before `## 1. Watch-on-docs ritual`, ≈5 lines): a one-off lookup ("have we seen X before?") — run `memory_search` and be done, no watch ritual, no write-back; no docs directory to watch and no durable fact to write — the ritual adds ceremony, not value; the memory-grade hook when you only need one answer (it is opt-in by env var; don't enable it for a single search).
+3. **New sections:** `## When NOT to Use` (after the title intro, before `## 1. Watch-on-docs ritual`, ≈5 lines): a one-off lookup ("have we seen X before?") — run `query` and be done, no watch ritual, no write-back; no docs directory to watch and no durable fact to write — the ritual adds ceremony, not value; the memory-grade hook when you only need one answer (it is opt-in by env var; don't enable it for a single search).
 
 4. **Acceptance:**
    - `grep -c "^## When NOT to Use" SKILL.md` == 1 (≥ 3 bullets); `wc -l` ≤ 130 (expected ≈ 122).

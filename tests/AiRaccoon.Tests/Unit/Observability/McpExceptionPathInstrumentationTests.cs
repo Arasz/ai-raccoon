@@ -33,11 +33,11 @@ public class McpExceptionPathInstrumentationTests
         var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck));
 
         await Should.ThrowAsync<McpException>(() =>
-            ThroughFilterAsync(metrics, "memory_watch_add", "", token => tools.Add("", "/repo", token)));
+            ThroughFilterAsync(metrics, "add_watch", "", token => tools.Add("", "/repo", token)));
 
         var snapshot = collector.GetMeasurementSnapshot();
         snapshot.Count.ShouldBe(1);
-        snapshot[0].Tags["tool"].ShouldBe("memory_watch_add");
+        snapshot[0].Tags["tool"].ShouldBe("add_watch");
         snapshot[0].Tags["result"].ShouldBe("error");
     }
 
@@ -49,11 +49,11 @@ public class McpExceptionPathInstrumentationTests
         var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck));
 
         await Should.ThrowAsync<McpException>(() =>
-            ThroughFilterAsync(metrics, "memory_watch_status", "", token => tools.Status("", token)));
+            ThroughFilterAsync(metrics, "get_watch_status", "", token => tools.Status("", token)));
 
         var snapshot = collector.GetMeasurementSnapshot();
         snapshot.Count.ShouldBe(1);
-        snapshot[0].Tags["tool"].ShouldBe("memory_watch_status");
+        snapshot[0].Tags["tool"].ShouldBe("get_watch_status");
         snapshot[0].Tags["result"].ShouldBe("error");
     }
 
@@ -65,11 +65,11 @@ public class McpExceptionPathInstrumentationTests
         var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new AllowAllGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck));
 
         await Should.ThrowAsync<McpException>(() =>
-            ThroughFilterAsync(metrics, "memory_watch_remove", "", token => tools.Remove("", "/repo", token)));
+            ThroughFilterAsync(metrics, "remove_watch", "", token => tools.Remove("", "/repo", token)));
 
         var snapshot = collector.GetMeasurementSnapshot();
         snapshot.Count.ShouldBe(1);
-        snapshot[0].Tags["tool"].ShouldBe("memory_watch_remove");
+        snapshot[0].Tags["tool"].ShouldBe("remove_watch");
         snapshot[0].Tags["result"].ShouldBe("error");
     }
 
@@ -81,11 +81,11 @@ public class McpExceptionPathInstrumentationTests
         var tools = new WatchTools(new NoOpWatchService(), new ToolGate(new DenyWriteGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck));
 
         await Should.ThrowAsync<McpException>(() =>
-            ThroughFilterAsync(metrics, "memory_watch_add", "proj-a", token => tools.Add("proj-a", "/repo", token)));
+            ThroughFilterAsync(metrics, "add_watch", "proj-a", token => tools.Add("proj-a", "/repo", token)));
 
         var snapshot = collector.GetMeasurementSnapshot();
         snapshot.Count.ShouldBe(1);
-        snapshot[0].Tags["tool"].ShouldBe("memory_watch_add");
+        snapshot[0].Tags["tool"].ShouldBe("add_watch");
         snapshot[0].Tags["result"].ShouldBe("error");
     }
 
@@ -100,11 +100,11 @@ public class McpExceptionPathInstrumentationTests
             new ToolGate(new DenyWriteGuard(), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck));
 
         await Should.ThrowAsync<McpException>(() =>
-            ThroughFilterAsync(metrics, "memory_sync", "proj-a", token => tools.Sync("proj-a", token)));
+            ThroughFilterAsync(metrics, "sync_to_cloud", "proj-a", token => tools.Sync("proj-a", token)));
 
         var snapshot = collector.GetMeasurementSnapshot();
         snapshot.Count.ShouldBe(1);
-        snapshot[0].Tags["tool"].ShouldBe("memory_sync");
+        snapshot[0].Tags["tool"].ShouldBe("sync_to_cloud");
         snapshot[0].Tags["result"].ShouldBe("error");
     }
 

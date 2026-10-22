@@ -3,7 +3,7 @@ using FluentValidation;
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>
-///     A validated `memory_share_extract` call. The tool builds one and hands it over; the mode
+///     A validated `trigger_memory_sharing` call. The tool builds one and hands it over; the mode
 ///     decision, the consent gate and the two pipelines live behind <see cref="IShareExtractService" />
 ///     so the CLI and the background extraction loop can reach them too (docs/adr/0065).
 /// </summary>

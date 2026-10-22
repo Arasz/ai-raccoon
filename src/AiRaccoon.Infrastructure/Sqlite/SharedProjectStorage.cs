@@ -34,6 +34,7 @@ internal static class SharedProjectStorage
 
         var conflict = await connection.ExecuteScalarAsync<bool>(Sql.Def("""
             SELECT EXISTS(SELECT 1 FROM projects WHERE id = @projectId)
+                OR EXISTS(SELECT 1 FROM projects WHERE name = @projectId)
                 OR EXISTS(SELECT 1 FROM entries WHERE project_id = @projectId AND scope IS NOT 'shared')
                 OR EXISTS(SELECT 1 FROM code_entries WHERE project_id = @projectId)
                 OR EXISTS(SELECT 1 FROM workspaces WHERE project_id = @projectId)

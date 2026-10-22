@@ -188,12 +188,12 @@ internal static class MemorySql
                                                         ORDER BY v.distance, e.path
                                                         """;
 
-    // @scope null is memory_delete (N7/F26): every row sharing the write's path goes, not just
-    // the reported hash — a manual memory_write's N chunks share one content-addressed path. The
+    // @scope null is delete_entry (N7/F26): every row sharing the write's path goes, not just
+    // the reported hash — a manual add_memory's N chunks share one content-addressed path. The
     // "(source_file IS NULL OR source_file <> path)" guard keeps this off an ingested/mirrored
     // file's rows, where FileIngestor always sets source_file = path for its own group: those stay
     // reachable only by their exact hash (DeleteBySourcePath/the watcher own the whole-file delete,
-    // never memory_delete — see SqliteMemoryStoreChunkColumnMaintenanceTests). @scope set is the
+    // never delete_entry — see SqliteMemoryStoreChunkColumnMaintenanceTests). @scope set is the
     // sweep's own delete (H2): chunk-exact, so a project-scoped pass cannot touch a sibling row
     // sharing the hash in another scope/workspace.
     public const string DeleteMatchPredicate =
@@ -210,7 +210,7 @@ internal static class MemorySql
         "SELECT path FROM entries WHERE hash = @hash AND project_id = @projectId LIMIT 1";
 
     // Sync propagates deletes through tombstones (FR-NM-8). The set is derived from the rows the
-    // delete's own predicate reaches — memory_delete's is the whole write (N7/F26), so a
+    // delete's own predicate reaches — delete_entry's is the whole write (N7/F26), so a
     // multi-chunk write's untombstoned siblings cannot resurrect on the next sync pull — inside the
     // caller's transaction, before the delete runs. The committed-scope filter is mandatory: a
     // workspace row's scope is NULL, and tombstoning it would delete a same-hash workspace row on
@@ -246,7 +246,7 @@ internal static class MemorySql
     // delete cascades; workspace scratch is transient and stays), plus per-path watch fingerprints
     // so a delete-then-recreate cycle cannot hash-skip back to stale chunks. Watch registration survives.
     // Matching is on `path`, not `source_file`: mirror/ingest rows carry the real file path in both
-    // columns, while manual memory_write rows carry path = <sha256(content)>.md and merely cite the
+    // columns, while manual add_memory rows carry path = <sha256(content)>.md and merely cite the
     // file in source_file — the digest owns the mirror rows, never manual rows that cite the file.
     /// <summary>
     ///     Rows of <paramref name="table" /> at the path or under it, as two index seeks on
@@ -461,7 +461,7 @@ internal static class MemorySql
     public const string SelectAllEmbedded =
         "SELECT id AS Id, value AS Value FROM entries WHERE embed_state = 'embedded' ORDER BY id";
 
-    /// <summary>Bank-wide (not project-scoped) pending rows — the migration relay's own drain, distinct from the per-project memory_embed_pending path.</summary>
+    /// <summary>Bank-wide (not project-scoped) pending rows — the migration relay's own drain, distinct from the per-project embed_deferred_entries path.</summary>
     public const string SelectAllPendingForEmbed =
         "SELECT id AS Id, value AS Value, COALESCE(source_file, path) AS Source FROM entries " +
         "WHERE embed_state = 'pending' AND embed_attempts < 3 ORDER BY id LIMIT @limit";
@@ -653,7 +653,7 @@ internal static class MemorySql
         "UPDATE promotion_queue_prune_requests SET finished_at = @finishedAt WHERE id = 1 AND finished_at IS NULL";
 
     // Custom contexts are listed alongside shared/project because their label is the only key that
-    // reaches their rows through memory_search (SearchContexts.For), and this is the only place a
+    // reaches their rows through query (SearchContexts.For), and this is the only place a
     // caller can read it back. Omitting them made a context-scoped write unreachable by any means
     // except a hash the caller had to have kept.
     /// <summary>The custom-context labels a project has rows under; the project scope reads them all.</summary>
@@ -685,7 +685,7 @@ internal static class MemorySql
                                             ORDER BY path
                                             """;
 
-    // memory_get read path (ADR-0035): a hash addressable within the caller's own project rows
+    // get_entry read path (ADR-0035): a hash addressable within the caller's own project rows
     // plus the cross-project shared tier — the same reach BumpAccess already
     // grant search hits.
     public const string SelectEntryByHashForRead = """
@@ -793,7 +793,7 @@ internal static class MemorySql
 
     /// <summary>
     ///     The write path's post-insert lookup. Scoped by hash as well as path because a chunked
-    ///     `memory_write` puts several rows under one path (docs/adr/0064), and the entry the caller
+    ///     `add_memory` puts several rows under one path (docs/adr/0064), and the entry the caller
     ///     is handed back must be the chunk whose hash it was told — not whichever row LIMIT 1 picks.
     /// </summary>
     public const string SelectEntryByPathAndHashInBucket = """

@@ -372,7 +372,7 @@ internal static class MemorySchema
                                           );
 
                                           -- Propose tier: candidates waiting for promotion review, kept separate from
-                                          -- entries — queue rows are never searchable and never counted by memory_stats.
+                                          -- entries — queue rows are never searchable and never counted by get_store_statistics.
                                           -- Capacity/eviction lives on this table only (the shared tier stays curated and sweep-exempt).
                                           CREATE TABLE IF NOT EXISTS promotion_queue (
                                               id          INTEGER PRIMARY KEY,
@@ -390,7 +390,7 @@ internal static class MemorySchema
                                               UNIQUE (project_id, hash)
                                           );
 
-                                          -- Agent rejections (memory_promotion_discard): a permanent per-project
+                                          -- Agent rejections (delete_memory_from_ranking): a permanent per-project
                                           -- "no" for a content identity — propose never re-queues it (docs/adr/0026).
                                           CREATE TABLE IF NOT EXISTS promotion_discards (
                                               project_id   TEXT NOT NULL,
@@ -419,7 +419,7 @@ internal static class MemorySchema
                                           CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source
                                               ON memory_source(source_type, source_locator, COALESCE(section, ''));
 
-                                          -- Search-quality metric: tracks every memory_search call with correlation-id,
+                                          -- Search-quality metric: tracks every query call with correlation-id,
                                           -- follow-through (did the agent use the result?), and usefulness grade.
                                           -- See docs/plans/2026-08-11-search-quality-metric-plan.md.
                                           {SearchQualityTableDdl}

@@ -406,7 +406,7 @@ public sealed class ChunkBoundaryRepair(
         long ChunkIndex,
         long TotalChunks)
     {
-        /// <summary>A file's own mirror row, as opposed to a memory_write note that may merely cite the file.</summary>
+        /// <summary>A file's own mirror row, as opposed to a add_memory note that may merely cite the file.</summary>
         public bool IsFileRow => SourceFile is not null && string.Equals(Path, SourceFile, StringComparison.Ordinal);
     }
 }

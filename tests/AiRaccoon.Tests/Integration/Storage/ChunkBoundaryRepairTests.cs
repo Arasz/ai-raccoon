@@ -466,7 +466,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     }
 
     /// <summary>A note citing a file shares its position partition: the repair puts the file's rows first and the note
-    /// after them, total_chunks counts both, and a later memory_write keeps them agreeing so a second run has nothing to do.</summary>
+    /// after them, total_chunks counts both, and a later add_memory keeps them agreeing so a second run has nothing to do.</summary>
     [RetryFact]
     public async Task Run_FileCitedByANote_NumbersTheWholePartitionAndIsIdempotent()
     {
@@ -493,7 +493,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
 
         var second = await RepairAsync();
 
-        second.ShouldBe(new ChunkBoundaryRepairReport(0, 0, 0, 0, 0), "the repair and memory_write agree on what the partition holds");
+        second.ShouldBe(new ChunkBoundaryRepairReport(0, 0, 0, 0, 0), "the repair and add_memory agree on what the partition holds");
         (await PartitionAsync(file)).ShouldBe(partition);
     }
 
@@ -696,7 +696,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
                ?? throw new InvalidOperationException("no row for the hash");
     }
 
-    /// <summary>The positions memory_write gives a source-citing note: filled in id order after the insert.</summary>
+    /// <summary>The positions add_memory gives a source-citing note: filled in id order after the insert.</summary>
     private async Task RecomputePositionsAsync()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

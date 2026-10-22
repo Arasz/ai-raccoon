@@ -136,7 +136,7 @@ class TestStartServerWithFakeBinary:
             def __init__(self):
                 self.kwargs = None
 
-            def memory_search(self, **kwargs):
+            def query(self, **kwargs):
                 self.kwargs = kwargs
                 return [{"hash": "abc"}]
 
@@ -170,13 +170,13 @@ class TestStartServerWithFakeBinary:
         assert "rrfK" not in client.kwargs  # tuning is settings-driven, never per-call
 
     def test_search_passes_kind_through_when_the_corpus_entry_carries_one(self):
-        """H8 (plan §12.2): a code eval-set entry's 'kind' reaches memory_search."""
+        """H8 (plan §12.2): a code eval-set entry's 'kind' reaches query."""
 
         class FakeClient:
             def __init__(self):
                 self.kwargs = None
 
-            def memory_search(self, **kwargs):
+            def query(self, **kwargs):
                 self.kwargs = kwargs
                 return [{"hash": "code-hash"}]
 

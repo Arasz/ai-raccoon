@@ -4,6 +4,21 @@ Date: 2026-10-21
 
 Status: Accepted for implementation in 1.62.0.
 
+Amended 2026-10-22 — **the reserved NAME is refused too.** The record reserves the literal
+`shared` as an id; the name was not covered, so `save_project_id_token {name: "shared"}` minted a
+private project under it. Name lookup then answered with the reserved id for ever, so the private
+project became unreachable by name, and the activation guard — which keyed on the reserved *id* —
+let the target publish over rows this record says must block it. The mint tool now refuses the
+reserved name (exact and case-sensitive, like the id), and the activation guard also keys on the
+name, so a bank that already holds such a row blocks the target instead of being published over.
+
+Amended 2026-10-22 — **the reserved target's code refusal moved from the tool to the corpus.**
+The tool that read a code chunk (`code_get`) was merged into `get_entry`, which now reads the
+memory corpus and the code corpus and declares the `All` scope. A `get_entry` call on the
+reserved target is therefore allowed, and a call naming a code hash returns nothing: the code
+corpus is project-scoped and holds no shared rows. What this record refused — code on the
+reserved target — is still refused, by the absence of rows rather than by the tool's scope.
+
 Amended 2026-10-21 — **the code-routing sentence below names a method that no longer exists, and
 the reserved target's refusal list now names `memory_delete`.** The Consequences section says
 that `CanSearchCode(SearchQuery)` "separately checks code routing"; that method was removed from

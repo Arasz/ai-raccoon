@@ -3,7 +3,7 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Tests.Unit.Retrieval;
 
-/// <summary>One hit from the reference extension's memory_search virtual table.</summary>
+/// <summary>One hit from the reference extension's query virtual table.</summary>
 public sealed record ReferenceHit(string Hash, int Seq, double Ranking, string Path, string Snippet);
 
 /// <summary>Deterministic reference top-k output for one query.</summary>
@@ -33,7 +33,7 @@ public static class ReferenceRunner
     private const string AddContentSql = "SELECT memory_add_content(@path, @content, @context)";
     private const string SetModelSql = "SELECT memory_set_model('local', @model)";
     private const string SetOptionSql = "SELECT memory_set_option(@key, @value)";
-    private const string EmbedPendingSql = "SELECT memory_embed_pending()";
+    private const string EmbedPendingSql = "SELECT memory_embed_pending();";
     private const string CountSql = "SELECT count(*) FROM dbmem_content";
 
     private const string SearchSql = """

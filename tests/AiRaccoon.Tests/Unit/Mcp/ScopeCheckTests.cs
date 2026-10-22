@@ -7,7 +7,7 @@ namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
 ///     The MCP tool scope: the scope each tool declares, and which targets it may run against.
-///     The two sets below are the pin — the review record's F3 baseline with `memory_delete`
+///     The two sets below are the pin — the review record's F3 baseline with `delete_entry`
 ///     moved across (F12/F12a) — and the classification they are compared against is derived
 ///     from the tool surface, so a new tool cannot be added without stating its scope.
 /// </summary>
@@ -18,41 +18,41 @@ public sealed class ScopeCheckTests
     /// <summary>Ordinary projects only: the tools the reserved target refuses.</summary>
     private static readonly string[] ProjectScope =
     [
-        "code_get",
-        "memory_delete",
-        "memory_delete_context",
-        "memory_promotion_discard",
-        "memory_promotion_list",
-        "memory_set_ttl",
-        "memory_share",
-        "memory_share_extract",
-        "memory_sweep",
-        "memory_workspace_begin",
-        "memory_workspace_consolidate",
-        "memory_workspace_discard",
-        "memory_workspace_status",
-        "memory_write"
+        "add_memory",
+        "close_workspace",
+        "delete_context",
+        "delete_entry",
+        "delete_memory_from_ranking",
+        "discard_workspace",
+        "get_memories_sharing_ranking",
+        "get_workspace_status",
+        "initialize_workspace",
+        "set_memory_ttl",
+        "share_memory",
+        "trigger_memory_cleanup",
+        "trigger_memory_sharing",
     ];
 
     /// <summary>Any target: the tools the reserved target accepts — reads, ingestion, watches, telemetry.</summary>
     private static readonly string[] AllScope =
     [
-        "memory_embed_pending",
-        "memory_get",
-        "memory_ingest_directory",
-        "memory_ingest_file",
-        "memory_list",
-        "memory_performance",
-        "memory_record_followthrough",
-        "memory_record_grade",
-        "memory_search",
-        "memory_stats",
-        "memory_sync",
-        "memory_watch_add",
-        "memory_watch_remove",
-        "memory_watch_status",
-        "project_id_get",
-        "project_id_token_get"
+        "add_watch",
+        "embed_deferred_entries",
+        "get_engine_statistics",
+        "get_entry",
+        "get_index",
+        "get_project_id",
+        "get_quality_report",
+        "get_store_statistics",
+        "get_watch_status",
+        "ingest_directory",
+        "ingest_file",
+        "query",
+        "remove_watch",
+        "save_project_id_token",
+        "set_memory_usage_record",
+        "set_query_result_grade",
+        "sync_to_cloud",
     ];
 
     private readonly IToolNameScope _names = new ToolNameScope();
@@ -71,7 +71,7 @@ public sealed class ScopeCheckTests
     [Fact]
     public void TheProjectScopedTools_AreExactlyTheOrdinaryOnlyTools() =>
         string.Join(", ", Declared(ToolScope.Project)).ShouldBe(string.Join(", ", ProjectScope),
-            "the tools that need an ordinary project, memory_delete among them");
+            "the tools that need an ordinary project, delete_entry among them");
 
     [Fact]
     public void TheAllScopedTools_AreExactlyTheSharedAllowedTools() =>
@@ -80,8 +80,8 @@ public sealed class ScopeCheckTests
 
     [Fact]
     public void MemoryDelete_IsRefusedOnTheReservedTarget() =>
-        _scope.Check("shared", "memory_delete").IsAllowed.ShouldBeFalse(
-            "memory_delete is refused on the reserved target: its content is owned by the watch and the file");
+        _scope.Check("shared", "delete_entry").IsAllowed.ShouldBeFalse(
+            "delete_entry is refused on the reserved target: its content is owned by the watch and the file");
 
     [Fact]
     public void AnOrdinaryProject_AllowsEveryTool()

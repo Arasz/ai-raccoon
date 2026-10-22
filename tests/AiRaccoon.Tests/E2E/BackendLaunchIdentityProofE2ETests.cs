@@ -191,7 +191,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
             await using (var first = StartProxy(port))
             {
                 (await first.ListToolsAsync(Ct)).ShouldNotBeEmpty();
-                var written = await first.CallToolAsync("memory_write",
+                var written = await first.CallToolAsync("add_memory",
                     new JsonObject { ["projectId"] = "flow", ["content"] = "identity proof full flow marker" }, Ct);
                 hash = JsonDocument.Parse(written).RootElement.GetProperty("data").GetProperty("hash").GetString()!;
                 (await first.CloseAsync(HardCap)).ShouldBe(ErrorCode.Ok.Success, first.Stderr);
@@ -218,7 +218,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
 
             await using (var second = StartProxy(port))
             {
-                var read = await second.CallToolAsync("memory_get",
+                var read = await second.CallToolAsync("get_entry",
                     new JsonObject { ["projectId"] = "flow", ["hash"] = hash }, Ct);
                 read.ShouldContain("identity proof full flow marker");
                 (await second.CloseAsync(HardCap)).ShouldBe(ErrorCode.Ok.Success, second.Stderr);

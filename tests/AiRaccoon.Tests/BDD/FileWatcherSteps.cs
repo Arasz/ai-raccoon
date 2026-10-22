@@ -545,7 +545,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         }
     }
 
-    // ── Rule: Watch errors are reported through memory_watch_status ──
+    // ── Rule: Watch errors are reported through get_watch_status ──
     [Given("^a watch for \"([^\"]*)\" whose file fails to ingest$")]
     public Task GivenWatchWhoseFileFailsToIngest(string projectId) => GivenWatchWhereDigestFails(projectId, "/repo");
 
@@ -588,7 +588,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         }
     }
 
-    // ── Rule: memory_watch_remove on a non-existent watch is a no-op ──
+    // ── Rule: remove_watch on a non-existent watch is a no-op ──
     [Given("^a watch for \"([^\"]*)\" that was already removed$")]
     public async Task GivenWatchAlreadyRemoved(string projectId)
     {
@@ -620,7 +620,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     }
 
     // ── Whens ──
-    [When("^I call memory_watch_add for \"([^\"]*)\" on path \"([^\"]*)\"$")]
+    [When("^I call add_watch for \"([^\"]*)\" on path \"([^\"]*)\"$")]
     public async Task WhenCallWatchAdd(string projectId, string path)
     {
         _lastError = null;
@@ -644,7 +644,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         }
     }
 
-    [When("^I call memory_watch_add for \"([^\"]*)\" on path \"([^\"]*)\" twice$")]
+    [When("^I call add_watch for \"([^\"]*)\" on path \"([^\"]*)\" twice$")]
     public async Task WhenCallWatchAddTwice(string projectId, string path)
     {
         _lastError = null;
@@ -661,7 +661,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         }
     }
 
-    [When("^I call memory_watch_add without a project on path \"([^\"]*)\"$")]
+    [When("^I call add_watch without a project on path \"([^\"]*)\"$")]
     public async Task WhenCallWatchAddWithoutProject(string path)
     {
         _lastError = null;
@@ -675,7 +675,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         }
     }
 
-    [When("^I call memory_watch_remove for \"([^\"]*)\" on path \"([^\"]*)\"$")]
+    [When("^I call remove_watch for \"([^\"]*)\" on path \"([^\"]*)\"$")]
     public async Task WhenCallWatchRemove(string projectId, string path)
     {
         _lastError = null;
@@ -690,7 +690,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         }
     }
 
-    [When("^I call memory_watch_remove for \"([^\"]*)\" on the same path$")]
+    [When("^I call remove_watch for \"([^\"]*)\" on the same path$")]
     public async Task WhenCallWatchRemoveSamePath(string projectId)
     {
         _lastError = null;
@@ -705,7 +705,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         }
     }
 
-    [When("^memory_watch_status for \"([^\"]*)\" is called$")]
+    [When("^get_watch_status for \"([^\"]*)\" is called$")]
     public Task WhenWatchStatusCalled(string projectId) => StatusAsync(projectId);
 
     [When("^a new file \"([^\"]*)\" is created$")]
@@ -1028,7 +1028,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
             .ShouldBeTrue();
     }
 
-    [Then("^memory_watch_status for \"([^\"]*)\" shows the watch scanning$")]
+    [Then("^get_watch_status for \"([^\"]*)\" shows the watch scanning$")]
     public async Task ThenStatusShowsScanning(string projectId)
     {
         var status = await StatusAsync(projectId);
@@ -1044,9 +1044,9 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         status.Watches[0].State.ShouldBe(WatchState.Scanning);
     }
 
-    [Then("^memory_watch_status for \"([^\"]*)\" shows the scan error$")]
-    [Then("^memory_watch_status for \"([^\"]*)\" shows the error for that watch$")]
-    [Then("^memory_watch_status for \"([^\"]*)\" shows the error$")]
+    [Then("^get_watch_status for \"([^\"]*)\" shows the scan error$")]
+    [Then("^get_watch_status for \"([^\"]*)\" shows the error for that watch$")]
+    [Then("^get_watch_status for \"([^\"]*)\" shows the error$")]
     public async Task ThenStatusShowsError(string projectId)
     {
         await Ctx.ReconcileOnceAsync();
@@ -1066,7 +1066,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         status.Watches.Any(w => w.LastError is not null).ShouldBeTrue();
     }
 
-    [Then("^memory_watch_status for \"([^\"]*)\" no longer shows the error$")]
+    [Then("^get_watch_status for \"([^\"]*)\" no longer shows the error$")]
     public async Task ThenStatusNoLongerShowsError(string projectId)
     {
         var status = await StatusAsync(projectId);
@@ -1074,7 +1074,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         status.Watches[0].LastError.ShouldBeNull();
     }
 
-    [Then("^memory_watch_status for \"([^\"]*)\" reports the watch as stopped$")]
+    [Then("^get_watch_status for \"([^\"]*)\" reports the watch as stopped$")]
     public async Task ThenStatusReportsStopped(string projectId)
     {
         var status = await StatusAsync(projectId);
@@ -1082,7 +1082,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         status.Watches[0].State.ShouldBe(WatchState.Stopped);
     }
 
-    [Then("^memory_watch_status for \"([^\"]*)\" reports the watch as retrying$")]
+    [Then("^get_watch_status for \"([^\"]*)\" reports the watch as retrying$")]
     public async Task ThenStatusReportsRetrying(string projectId)
     {
         // The retry that follows the backoff succeeded (Then "the digest is attempted again");
@@ -1101,7 +1101,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         status.Watches[0].State.ShouldBe(WatchState.Retrying);
     }
 
-    [Then("^memory_watch_status for \"([^\"]*)\" reports the watch healthy$")]
+    [Then("^get_watch_status for \"([^\"]*)\" reports the watch healthy$")]
     public async Task ThenStatusReportsHealthy(string projectId)
     {
         var status = await StatusAsync(projectId);
@@ -1109,7 +1109,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         status.Watches[0].State.ShouldBe(WatchState.Healthy);
     }
 
-    [Then("^memory_watch_status for \"([^\"]*)\" stays healthy$")]
+    [Then("^get_watch_status for \"([^\"]*)\" stays healthy$")]
     public async Task ThenStatusStaysHealthy(string projectId)
     {
         var ok = await Ctx.StepUntilAsync(async () =>
@@ -1120,14 +1120,14 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         ok.ShouldBeTrue("the watch did not reach healthy within the poll bound");
     }
 
-    [Then("^memory_watch_status for \"([^\"]*)\" shows no watch for it$")]
+    [Then("^get_watch_status for \"([^\"]*)\" shows no watch for it$")]
     public async Task ThenStatusShowsNoWatch(string projectId)
     {
         var status = await StatusAsync(projectId);
         status.Watches.Count.ShouldBe(0);
     }
 
-    [Then("^memory_watch_status for \"([^\"]*)\" still answers$")]
+    [Then("^get_watch_status for \"([^\"]*)\" still answers$")]
     public async Task ThenStatusStillAnswers(string projectId)
     {
         var status = await StatusAsync(projectId);
@@ -1178,8 +1178,8 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         results.ShouldNotBeNull();
     }
 
-    [Then("^memory_search for \"([^\"]*)\" returns the file's content$")]
-    [Then("^memory_search for \"([^\"]*)\" returns its content$")]
+    [Then("^query for \"([^\"]*)\" returns the file's content$")]
+    [Then("^query for \"([^\"]*)\" returns its content$")]
     public async Task ThenSearchReturnsFilesContent(string projectId)
     {
         _lastFile.ShouldNotBeNull();
@@ -1266,14 +1266,14 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         (await SearchAsync(DefaultProject, _lastFileContent!)).Count.ShouldBe(1);
     }
 
-    [Then("^memory_search for \"([^\"]*)\" returns nothing for it$")]
+    [Then("^query for \"([^\"]*)\" returns nothing for it$")]
     public async Task ThenSearchReturnsNothing(string projectId)
     {
         _lastFileContent.ShouldNotBeNull();
         (await SearchAsync(projectId, _lastFileContent!)).Count.ShouldBe(0);
     }
 
-    [Then("^memory_search for \"([^\"]*)\" no longer returns its content$")]
+    [Then("^query for \"([^\"]*)\" no longer returns its content$")]
     public async Task ThenSearchNoLongerReturnsContent(string projectId)
     {
         _lastFileContent.ShouldNotBeNull();
@@ -1281,7 +1281,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         ok.ShouldBeTrue("the deleted file's content is still searchable");
     }
 
-    [Then("^memory_search for \"([^\"]*)\" returns the content under \"([^\"]*)\"$")]
+    [Then("^query for \"([^\"]*)\" returns the content under \"([^\"]*)\"$")]
     public async Task ThenSearchReturnsContentUnder(string projectId, string path)
     {
         var real = Resolve(path);
@@ -1427,7 +1427,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         }
     }
 
-    [Then("^memory_search for \"([^\"]*)\" returns the same results as before$")]
+    [Then("^query for \"([^\"]*)\" returns the same results as before$")]
     public async Task ThenSearchSameResultsAsBefore(string projectId)
     {
         _beforeSearch.ShouldNotBeNull();
@@ -1435,14 +1435,14 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         after.Count.ShouldBe(_beforeSearch!.Count);
     }
 
-    [Then("^memory_search for \"([^\"]*)\" still answers$")]
+    [Then("^query for \"([^\"]*)\" still answers$")]
     public async Task ThenSearchStillAnswers(string projectId)
     {
         var results = await SearchAsync(projectId, "zephyr");
         results.ShouldNotBeNull();
     }
 
-    [Then("^memory_watch_add for \"([^\"]*)\" on another path still works$")]
+    [Then("^add_watch for \"([^\"]*)\" on another path still works$")]
     public async Task ThenWatchAddOnAnotherPathStillWorks(string projectId)
     {
         _lastError = null;
@@ -1483,7 +1483,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     [Then("^the removal succeeds without tier denial$")]
     public void ThenRemovalSucceedsWithoutTierDenial() => _lastError.ShouldBeNull();
 
-    [Then("^memory_watch_remove for \"([^\"]*)\" on path \"([^\"]*)\" removes it$")]
+    [Then("^remove_watch for \"([^\"]*)\" on path \"([^\"]*)\" removes it$")]
     public async Task ThenWatchRemoveRemovesIt(string projectId, string path)
     {
         _lastError = null;
@@ -1787,7 +1787,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         WriteFileAt("/repo", file2);
     }
 
-    [Then("^memory_search for \"([^\"]*)\" returns both new contents$")]
+    [Then("^query for \"([^\"]*)\" returns both new contents$")]
     public async Task ThenSearchReturnsBothNewContents(string projectId)
     {
         foreach (var file in new[] { "a.md", "b.md" })
@@ -1844,8 +1844,8 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         (await EnsureSearchableAsync(projectId, _lastFileContent!, _lastFile)).ShouldBeTrue(
             "the rewritten notebook did not become searchable");
 
-    [Given("^memory_watch_status for \"([^\"]*)\" reports the watch healthy with ([0-9]+) skipped files$")]
-    [Then("^memory_watch_status for \"([^\"]*)\" reports the watch healthy with ([0-9]+) skipped files$")]
+    [Given("^get_watch_status for \"([^\"]*)\" reports the watch healthy with ([0-9]+) skipped files$")]
+    [Then("^get_watch_status for \"([^\"]*)\" reports the watch healthy with ([0-9]+) skipped files$")]
     public async Task ThenStatusReportsSkippedCount(string projectId, int count)
     {
         await Ctx.ReconcileOnceAsync();

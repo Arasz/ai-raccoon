@@ -104,7 +104,7 @@ public sealed class AccessModeGuardTests
     {
         var counting = new CountingStore();
 
-        await new MemoryAccessGuard(counting).EnsureAsync("acme", AccessRequirement.Write, "memory_write",
+        await new MemoryAccessGuard(counting).EnsureAsync("acme", AccessRequirement.Write, "add_memory",
             TestContext.Current.CancellationToken);
 
         counting.SettingsReadCount.ShouldBe(1);
@@ -116,12 +116,12 @@ public sealed class AccessModeGuardTests
         _store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "rw";
 
         var ex = await Should.ThrowAsync<AccessDeniedException>(() =>
-            _guard.EnsureAsync("acme", AccessRequirement.Destructive, "memory_delete",
+            _guard.EnsureAsync("acme", AccessRequirement.Destructive, "delete_entry",
                 TestContext.Current.CancellationToken));
 
         // The "access-denied:" wire prefix is added by the CallToolFilter (ToolRefusalsTests), not the guard itself.
         // F53: the refusal names the remedy so an agent can relay what to run.
-        ex.Message.ShouldBe("memory_delete requires mode full (current rw); run 'ai-raccoon settings access set acme full' to raise this project's mode, or 'ai-raccoon settings access default set full' for all projects");
+        ex.Message.ShouldBe("delete_entry requires mode full (current rw); run 'ai-raccoon settings access set acme full' to raise this project's mode, or 'ai-raccoon settings access default set full' for all projects");
     }
 
     // Scenario 5: forgetting knobs denied in rw, policy unchanged.

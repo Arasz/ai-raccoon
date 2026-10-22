@@ -48,7 +48,7 @@ public class CliCommandTreeTests
 
         description.ShouldContain("server");
         description.ShouldContain("--apply");
-        description.ShouldNotContain("memory_embed_pending");
+        description.ShouldNotContain("embed_deferred_entries");
         description.ShouldNotContain("no server running");
     }
 
@@ -94,7 +94,7 @@ public class CliCommandTreeTests
             var value = description!;
             value.ShouldNotContain("ADR-");
             value.ShouldNotContain("GH #");
-            value.ShouldNotContain("memory_embed_pending");
+            value.ShouldNotContain("embed_deferred_entries");
             value.Length.ShouldBeLessThan(220);
         }
 

@@ -24,11 +24,11 @@ public sealed class ToolRefusalsCancellationTests
     public async Task OperationCanceled_WithLiveToken_ReturnsCancelledErrorResult()
     {
         var result = await ToolRefusals.Filter(Throwing(new OperationCanceledException()))(
-            Request("memory_search"), CancellationToken.None);
+            Request("query"), CancellationToken.None);
 
         result.IsError.ShouldBe(true);
         TextOf(result).ShouldStartWith("cancelled:");
-        TextOf(result).ShouldContain("memory_search");
+        TextOf(result).ShouldContain("query");
     }
 
     /// <summary>The traced stack threw the derived type at the key-resolver gate.</summary>
@@ -36,7 +36,7 @@ public sealed class ToolRefusalsCancellationTests
     public async Task TaskCanceled_WithLiveToken_ReturnsCancelledErrorResult()
     {
         var result = await ToolRefusals.Filter(Throwing(new TaskCanceledException()))(
-            Request("memory_search"), CancellationToken.None);
+            Request("query"), CancellationToken.None);
 
         result.IsError.ShouldBe(true);
         TextOf(result).ShouldStartWith("cancelled:");
@@ -53,11 +53,11 @@ public sealed class ToolRefusalsCancellationTests
         await cts.CancelAsync();
 
         var result = await ToolRefusals.Filter(Throwing(new TaskCanceledException()))(
-            Request("memory_search"), cts.Token);
+            Request("query"), cts.Token);
 
         result.IsError.ShouldBe(true);
         TextOf(result).ShouldStartWith("cancelled:");
-        TextOf(result).ShouldContain("memory_search");
+        TextOf(result).ShouldContain("query");
     }
 
     /// <summary>Protocol-level stays protocol-level, even though McpProtocolException derives from McpException.</summary>
@@ -66,7 +66,7 @@ public sealed class ToolRefusalsCancellationTests
     {
         await Should.ThrowAsync<McpProtocolException>(() =>
             ToolRefusals.Filter(Throwing(new McpProtocolException("boom")))(
-                Request("memory_search"), CancellationToken.None).AsTask());
+                Request("query"), CancellationToken.None).AsTask());
     }
 
     /// <summary>The cancel line follows the refusal anti-flood shape: one line, no exception attached.</summary>
@@ -75,13 +75,13 @@ public sealed class ToolRefusalsCancellationTests
     {
         var logger = new FakeLogger();
 
-        ToolRefusals.Log.ToolCancelled(logger, "memory_search", "request was cancelled");
+        ToolRefusals.Log.ToolCancelled(logger, "query", "request was cancelled");
 
         var record = logger.Collector.LatestRecord;
         record.ShouldNotBeNull();
         record.Level.ShouldBe(LogLevel.Information);
         record.Id.Id.ShouldBe(913);
-        record.Message.ShouldContain("memory_search");
+        record.Message.ShouldContain("query");
         record.Exception.ShouldBeNull();
     }
 
@@ -98,14 +98,14 @@ public sealed class ToolRefusalsCancellationTests
         };
 
         await ToolRefusals.Filter(Throwing(new TaskCanceledException()))(
-            Request("memory_search", arguments, logger), cts.Token);
+            Request("query", arguments, logger), cts.Token);
 
         logger.Collector.Count.ShouldBe(1);
         var record = logger.Collector.LatestRecord;
         record.ShouldNotBeNull();
         record.Id.Id.ShouldBe(914);
         record.Level.ShouldBe(LogLevel.Warning);
-        record.Message.ShouldContain("memory_search");
+        record.Message.ShouldContain("query");
         record.Message.ShouldContain("timed out");
         record.Message.ShouldContain("query of 4181 chars");
         record.Exception.ShouldBeNull();
@@ -125,12 +125,12 @@ public sealed class ToolRefusalsCancellationTests
         await cts.CancelAsync();
 
         await ToolRefusals.Filter(Throwing(new OperationCanceledException()))(
-            Request("memory_sync", null, logger), cts.Token);
+            Request("sync_to_cloud", null, logger), cts.Token);
 
         var record = logger.Collector.LatestRecord;
         record.ShouldNotBeNull();
         record.Id.Id.ShouldBe(915);
-        record.Message.ShouldContain("memory_sync");
+        record.Message.ShouldContain("sync_to_cloud");
         record.Message.ShouldNotContain("query");
         record.StructuredState!.ShouldNotContain(kv => kv.Key == "QueryLength");
     }

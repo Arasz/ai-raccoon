@@ -72,7 +72,7 @@ public sealed class SweepScopeSiblingTests : IDisposable
 
         var stillActive = await _store.ListContextAsync(ProjectId, ContextNaming.WorkspaceContext("ws-1"),
             TestContext.Current.CancellationToken);
-        stillActive.Count.ShouldBe(1, "memory_workspace_status must still report the untouched workspace entry");
+        stillActive.Count.ShouldBe(1, "get_workspace_status must still report the untouched workspace entry");
     }
 
     [RetryFact]

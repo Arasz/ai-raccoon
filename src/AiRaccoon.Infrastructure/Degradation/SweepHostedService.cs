@@ -83,7 +83,7 @@ public sealed partial class SweepHostedService(
         {
             try
             {
-                // H6: the same Destructive requirement memory_sweep enforces at the MCP boundary
+                // H6: the same Destructive requirement trigger_memory_cleanup enforces at the MCP boundary
                 // (full mode only) applies here — a project that has not consented to destructive
                 // operations does not lose that consent just because the caller is a timer.
                 var mode = await ResolveModeAsync(projectId, cancellationToken);

@@ -137,7 +137,7 @@ public sealed class ReingestRepairTests : IDisposable
         await RunRepairAsync(apply: true);
 
         var metadata = await _store.GetMetadataAsync(ProjectId, manual.Hash, TestContext.Current.CancellationToken);
-        metadata.ShouldNotBeNull("a memory_write row citing the file as source_file must survive reingest untouched");
+        metadata.ShouldNotBeNull("a add_memory row citing the file as source_file must survive reingest untouched");
     }
 
     [RetryFact]

@@ -24,7 +24,7 @@ public sealed class ToolRefusalsBankBusyTests
     public async Task Busy_Code5_ReturnsBankBusyRefusal()
     {
         var result = await ToolRefusals.Filter(Throwing(new SqliteException("database is locked", 5)))(
-            Request("memory_search"), CancellationToken.None);
+            Request("query"), CancellationToken.None);
 
         result.IsError.ShouldBe(true);
         TextOf(result).ShouldStartWith("bank-busy:");
@@ -36,7 +36,7 @@ public sealed class ToolRefusalsBankBusyTests
     public async Task Locked_Code6_ReturnsBankBusyRefusal()
     {
         var result = await ToolRefusals.Filter(Throwing(new SqliteException("database table is locked", 6)))(
-            Request("memory_write"), CancellationToken.None);
+            Request("add_memory"), CancellationToken.None);
 
         result.IsError.ShouldBe(true);
         TextOf(result).ShouldStartWith("bank-busy:");
@@ -49,7 +49,7 @@ public sealed class ToolRefusalsBankBusyTests
         var wrapped = new InvalidOperationException("write failed",
             new SqliteException("database is locked", 5));
 
-        var result = await ToolRefusals.Filter(Throwing(wrapped))(Request("memory_search"), CancellationToken.None);
+        var result = await ToolRefusals.Filter(Throwing(wrapped))(Request("query"), CancellationToken.None);
 
         result.IsError.ShouldBe(true);
         TextOf(result).ShouldStartWith("bank-busy:");
@@ -64,7 +64,7 @@ public sealed class ToolRefusalsBankBusyTests
     public async Task NonBusySqliteError_StaysUnexpected()
     {
         var result = await ToolRefusals.Filter(Throwing(new SqliteException("file is not a database", 26)))(
-            Request("memory_stats"), CancellationToken.None);
+            Request("get_store_statistics"), CancellationToken.None);
 
         result.IsError.ShouldBe(true);
         TextOf(result).ShouldBe("unexpected-error: SqliteException");

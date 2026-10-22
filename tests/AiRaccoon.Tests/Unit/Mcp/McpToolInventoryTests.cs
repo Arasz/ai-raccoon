@@ -25,7 +25,7 @@ public sealed class McpToolInventoryTests
     [Fact]
     public void Names_ContainsMemoryPerformance()
     {
-        McpToolInventory.Names().ShouldContain("memory_performance");
+        McpToolInventory.Names().ShouldContain("get_engine_statistics");
     }
 
     /// <summary>

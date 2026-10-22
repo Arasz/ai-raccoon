@@ -53,9 +53,9 @@ public sealed class McpToolCompositionTests : IDisposable
         });
         var gate = provider.GetRequiredService<IToolGate>();
         var error = await Should.ThrowAsync<ArgumentException>(() =>
-            gate.RequireAsync("shared", AccessRequirement.Write, "memory_write", TestContext.Current.CancellationToken));
-        error.Message.ShouldBe("shared-project-unsupported: memory_write requires an ordinary project; shared supports document ingestion and watches.");
-        (await gate.RequireAsync("shared", AccessRequirement.Read, "memory_search", TestContext.Current.CancellationToken))
+            gate.RequireAsync("shared", AccessRequirement.Write, "add_memory", TestContext.Current.CancellationToken));
+        error.Message.ShouldBe("shared-project-unsupported: add_memory requires an ordinary project; shared supports document ingestion and watches.");
+        (await gate.RequireAsync("shared", AccessRequirement.Read, "query", TestContext.Current.CancellationToken))
             .ShouldBe("shared");
     }
 

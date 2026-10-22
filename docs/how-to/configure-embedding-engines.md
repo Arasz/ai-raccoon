@@ -4,7 +4,7 @@ Select, configure, and switch embedding models for vector search.
 
 > **A fresh bank has no memory engine.** Memory search runs keyword-only until you run
 > `ai-raccoon model embedding set local` (Recipe 1, the recommended engine). The `warning`
-> on a `memory_search` result says so, and `doctor` reports the same state.
+> on a `query` result says so, and `doctor` reports the same state.
 
 ---
 
@@ -396,7 +396,7 @@ on that model keeps it until you run the command again.
 
 It is the one command every surface that can notice a missing code engine quotes: the
 `code engine not configured` search warning, `ai-raccoon doctor`, the MCP server
-instructions and the `memory_search` tool description all name this exact string
+instructions and the `query` tool description all name this exact string
 (`CodeEngineSetup.DefaultModelCommand` — one constant, not six copies).
 
 **Why this one activates when `model download` never does.** `model download` is a fetch

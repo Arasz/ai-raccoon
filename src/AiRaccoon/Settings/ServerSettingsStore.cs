@@ -73,7 +73,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
             return null;
         }
 
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         var value = await response.Content.ReadFromJsonAsync<SettingValue>(cancellationToken);
         return value?.Value;
     }
@@ -83,7 +83,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     {
         Guard.IsNotNullOrWhiteSpace(prefix);
         var response = await SendAsync(token => _client.GetAsync(SettingsProtocol.ForPrefix(prefix), token), cancellationToken);
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         var rows = await response.Content.ReadFromJsonAsync<SettingRows>(cancellationToken);
         return rows?.Rows ?? new Dictionary<string, string>(StringComparer.Ordinal);
     }
@@ -98,7 +98,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
             throw new ProjectRefusedException(await ReadRefusalBodyAsync(response.Content, cancellationToken));
         }
 
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
     }
 
     public async Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default)
@@ -111,7 +111,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
             throw new ModelMigrationInProgressException(await ReadRefusalBodyAsync(response.Content, cancellationToken));
         }
 
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -127,7 +127,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
             throw new ModelMigrationInProgressException(await ReadRefusalBodyAsync(response.Content, cancellationToken));
         }
 
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         var body = await response.Content.ReadFromJsonAsync<ModelMigrationResponse>(cancellationToken);
         return new EmbeddingConfig(body!.Provider, body.Model, body.Engine);
     }
@@ -150,7 +150,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
             throw new CodeEngineActivationRefusedException(await response.Content.ReadAsStringAsync(cancellationToken));
         }
 
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         var body = await response.Content.ReadFromJsonAsync<ModelCodeActivationResponse>(cancellationToken);
         return new EmbeddingConfig("local", body!.Model, body.Engine);
     }
@@ -160,7 +160,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     {
         var response = await SendAsync(token => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.Reingest), token), cancellationToken,
             Timeout.InfiniteTimeSpan);
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         return (await response.Content.ReadFromJsonAsync<ReingestRepairReport>(cancellationToken))!;
     }
 
@@ -169,7 +169,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     {
         var response = await SendAsync(token => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.ChunkIndex), token), cancellationToken,
             Timeout.InfiniteTimeSpan);
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         return (await response.Content.ReadFromJsonAsync<ChunkIndexRepairReport>(cancellationToken))!;
     }
 
@@ -178,7 +178,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     {
         var response = await SendAsync(token => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.ProjectIds), token), cancellationToken,
             Timeout.InfiniteTimeSpan);
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         return (await response.Content.ReadFromJsonAsync<ProjectIdCensusReport>(cancellationToken))!;
     }
 
@@ -187,14 +187,14 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     {
         var response = await SendAsync(token =>
             _client.PostAsJsonAsync(RepairProtocol.Path, new RepairRequest(kind.ToKey(), projectIdsMapJson), token), cancellationToken);
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
     }
 
     /// <inheritdoc />
     public async Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default)
     {
         var response = await SendAsync(token => _client.GetAsync(PromotionQueuePruneProtocol.Path, token), cancellationToken);
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         return (await response.Content.ReadFromJsonAsync<PromotionQueueOrphanReport>(cancellationToken))!;
     }
 
@@ -203,14 +203,14 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     {
         var response = await SendAsync(token =>
             _client.PostAsync(PromotionQueuePruneProtocol.Path, null, token), cancellationToken);
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
     }
 
     /// <inheritdoc />
     public async Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default)
     {
         var response = await SendAsync(token => _client.GetAsync(MaintenanceStatsProtocol.Path, token), cancellationToken);
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         return (await response.Content.ReadFromJsonAsync<BankStats>(cancellationToken))!;
     }
 
@@ -218,7 +218,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     public async Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default)
     {
         var response = await SendAsync(token => _client.GetAsync(NoiseSummaryProtocol.Path, token), cancellationToken);
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         return (await response.Content.ReadFromJsonAsync<NoiseEntrySummary>(cancellationToken))!;
     }
 
@@ -226,7 +226,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     public async Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default)
     {
         var response = await SendAsync(token => _client.GetAsync(WatchRegisteredProtocol.Path, token), cancellationToken);
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         return (await response.Content.ReadFromJsonAsync<List<WatchRegistration>>(cancellationToken))!;
     }
 
@@ -265,7 +265,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         Guard.IsNotNullOrWhiteSpace(projectId);
         var response = await SendAsync(token =>
             _client.PostAsJsonAsync(ProjectsProtocol.Path, new ProjectRegisterRequest(projectId, name), token), cancellationToken);
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         var body = (await response.Content.ReadFromJsonAsync<ProjectRegisterResponse>(cancellationToken))!;
         return new ProjectRegistration(body.ProjectId, body.Outcome);
     }
@@ -275,7 +275,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     {
         Guard.IsNotNullOrWhiteSpace(name);
         var response = await SendAsync(token => _client.GetAsync(ProjectsProtocol.ForName(name), token), cancellationToken);
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         return (await response.Content.ReadFromJsonAsync<ProjectIdsResponse>(cancellationToken))!.Ids;
     }
 
@@ -284,7 +284,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     {
         Guard.IsNotNullOrWhiteSpace(projectId);
         var response = await SendAsync(token => _client.GetAsync(ProjectsProtocol.ForCheck(projectId), token), cancellationToken);
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
         var body = (await response.Content.ReadFromJsonAsync<ProjectCheckResponse>(cancellationToken))!;
         return new ProjectIdCheck(body.ProjectId, body.Status);
     }
@@ -327,7 +327,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
             throw WatchRefusedException.For(refusal, projectId, path);
         }
 
-        Ensure(response);
+        await EnsureAsync(response, cancellationToken);
     }
 
     /// <summary>A 409 body is displayed to the user: read no more than <see cref="RefusalBodyMaxLength" /> characters, so a runaway body cannot become an unbounded CLI string.</summary>
@@ -340,7 +340,13 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         return new string(buffer, 0, read);
     }
 
-    private void Ensure(HttpResponseMessage response)
+    /// <summary>
+    ///     A 4xx body is the server's refusal and it names what to do ("repair that owner"), so it
+    ///     is read and carried into the message. <c>EnsureSuccessStatusCode()</c> threw the status
+    ///     away, and the operator saw "400 (Bad Request)" instead of the sentence that says which
+    ///     owner to repair.
+    /// </summary>
+    private async Task EnsureAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
@@ -354,6 +360,17 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
                 $"ai-raccoon: the settings server at {_client.BaseAddress} failed with {(int)response.StatusCode} {response.ReasonPhrase} — this is a server-side fault, not a bad argument");
         }
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            // An HttpRequestException with the status, so the CLI's status-to-exit-code mapping
+            // still names the case (400 -> RequestRejected, 404 -> EndpointMissing) - but the
+            // message carries the server's refusal, which names what to do ("repair that owner").
+            var body = await ReadRefusalBodyAsync(response.Content, cancellationToken);
+            // No "ai-raccoon: " prefix here: CliFailureFormatting.Format prepends one, and the
+            // operator saw it twice.
+            throw new HttpRequestException(
+                $"the settings server refused this request ({(int)response.StatusCode} {response.ReasonPhrase}): {body}",
+                inner: null, response.StatusCode);
+        }
     }
 }

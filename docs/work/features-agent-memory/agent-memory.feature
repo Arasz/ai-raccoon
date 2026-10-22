@@ -21,7 +21,7 @@ Feature: Agent memory management (ai-raccoon MCP server)
     @FR-MEM-1.2 @FR-MEM-1.3 @FR-MEM-1.4 @FR-MEM-1.21 @AC-2
     Rule: One memory bank per install scope; projects partition it, and a shared context spans them
         Scenario: Every tool requires a project id
-            When I call memory_write without a project_id
+            When I call add_memory without a project_id
             Then the tool errors with invalid-params
             And no memory is written
         Scenario: Two projects keep separate partitions in one bank
@@ -49,7 +49,7 @@ Feature: Agent memory management (ai-raccoon MCP server)
             Then one result is returned with ranking above the minimum score
         Scenario: Duplicate content is written once
             When I write the same content twice to project "acme-web"
-            Then memory_stats reports one entry
+            Then get_store_statistics reports one entry
         Scenario: A context restricts search
             Given content "docs note" is written with context "docs:api"
             When I search for "docs note" restricted to context "docs:api"
@@ -59,19 +59,19 @@ Feature: Agent memory management (ai-raccoon MCP server)
         Scenario: Deleting a hash removes the entry
             Given a memory entry with a known hash exists
             When I delete that hash
-            Then memory_stats reports the entry is gone
+            Then get_store_statistics reports the entry is gone
 
     @FR-MEM-1.5 @FR-MEM-1.6 @FR-MEM-1.7 @AC-3
     Rule: A workspace sandbox keeps worktree writes out of committed memory
         Scenario: A new workspace returns a workspace id
-            When I call memory_workspace_begin for project "acme-web" with agent "agent-a"
+            When I call initialize_workspace for project "acme-web" with agent "agent-a"
             Then a workspace id is returned
             And its context is "workspace:<workspace-id>"
         Scenario: Writes with a workspace id stay in the workspace
             Given a workspace "ws-1" exists for project "acme-web"
             When I write "draft finding" to project "acme-web" with workspace "ws-1"
-            Then memory_stats for project "acme-web" without workspace shows zero draft entries
-            And the entry is listed by memory_workspace_status for "ws-1"
+            Then get_store_statistics for project "acme-web" without workspace shows zero draft entries
+            And the entry is listed by get_workspace_status for "ws-1"
         Scenario: Search spans project and workspace when the workspace is named
             Given project "acme-web" contains "committed fact"
             And workspace "ws-1" contains "draft finding"
@@ -79,15 +79,15 @@ Feature: Agent memory management (ai-raccoon MCP server)
             Then both the committed fact and the draft finding are returned
         Scenario: Consolidation promotes the kept hashes and deletes the rest
             Given workspace "ws-1" for project "acme-web" contains entries with hashes "h1" and "h2"
-            When I call memory_workspace_consolidate with keep=["h1"]
+            When I call close_workspace with keep=["h1"]
             Then "h1" is searchable in the project context
             And workspace "ws-1" no longer lists "h1" or "h2"
-            And memory_stats for project "acme-web" without workspace reports exactly one new entry
+            And get_store_statistics for project "acme-web" without workspace reports exactly one new entry
         Scenario: A workspace can be discarded without promoting anything
             Given workspace "ws-2" for project "acme-web" contains an entry
-            When I call memory_workspace_discard for "ws-2"
-            Then memory_workspace_status for "ws-2" returns zero entries
-            And memory_stats for project "acme-web" is unchanged
+            When I call discard_workspace for "ws-2"
+            Then get_workspace_status for "ws-2" returns zero entries
+            And get_store_statistics for project "acme-web" is unchanged
 
     # Embedding configuration is live in native-memory FR-NM-3 (pluggable embeddings: local
     # engine, deferred writes, embed_pending) — the three FR-MEM-1.11/1.12 scenarios above
@@ -104,18 +104,18 @@ Feature: Agent memory management (ai-raccoon MCP server)
     Rule: Degradation removes only low-rated, aged memories
         Scenario: A dry run lists candidates without deleting
             Given an entry rated below threshold and older than the TTL exists
-            When I call memory_sweep with dry_run=true
+            When I call trigger_memory_cleanup with dry_run=true
             Then the entry is listed as a candidate
-            And memory_stats still reports the entry
+            And get_store_statistics still reports the entry
         Scenario: A real sweep deletes exactly the candidates
             Given an entry rated below threshold and older than the TTL exists
             And an entry rated above threshold exists
-            When I call memory_sweep with dry_run=false
+            When I call trigger_memory_cleanup with dry_run=false
             Then the low-rated aged entry is deleted
             And the highly-rated entry survives
         Scenario: Shared entries are protected from the sweep
             Given a shared entry rated below threshold and older than the TTL exists
-            When I call memory_sweep with dry_run=false
+            When I call trigger_memory_cleanup with dry_run=false
             Then the shared entry is not deleted
 
     @FR-MEM-1.16 @FR-MEM-1.22 @AC-8
@@ -126,7 +126,7 @@ Feature: Agent memory management (ai-raccoon MCP server)
         Scenario: A local-only install syncs its bank to the cloud database
             Given the tool is installed in project scope with no user-scope instance
             And a shared entry exists in the local bank
-            When I call memory_sync for project "acme-web"
+            When I call sync_to_cloud for project "acme-web"
             Then the local bank is synced to the configured cloud database
             And the shared entry is included in the synced payload
             And any user-scope instance correlates with it only through that cloud database

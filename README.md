@@ -25,7 +25,7 @@ Install the global tool:
 dotnet tool install -g ai-raccoon
 ```
 
-Activate the bundled embedding engine. A fresh bank has no memory engine until you run this, and `memory_search` stays keyword-only (it says so in its `warning`):
+Activate the bundled embedding engine. A fresh bank has no memory engine until you run this, and `query` stays keyword-only (it says so in its `warning`):
 
 ```bash
 ai-raccoon model embedding set local
@@ -48,7 +48,7 @@ The full walkthrough, including indexing your code, is [Get started with AiRacco
 - **The embed drain's rows-per-run is configurable from 64 to 4096, and what that value costs is written down (1.61.0).** [ADR-0136](docs/adr/0136-the-embed-drain-rows-per-run-runs-from-64-to-4096.md)
 - `ai-raccoon watch add|remove|status` register and inspect watches from a terminal; the watcher indexes Jupyter notebooks (`.ipynb`) by cell and reports the files it skipped, with the reason. (1.59.0) [CLI reference](docs/reference/cli-reference.md)
 - `ai-raccoon encryption 1password` keys the bank from an SSH Key item in 1Password, read through the `op` CLI. (1.58.0) [ADR-0132](docs/adr/0132-1password-cli-as-a-second-bank-key-source.md) · [how-to](docs/how-to/configure-ai-raccoon-server.md#key-the-bank-from-1password)
-- `ai-raccoon project id register | get | check` and the MCP tool `project_id_get` find or register the id a project already uses, before a new one is minted. (1.57.0) [ADR-0127](docs/adr/0127-reads-need-a-registered-project-id.md)
+- `ai-raccoon project id register | get | check` and the MCP tool `get_project_id` find or register the id a project already uses, before a new one is minted. (1.57.0) [ADR-0127](docs/adr/0127-reads-need-a-registered-project-id.md)
 - On Apple silicon the bundled engine can also run on the Neural Engine, opt-in with `ai-raccoon settings model device coreml`. (1.53.0) [ADR-0118](docs/adr/0118-opt-in-coreml-device-on-the-neural-engine.md) · [how-to](docs/how-to/configure-embedding-engines.md)
 - On Windows and Linux x64 the bundled engine runs on the GPU through WebGPU again, from ONNX Runtime's own WebGPU-enabled core that now ships inside the package; linux-arm64 stays on the CPU. (1.52.0) [ADR-0115](docs/adr/0115-bundle-onnxruntimes-webgpu-core-for-windows-and-linux-x64.md) · [how-to](docs/how-to/configure-embedding-engines.md)
 - The server went from up to a full core of CPU and a 6.8 GB footprint to about 2% of one core and 1.75 GB, and embeds on the GPU with 30-90x less CPU per embed, at unchanged search quality. (1.44.3-1.51.2) [report](docs/work/2026-09-25-performance-cpu-memory-gpu.md)
@@ -97,14 +97,14 @@ It asks for your password once, for `powermetrics` (add `--no-power` to skip it)
 |---|---|---|
 | Project-scoped memory | Notes partitioned by project id, in `~/.ai-raccoon` or `<project>/.ai-raccoon` | [Capabilities](docs/explanation/agent-memory-capabilities.md#storage-architecture-and-scope-partitioning) |
 | Hybrid search | FTS5 keyword and vec0 vector search, fused with Reciprocal Rank Fusion, with relevance floors and per-hit evidence | [Search pipeline](docs/explanation/agent-memory-capabilities.md#hybrid-search-pipeline-fts5--vec0--rrf) · [Parameters](docs/reference/search-parameters.md) |
-| Code corpus | A separate, never-synced index of 37 source extensions across C#, F#, Java, Kotlin, Scala, Python, Ruby, PHP, Lua, shell, TS/JS, Vue, Go, Rust, C/C++, Objective-C, Swift, HTML, CSS/SCSS, SQL, Terraform/HCL and Gherkin; `memory_search kind=code` or `kind=both`, `code_get` by hash | [How-to](docs/how-to/search-the-code-corpus.md) · [Dossier](docs/features/code-corpus/) |
+| Code corpus | A separate, never-synced index of 37 source extensions across C#, F#, Java, Kotlin, Scala, Python, Ruby, PHP, Lua, shell, TS/JS, Vue, Go, Rust, C/C++, Objective-C, Swift, HTML, CSS/SCSS, SQL, Terraform/HCL and Gherkin; `query kind=code` or `kind=both`, `get_entry` by hash | [How-to](docs/how-to/search-the-code-corpus.md) · [Dossier](docs/features/code-corpus/) |
 | File watching | Watched directories re-ingest on change, honouring `ai-raccoon.ignore` ([template](docs/reference/ai-raccoon-ignore-template.ignore)) | [Dossier](docs/features/file-watcher/) |
 | Workspace sandboxes | Isolated in-progress notes that consolidate into the project or get discarded | [Workspaces](docs/explanation/agent-memory-capabilities.md#workspace-sandbox-context-lifecycle) |
-| Shared tier | Cross-project facts promoted by `memory_share`, exempt from decay | [Shared tier](docs/explanation/agent-memory-capabilities.md#propose-and-shared-promotion-tier) |
+| Shared tier | Cross-project facts promoted by `share_memory`, exempt from decay | [Shared tier](docs/explanation/agent-memory-capabilities.md#propose-and-shared-promotion-tier) |
 | Rating and decay | Retrieval raises a memory's rating; a background sweep expires what nobody uses | [Degradation](docs/explanation/agent-memory-capabilities.md#memory-rating-and-degradation-sweep-reaper) |
 | Cloud sync | Optional S3 or Azure Blob snapshot sync with optimistic locking | [Architecture](docs/explanation/architecture.md#sync-cycle) |
 | Encryption at rest | Page-level ChaCha20 via `AIRACCOON_DB_PASSPHRASE`, rekeyable | [Configure](docs/how-to/configure-ai-raccoon-server.md#manage-database-encryption) · [Rekey](docs/how-to/rekey-an-encrypted-bank.md) |
-| Telemetry | OpenTelemetry metrics and traces, OTLP export, `memory_performance` | [Monitor](docs/how-to/monitor-and-export-telemetry.md) · [Metrics](docs/how-to/read-performance-metrics.md) |
+| Telemetry | OpenTelemetry metrics and traces, OTLP export, `get_engine_statistics` | [Monitor](docs/how-to/monitor-and-export-telemetry.md) · [Metrics](docs/how-to/read-performance-metrics.md) |
 
 Every MCP tool and its parameters are in the [tool reference](docs/reference/agent-memory-server.md); every command, option and exit code is in the [CLI reference](docs/reference/cli-reference.md).
 
@@ -152,6 +152,11 @@ Design background: [Architecture](docs/explanation/architecture.md) and the [ADR
 - [CLAUDE.md](CLAUDE.md) holds repo conventions, including the mandatory TDD workflow.
 - Before packing the tool from source, run `python3 scripts/download-embedding-model.py`. The bundled
   model's weights are downloaded, not committed, and `dotnet pack` stops without them.
+- The same file is what a plain `dotnet build` needs to *run*: the weights are gitignored, so a
+  fresh clone or a `git archive` build has an incomplete `Models/` directory and every write and
+  every search answers `unexpected-error: EmbeddingModelRejectedException` — which reads as a
+  product bug and is not one. Copy `model_fp16.onnx_data` from an installed build's output
+  directory, or run `ai-raccoon model download`, and the build behaves like the installed tool.
 - Report security issues privately per [SECURITY.md](SECURITY.md).
 
 ## License

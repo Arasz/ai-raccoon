@@ -16,7 +16,7 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
 /// <summary>
-///     `memory_ingest_file`'s direct-ingest path (<c>SqliteMemoryStore.ReplaceForDirectIngestAsync</c>)
+///     `ingest_file`'s direct-ingest path (<c>SqliteMemoryStore.ReplaceForDirectIngestAsync</c>)
 ///     leaves the row `pending` and enqueues the embed topic, like every other write path
 ///     (docs/work/2026-08-22-post-delta-3-plan.md) — it never embeds inline.
 /// </summary>

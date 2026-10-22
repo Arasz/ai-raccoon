@@ -1,9 +1,9 @@
 {
   "Provenance": {
-    "CapturedUtc": "2026-09-22T17:09:31.0632250\u002B00:00",
+    "CapturedUtc": "2026-10-22T02:12:13.4244410\u002B00:00",
     "ProcessArchitecture": "Arm64",
-    "OsDescription": "macOS 26.6.2",
-    "BuildVersion": "1.42.5.0",
+    "OsDescription": "macOS 27.0.1",
+    "BuildVersion": "2.0.0.0",
     "OnnxRuntimeVersion": "1.30.0\u002Bf2c39fe2f838cf35ce7da92824f5a5e3ee6e88a7",
     "Engine": "OnnxEmbeddingGenerator \u2014 bundled all-MiniLM-L6-v2 qint8, mean-pool \u002B L2, 256 window",
     "ModelSha256": "4278337fd0ff3c68bfb6291042cad8ab363e1d9fbc43dcb499fe91c871902474",

@@ -18,7 +18,7 @@ public sealed class PerformanceReportBuilderTests
     [Fact]
     public void Build_DefaultWindowAndBucket_Yields180Buckets()
     {
-        var report = PerformanceReportBuilder.Build(["memory_write"], [], Now,
+        var report = PerformanceReportBuilder.Build(["add_memory"], [], Now,
             TimeSpan.FromHours(3), TimeSpan.FromMinutes(1));
 
         report.Window.ShouldBe(TimeSpan.FromHours(3));
@@ -33,11 +33,11 @@ public sealed class PerformanceReportBuilderTests
     {
         var samples = new[]
         {
-            new MetricSample("memory_write", 10, Now - TimeSpan.FromMinutes(50)),
-            new MetricSample("memory_write", 20, Now - TimeSpan.FromMinutes(10))
+            new MetricSample("add_memory", 10, Now - TimeSpan.FromMinutes(50)),
+            new MetricSample("add_memory", 20, Now - TimeSpan.FromMinutes(10))
         };
 
-        var report = PerformanceReportBuilder.Build(["memory_write"], samples, Now,
+        var report = PerformanceReportBuilder.Build(["add_memory"], samples, Now,
             TimeSpan.FromHours(1), TimeSpan.FromHours(2));
 
         report.Bucket.ShouldBe(TimeSpan.FromHours(1), "the bucket clamps down to the window, never the reverse");
@@ -52,13 +52,13 @@ public sealed class PerformanceReportBuilderTests
     [Fact]
     public void Build_ToolNeverCalled_AppearsWithZeroCountSeries()
     {
-        var samples = new[] { new MetricSample("memory_write", 5, Now - TimeSpan.FromMinutes(1)) };
+        var samples = new[] { new MetricSample("add_memory", 5, Now - TimeSpan.FromMinutes(1)) };
 
-        var report = PerformanceReportBuilder.Build(["memory_write", "memory_search"], samples, Now,
+        var report = PerformanceReportBuilder.Build(["add_memory", "query"], samples, Now,
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(30));
 
         report.Series.Count.ShouldBe(2, "the series list is derived from the tool inventory, not from what has data");
-        var neverCalled = report.Series.Single(s => s.Tool == "memory_search");
+        var neverCalled = report.Series.Single(s => s.Tool == "query");
         neverCalled.Count.ShouldBe(0);
         neverCalled.P50.ShouldBeNull();
         neverCalled.P95.ShouldBeNull();
@@ -72,7 +72,7 @@ public sealed class PerformanceReportBuilderTests
     [Fact]
     public void Build_EmptySampleSet_EveryToolIsAnEmptySeries_NotAnError()
     {
-        var report = PerformanceReportBuilder.Build(["memory_write", "memory_search"], [], Now,
+        var report = PerformanceReportBuilder.Build(["add_memory", "query"], [], Now,
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1));
 
         report.Series.Count.ShouldBe(2);
@@ -87,10 +87,10 @@ public sealed class PerformanceReportBuilderTests
     public void Build_PerSeriesStatistics_MatchHandComputedNearestRank()
     {
         var samples = Enumerable.Range(1, 21)
-            .Select(i => new MetricSample("memory_write", i, Now - TimeSpan.FromMinutes(i)))
+            .Select(i => new MetricSample("add_memory", i, Now - TimeSpan.FromMinutes(i)))
             .ToArray();
 
-        var report = PerformanceReportBuilder.Build(["memory_write"], samples, Now,
+        var report = PerformanceReportBuilder.Build(["add_memory"], samples, Now,
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(30));
 
         var series = report.Series.Single();
@@ -111,7 +111,7 @@ public sealed class PerformanceReportBuilderTests
     {
         var samples = new[] { new MetricSample("totally_unknown_name", 5, Now - TimeSpan.FromMinutes(1)) };
 
-        var report = PerformanceReportBuilder.Build(["memory_write"], samples, Now,
+        var report = PerformanceReportBuilder.Build(["add_memory"], samples, Now,
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1));
 
         report.Series.Single().Count.ShouldBe(0);
@@ -126,15 +126,15 @@ public sealed class PerformanceReportBuilderTests
     {
         var samples = new[]
         {
-            new MetricSample("memory_search", 10, Now - TimeSpan.FromMinutes(1)),
+            new MetricSample("query", 10, Now - TimeSpan.FromMinutes(1)),
             new MetricSample("search.fts", 3, Now - TimeSpan.FromMinutes(1)),
             new MetricSample("search.fts", 7, Now - TimeSpan.FromMinutes(2))
         };
 
-        var report = PerformanceReportBuilder.Build(["memory_search"], samples, Now,
+        var report = PerformanceReportBuilder.Build(["query"], samples, Now,
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), ["search.fts", "search.vector"]);
 
-        report.Series.Select(s => s.Tool).ShouldBe(["memory_search", "search.fts", "search.vector"]);
+        report.Series.Select(s => s.Tool).ShouldBe(["query", "search.fts", "search.vector"]);
         var fts = report.Series.Single(s => s.Tool == "search.fts");
         fts.Count.ShouldBe(2);
         fts.Max.ShouldBe(7.0);
@@ -157,7 +157,7 @@ public sealed class PerformanceReportBuilderTests
     {
         var window = TimeSpan.FromMinutes(525_600);
 
-        var report = PerformanceReportBuilder.Build(["memory_write"], [], Now, window, TimeSpan.FromMinutes(1));
+        var report = PerformanceReportBuilder.Build(["add_memory"], [], Now, window, TimeSpan.FromMinutes(1));
 
         report.Window.ShouldBe(window, "the window is never truncated — only the bucket widens");
         report.BucketCount.ShouldBeLessThanOrEqualTo(PerformanceReportBuilder.MaxBucketCount);
@@ -174,7 +174,7 @@ public sealed class PerformanceReportBuilderTests
     [Fact]
     public void Build_WindowWithinCapAtRequestedBucket_BucketIsNotWidened()
     {
-        var report = PerformanceReportBuilder.Build(["memory_write"], [], Now,
+        var report = PerformanceReportBuilder.Build(["add_memory"], [], Now,
             TimeSpan.FromDays(1), TimeSpan.FromMinutes(1));
 
         report.Bucket.ShouldBe(TimeSpan.FromMinutes(1), "1440 buckets is under the cap, so the bucket stays as requested");
@@ -197,9 +197,9 @@ public sealed class PerformanceReportBuilderTests
         // What a floor(from)-based SQL boundary would admit: the whole second below the true start.
         var flooredStart = new DateTimeOffset(trueStart.Year, trueStart.Month, trueStart.Day, trueStart.Hour,
             trueStart.Minute, trueStart.Second, TimeSpan.Zero); // 11:00:00.000
-        var samples = new[] { new MetricSample("memory_write", 5, flooredStart) };
+        var samples = new[] { new MetricSample("add_memory", 5, flooredStart) };
 
-        var report = PerformanceReportBuilder.Build(["memory_write"], samples, subSecondNow, window, TimeSpan.FromMinutes(1));
+        var report = PerformanceReportBuilder.Build(["add_memory"], samples, subSecondNow, window, TimeSpan.FromMinutes(1));
 
         var series = report.Series.Single();
         series.Count.ShouldBe(0, "a sample from before the true sub-second window start must not feed Count");
@@ -212,10 +212,10 @@ public sealed class PerformanceReportBuilderTests
     {
         var samples = new[] { new MetricSample("search.fts", 3, Now - TimeSpan.FromMinutes(1)) };
 
-        var report = PerformanceReportBuilder.Build(["memory_search"], samples, Now,
+        var report = PerformanceReportBuilder.Build(["query"], samples, Now,
             TimeSpan.FromHours(1), TimeSpan.FromMinutes(1));
 
-        report.Series.Single().Tool.ShouldBe("memory_search");
+        report.Series.Single().Tool.ShouldBe("query");
         report.Series.Single().Count.ShouldBe(0, "search.fts is not a tool and no phaseNames were given, so it must not appear");
     }
 }

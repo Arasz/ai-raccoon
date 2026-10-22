@@ -31,7 +31,7 @@ public sealed class UnregisteredProjectExceptionTests
         var message = new UnregisteredProjectException("ghost; rm -rf x").Message;
 
         message.ShouldNotContain("project id register");
-        message.ShouldContain("project_id_get");
+        message.ShouldContain("get_project_id");
         message.ShouldContain("repair project-ids");
     }
 

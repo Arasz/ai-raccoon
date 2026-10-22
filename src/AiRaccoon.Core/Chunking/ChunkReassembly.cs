@@ -4,7 +4,7 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Core.Chunking;
 
 /// <summary>
-///     Proven reassembly of a <c>memory_write</c> note's stored chunks: the rows join back into the body
+///     Proven reassembly of a <c>add_memory</c> note's stored chunks: the rows join back into the body
 ///     their path names only when the join hashes to the path's sha256 stem. Thin wrapper over
 ///     <see cref="NoteTextOrder" />'s backtracking overlay search — never a greedy longest-match strip,
 ///     which eats live text where the body repeats at a chunk boundary.

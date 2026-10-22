@@ -1,7 +1,7 @@
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>
-///     Owns memory_search's `kind` selection (docs/work/2026-08-21-code-search-implementation-plan.md
+///     Owns query's `kind` selection (docs/work/2026-08-21-code-search-implementation-plan.md
 ///     §3.6): which of the memory/code legs run, the code leg's project-scoped-only rule (empty on
 ///     scope=shared) and its FTS5-only-mode warning, and the search_quality recording rule for
 ///     every kind (ADR-0094) — so the MCP tool layer stays a thin caller (mcp.instructions.md).

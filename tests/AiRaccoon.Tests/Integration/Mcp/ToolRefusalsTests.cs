@@ -50,14 +50,14 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
         new()
         {
             {
-                "memory_write",
+                "add_memory",
                 new Dictionary<string, object?> { ["projectId"] = "acme-ro", ["content"] = "x" },
                 "access-denied",
                 "acme-ro",
                 "ro"
             },
             {
-                "memory_write",
+                "add_memory",
                 new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = "x", ["workspaceId"] = "ws-bogus" },
                 "unknown-workspace",
                 null,
@@ -67,14 +67,14 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
                 // D1: 'keep' is documented as accepting the scalar "all", but the schema declares
                 // string[] — the SDK's argument marshaller throws a raw JsonException instead of a
                 // typed refusal (docs/reference/agent-memory-server.md Error shapes).
-                "memory_workspace_consolidate",
+                "close_workspace",
                 new Dictionary<string, object?> { ["projectId"] = "acme", ["workspaceId"] = "ws-1", ["keep"] = "all" },
                 "invalid-argument",
                 null,
                 null
             },
             {
-                "memory_share",
+                "share_memory",
                 new Dictionary<string, object?>
                 {
                     ["projectId"] = "acme", ["hash"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
@@ -86,7 +86,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
             {
                 // Binding-time failure: 'value' isn't a declared parameter, so the required 'content'
                 // is missing and the SDK's reflection marshaller throws a plain ArgumentException.
-                "memory_write",
+                "add_memory",
                 new Dictionary<string, object?> { ["projectId"] = "acme", ["value"] = "x" },
                 "invalid-argument",
                 null,
@@ -97,7 +97,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
                 // MemoryTools.cs. Delete requires the "full" access mode, so the project is seeded
                 // that way — otherwise the access-denied check fires first and the guard clause is
                 // never reached.
-                "memory_delete",
+                "delete_entry",
                 new Dictionary<string, object?> { ["projectId"] = "acme-full", ["hash"] = "" },
                 "invalid-argument",
                 "acme-full",
@@ -108,7 +108,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
                 // before any access check (invalid-params is in DirectThrowPrefixes).
                 // sessionId is required since P1 — a valid one is passed so the call reaches
                 // the tool-level refusal instead of the SDK's missing-param marshaller error.
-                "memory_search",
+                "query",
                 new Dictionary<string, object?> { ["projectId"] = "", ["query"] = "x", ["sessionId"] = "sess-test" },
                 "invalid-params",
                 null,
@@ -129,7 +129,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
             { new SyncNetworkException("timed out"), "sync-network" },
             { new SyncCorruptFileException("bad checksum"), "sync-corrupt-file" },
             { new SyncTamperedRemoteException("HMAC tag mismatch"), "sync-tampered-remote" },
-            { new AccessDeniedException("memory_delete requires mode full (current rw)"), "access-denied" },
+            { new AccessDeniedException("delete_entry requires mode full (current rw)"), "access-denied" },
             { new ValidationException("projectId is required"), "invalid-params" },
             { new JsonException("The JSON value could not be converted to System.String[]."), "invalid-argument" },
             { new ArgumentException("The arguments dictionary is missing a value for the required parameter 'content'."), "invalid-argument" },
@@ -175,7 +175,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
 
     [RetryFact]
     public Task IngestFile_OutsideScope_ReturnsRefusal_WithoutAnSdkErrorLog() =>
-        AssertRefusalOverRealServerAsync(_dataRoot, "memory_ingest_file",
+        AssertRefusalOverRealServerAsync(_dataRoot, "ingest_file",
             new Dictionary<string, object?> { ["projectId"] = "acme", ["path"] = "/etc/passwd" },
             "path-outside-scope");
 
@@ -199,7 +199,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
             await using var server = await RealMcpServerFixture.StartAsync(dataRoot, TestContext.Current.CancellationToken);
             var client = await server.ConnectAsync("tool-refusals-test", TestContext.Current.CancellationToken);
 
-            var result = await client.CallToolAsync("memory_write",
+            var result = await client.CallToolAsync("add_memory",
                 new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = "x" },
                 cancellationToken: TestContext.Current.CancellationToken);
 
@@ -354,7 +354,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
             await using var server = await RealMcpServerFixture.StartAsync(dataRoot, TestContext.Current.CancellationToken, fakeLogs);
             var client = await server.ConnectAsync("tool-refusals-warning-test", TestContext.Current.CancellationToken);
 
-            var result = await client.CallToolAsync("memory_share",
+            var result = await client.CallToolAsync("share_memory",
                 new Dictionary<string, object?>
                 {
                     ["projectId"] = "acme",
@@ -385,7 +385,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
             await using var server = await RealMcpServerFixture.StartAsync(dataRoot, TestContext.Current.CancellationToken, fakeLogs);
             var client = await server.ConnectAsync("tool-refusals-bare-mcpexception-test", TestContext.Current.CancellationToken);
 
-            var result = await client.CallToolAsync("memory_search",
+            var result = await client.CallToolAsync("query",
                 new Dictionary<string, object?> { ["projectId"] = "", ["query"] = "x", ["sessionId"] = "sess-test" },
                 cancellationToken: TestContext.Current.CancellationToken);
 
@@ -396,7 +396,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
             text.ShouldStartWith(
                 "invalid-params: projectId is required (no registered project's scope contains cwd ");
             text.ShouldContain(
-                "; pass projectId explicitly, or register this directory with memory_watch_add / settings ingest scope add)");
+                "; pass projectId explicitly, or register this directory with add_watch / settings ingest scope add)");
 
             // (b) the log carries the real reason after "refused: ".
             var record = fakeLogs.Collector.GetSnapshot()
@@ -448,7 +448,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
                 method = "tools/call",
                 @params = new
                 {
-                    name = "memory_write",
+                    name = "add_memory",
                     arguments = new { projectId = freshId, content = "x" }
                 }
             });

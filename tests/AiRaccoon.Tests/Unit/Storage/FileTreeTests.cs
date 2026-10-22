@@ -5,7 +5,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Storage;
 
 /// <summary>
-///     `memory_list`'s tree shape. Extracted from <c>SqliteMemoryStore</c> as a pure function, so it
+///     `get_index`'s tree shape. Extracted from <c>SqliteMemoryStore</c> as a pure function, so it
 ///     is testable without a bank — it never touched one.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]

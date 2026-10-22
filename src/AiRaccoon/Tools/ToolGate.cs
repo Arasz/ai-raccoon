@@ -91,7 +91,7 @@ public sealed class ToolGate(
         throw new McpException(
             $"invalid-params: projectId is required (no registered project's scope contains cwd " +
             $"{Environment.CurrentDirectory}; pass projectId explicitly, or register this directory with " +
-            "memory_watch_add / settings ingest scope add)");
+            "add_watch / settings ingest scope add)");
     }
 
     /// <summary>

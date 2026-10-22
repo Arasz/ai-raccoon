@@ -74,6 +74,26 @@ public sealed class SharedProjectTests : IDisposable
         (await SearchAsync("beta", "zephyrlegacy")).ShouldBeEmpty();
     }
 
+    /// <summary>
+    ///     A private project registered under the NAME "shared" blocks the reserved target, the
+    ///     same as one registered under the id (ADR-0137: "existing private rows, workspaces,
+    ///     code or registration under literal 'shared' block the target"). The mint tool refuses
+    ///     the name now, so this is the legacy half: a bank that already holds such a row.
+    /// </summary>
+    [RetryFact]
+    public async Task ALegacyOwnerRegisteredUnderTheReservedName_BlocksTheTarget()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var connection = await _factory.OpenBankAsync(ct);
+        await connection.ExecuteAsync(
+            "INSERT INTO projects (id, name, created_at) VALUES (@id, @name, 1)", new { id = "legacy-guid", name = "shared" });
+
+        var ex = await Should.ThrowAsync<ArgumentException>(() =>
+            ((IProjectRegistry)_store).IsRegisteredAsync("shared", ct));
+
+        ex.Message.ShouldContain("shared-project-conflict");
+    }
+
     [RetryFact]
     public async Task SharedReplacement_RejectsForeignChunkAndRollsBackEarlierChunks()
     {

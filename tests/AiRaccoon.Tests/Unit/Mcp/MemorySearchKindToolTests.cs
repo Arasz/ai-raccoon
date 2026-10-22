@@ -20,7 +20,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
-///     WP6 — memory_search kind (docs/work/2026-08-21-code-search-implementation-plan.md §3.6):
+///     WP6 — query kind (docs/work/2026-08-21-code-search-implementation-plan.md §3.6):
 ///     kind=memory|code|both, the pinned results/code envelope, the search_quality recording rule
 ///     for every kind (ADR-0094: both records the memory leg, code its count with no files), and
 ///     the FTS5-only-mode code section warning. WP6-T02…T06/T12.
@@ -331,7 +331,7 @@ public sealed class MemorySearchKindToolTests
     /// <summary>
     ///     ADR-0094 supersedes the integration-review S6 withholding rule: every kind now records
     ///     a search_quality row, so every envelope carries a backed correlation id and a later
-    ///     memory_record_grade/memory_record_followthrough call always has a row to key on.
+    ///     set_query_result_grade/set_memory_usage_record call always has a row to key on.
     /// </summary>
     [Fact]
     public async Task Search_KindCode_HasCorrelationIdInMeta()

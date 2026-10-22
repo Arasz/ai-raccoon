@@ -13,7 +13,7 @@ namespace AiRaccoon.Tests.Integration.Storage;
 /// <summary>
 ///     Persistence contract for promotion_queue: upsert-by-(project, hash), review ordering,
 ///     discard, stats, and per-project eviction victim query. Rows are separate from entries —
-///     never searchable, never counted by memory_stats.
+///     never searchable, never counted by get_store_statistics.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]

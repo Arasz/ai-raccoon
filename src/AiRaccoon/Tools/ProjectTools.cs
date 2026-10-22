@@ -14,8 +14,8 @@ public sealed class ProjectTools(
     IProjectDirectory directory,
     IToolGate gate)
 {
-    private const string TnProjectIdTokenGet = "project_id_token_get";
-    private const string TnProjectIdGet = "project_id_get";
+    private const string TnSaveProjectIdToken = "save_project_id_token";
+    private const string TnGetProjectId = "get_project_id";
 
     private const string Instructions =
         "This id is where the project's memory lives from now on — not a secret and not access "
@@ -23,16 +23,27 @@ public sealed class ProjectTools(
         + "out of memory) and pass it as projectId on every later call for this project; losing it "
         + "means the project's memory becomes unreachable, not deleted.";
 
-    [McpServerTool(Name = TnProjectIdTokenGet)]
+    [McpServerTool(Name = TnSaveProjectIdToken)]
     [McpToolScope(ToolScope.All)]
     [Description(
-        "Call project_id_get first; mint only when it finds nothing. Mints a new project id: a guidv7, registered so it is a real project from this call on. Call this once per project and keep the returned id — every other tool's projectId parameter takes it.")]
+        "Call get_project_id first; mint only when it finds nothing. Mints a new project id: a guidv7, registered so it is a real project from this call on. Call this once per project and keep the returned id — every other tool's projectId parameter takes it.")]
     public async Task<ApiEnvelope<ProjectIdTokenResult>> Get(
         [Description("Optional human-facing label for the new project. Not unique, and never accepted where a project id is expected.")]
         string? name = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireBankAvailableAsync(TnProjectIdTokenGet, cancellationToken);
+        await gate.RequireBankAvailableAsync(TnSaveProjectIdToken, cancellationToken);
+
+        // The reserved shared target owns the literal "shared" (ADR-0137). Its NAME is reserved
+        // too: a private project registered under that name would shadow it — name lookup keeps
+        // answering with the reserved id, so the private project becomes unreachable by name,
+        // and the reserved target would publish over rows the ADR says must block it. So the
+        // name is not mintable, exactly and case-sensitively.
+        if (name is not null && SharedProjectScope.IsReservedId(name))
+        {
+            throw new ArgumentException(
+                "reserved-name: 'shared' is the reserved shared target; it needs no minted id and cannot be registered under another id. Nothing was registered.");
+        }
 
         var projectId = Guid.CreateVersion7().ToString("D");
         await registry.RegisterAsync(projectId, name, cancellationToken);
@@ -41,17 +52,17 @@ public sealed class ProjectTools(
         return await gate.WrapAsync(projectId, result, cancellationToken);
     }
 
-    [McpServerTool(Name = TnProjectIdGet)]
+    [McpServerTool(Name = TnGetProjectId)]
     [McpToolScope(ToolScope.All)]
     [Description(
-        "Returns the project id registered under an exact, case-sensitive name, as stored. Call this before project_id_token_get. No match refuses with project-not-found (then mint one with project_id_token_get); several matches refuse with project-name-ambiguous, listing every id, so ask the user which one. Never registers anything.")]
+        "Returns the project id registered under an exact, case-sensitive name, as stored. Call this before save_project_id_token. No match refuses with project-not-found (then mint one with save_project_id_token); several matches refuse with project-name-ambiguous, listing every id, so ask the user which one. Never registers anything.")]
     public async Task<ApiEnvelope<ProjectIdGetResult>> FindByName(
         [Description("The project's name, matched exactly and case-sensitively.")]
         string name,
         CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(name);
-        await gate.RequireBankAvailableAsync(TnProjectIdGet, cancellationToken);
+        await gate.RequireBankAvailableAsync(TnGetProjectId, cancellationToken);
 
         var ids = await directory.FindByNameAsync(name, cancellationToken);
         var projectId = ProjectNameMatch.Single(name, ids);

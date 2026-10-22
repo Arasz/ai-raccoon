@@ -46,8 +46,8 @@ virtual tables and triggers ourselves gives us:
 
 ## Why writes land in the project by default
 
-The server's default is conservative: `memory_write` without a `workspace_id` writes into
-`project:<id>`. Nothing reaches the `shared` tier except an explicit `memory_share`
+The server's default is conservative: `add_memory` without a `workspace_id` writes into
+`project:<id>`. Nothing reaches the `shared` tier except an explicit `share_memory`
 promotion. That makes "shared" a *curated* tier — a fact that a project found durable
 enough to promote — rather than a second write lane that fills with noise. Because shared
 is curated, it is also **sweep-exempt**: degradation removes old, low-rated *project*
@@ -55,15 +55,15 @@ entries but never promoted knowledge.
 
 ## Why proposals wait in a propose tier
 
-Sharing is a two-step ritual: `memory_share_extract` (propose) *queues* ranked candidates
+Sharing is a two-step ritual: `trigger_memory_sharing` (propose) *queues* ranked candidates
 into a per-project **propose tier** (the `promotion_queue` table), the agent reviews what
-is waiting with `memory_promotion_list`, then `memory_share_extract` (mode=promote) — or
+is waiting with `get_memories_sharing_ranking`, then `trigger_memory_sharing` (mode=promote) — or
 the extraction loop, in promote mode — shares the top queued candidates and drains them.
 The queue is capacity-capped (`extract.queue-capacity.global`, default 1000): the cap is
 split into per-project reservations (cap ÷ project count), projects may borrow each
 other's unused space, and when the queue is over the cap the weakest candidate of the
 biggest occupier is evicted. The propose tier is a waiting surface, not memory: queue rows
-are never searchable and never counted by `memory_stats`, and degradation never touches
+are never searchable and never counted by `get_store_statistics`, and degradation never touches
 them — only the agent's promote/discard and the capacity rule do.
 
 ## Why the workspace is a context, not a flag
@@ -71,14 +71,14 @@ them — only the agent's promote/discard and the capacity rule do.
 A workspace is isolated *by design* — the presence of a `workspace_id` on a write routes
 it into `workspace:<id>`, and nothing in that context is synced to the cloud. The agent
 works in a worktree (ai-badger's `worktree-agent-isolation` style), writes notes into the
-workspace outbox, and at the end calls `memory_workspace_consolidate` to promote the
+workspace outbox, and at the end calls `close_workspace` to promote the
 durable facts into the project's committed memory and discard the rest. Workspace rows
 carry `workspace_id IS NOT NULL AND scope IS NULL` — the CHECK constraint enforces mutual
 exclusion with committed rows.
 
 ## Why sync goes through one cloud object
 
-`memory_sync` takes a VACUUM snapshot of the bank, strips workspace rows, and pushes it
+`sync_to_cloud` takes a VACUUM snapshot of the bank, strips workspace rows, and pushes it
 to a cloud object store (S3-compatible or Azure Blob) with If-Match CAS. It pulls the remote snapshot, merges entries (INSERT OR
 IGNORE by hash), merges settings (last-writer-wins), applies tombstones, and pushes back
 with If-Match for conflict detection. A user-scope install and a project-scope install on
@@ -92,7 +92,7 @@ removed as unused (docs/adr/0016-remove-the-extension-host.md).
 ## What it costs
 
 - One SQLite database per install scope means a user-scope install holds every project's
-  rows; context filters keep reads/writes partitioned, and `memory_stats` counts only the
+  rows; context filters keep reads/writes partitioned, and `get_store_statistics` counts only the
   caller's project context.
 - Content-hash dedup is global within a project's committed set (`workspace_id IS NULL`,
   matched on `value`). Identical content in two projects produces two rows with different
@@ -101,7 +101,7 @@ removed as unused (docs/adr/0016-remove-the-extension-host.md).
 - Deferred embeddings (`embed_state = 'pending'` by default) mean writes work before any
   model is configured; search only returns embedded content, so a fresh bank needs an
   engine configured via the CLI (`ai-raccoon model embedding set local` or
-  `model embedding set openai …`) plus `memory_embed_pending` to become searchable. When an
+  `model embedding set openai …`) plus `embed_deferred_entries` to become searchable. When an
   engine is already configured, writes embed synchronously.
 - Embedding engine changes (`ai-raccoon model embedding set …` with a different
   provider/model/base-url) re-embed the entire bank, and since ADR-0076 they do it as an

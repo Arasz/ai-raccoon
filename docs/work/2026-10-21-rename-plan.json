@@ -1,0 +1,392 @@
+{
+ "task_id": "air-rename-mcp-tools-entry-types",
+ "revision": 1,
+ "loop": "high",
+ "task_description_ref": "docs/plans/2026-10-21-mcp-tool-surface-rename.md",
+ "research_ref": "docs/work/2026-10-21-tool-surface-rename-and-entry-types.md",
+ "task_context": "Breaking rename of the ai-raccoon MCP tool surface (30 tools, no aliases) plus a new entry-type parameter (Memory|Code|File) on query and get_entry. Version 2.0.0. The ai-badger framework must be updated (separate repo) before the release ships. Research record: docs/work/2026-10-21-tool-surface-rename-and-entry-types.md. Naming decisions: docs/plans/2026-10-21-mcp-tool-surface-rename.md.",
+ "source_refs": [
+  "docs/plans/2026-10-21-mcp-tool-surface-rename.md",
+  "docs/work/2026-10-21-tool-surface-rename-and-entry-types.md",
+  "docs/adr/0139-attribute-derived-tool-scope.md",
+  "docs/adr/0137-shared-target-for-document-watches.md",
+  "docs/adr/0097-search-quality-kind-column.md"
+ ],
+ "steps": [
+  {
+   "acceptance_criteria": [
+    {
+     "check": "cd /Users/arasz/RiderProjects/ai-badger && git grep -n -E '\\b(memory_search|memory_get|memory_list|memory_performance|memory_record_grade|memory_record_followthrough|code_get|memory_write|memory_ingest_file|memory_ingest_directory|memory_delete|memory_share|memory_sweep|memory_set_ttl|memory_workspace_[a-z]+|memory_watch_[a-z]+|memory_sync|memory_embed_pending|memory_stats)\\b'",
+     "evidence": [],
+     "id": "ac1",
+     "statement": "No old tool name remains in the framework's hooks, skills, generated agent files or docs.",
+     "status": "unchecked"
+    },
+    {
+     "check": "gh pr list --repo <framework-repo> --state open",
+     "evidence": [],
+     "id": "ac2",
+     "statement": "A framework PR is open with the change and is not merged.",
+     "status": "unchecked"
+    },
+    {
+     "check": "cd /Users/arasz/RiderProjects/ai-badger && <its own test/lint command>",
+     "evidence": [],
+     "id": "ac3",
+     "statement": "The framework's own gates pass on its branch.",
+     "status": "unchecked"
+    },
+    {
+     "check": "gh pr view --repo <framework-repo>",
+     "evidence": [],
+     "id": "ac4",
+     "statement": "The framework PR names the ai-raccoon version this surface ships in, so the release can be sequenced against it.",
+     "status": "unchecked"
+    }
+   ],
+   "depends_on": [],
+   "effort": "medium",
+   "files": [
+    "(external repository /Users/arasz/RiderProjects/ai-badger)"
+   ],
+   "goal": "The ai-badger framework speaks the new tool names, so the framework lands before the release ships.",
+   "id": "framework-tool-names",
+   "instructions": "In the separate checkout /Users/arasz/RiderProjects/ai-badger, update every reference to the old ai-raccoon tool names (about 900 occurrences across ~40 files): the memory-first gate hooks (.ai-badger/hooks/memory_first_gate.py, memory_context.py, query_pipeline.py), the grade hook (memory_grade_hook.py), the ai-raccoon-memory skill and its scripts, the semantica-knowledge-graph and hermes-plugin-development skills, the MCP tool index (.ai-badger/mcp-tools.json), the generated agent instruction files, and the framework docs and ADRs. Open a PR in that repository; do not merge it. This step lands in a different repository and may run in parallel with the code steps.",
+   "level": "medium",
+   "persona": "dotnet-engineer",
+   "resources": [],
+   "status": "pending"
+  },
+  {
+   "acceptance_criteria": [
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~ToolInventoryTests|FullyQualifiedName~McpToolContractTests\"",
+     "evidence": [],
+     "id": "ac1",
+     "statement": "The generated tool inventory contains all 30 new names and none of the 30 old names.",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet build -warnaserror",
+     "evidence": [],
+     "id": "ac2",
+     "statement": "Every tool still declares a scope; the build fails if one does not (AIRGEN002).",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~ScopeCheckTests\"",
+     "evidence": [],
+     "id": "ac3",
+     "statement": "The scope map still classifies every tool, and the reserved shared target still refuses the ordinary-only set (ADR-0139, ADR-0137).",
+     "status": "unchecked"
+    },
+    {
+     "check": "git grep -n -E '\\b(memory_search|memory_get|memory_list|memory_performance|memory_record_grade|memory_record_followthrough|code_get|memory_write|memory_ingest_file|memory_ingest_directory|memory_delete|memory_delete_context|memory_share|memory_share_extract|memory_promotion_list|memory_promotion_discard|memory_sweep|memory_set_ttl|memory_workspace_[a-z]+|memory_watch_[a-z]+|memory_sync|memory_embed_pending|memory_stats|project_id_get|project_id_token_get)\\b' -- src tests scripts docs/reference docs/how-to",
+     "evidence": [],
+     "id": "ac4",
+     "statement": "No old tool name survives anywhere in src/, tests/, scripts/ or docs/ (excluding docs/work and docs/plans history).",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet run --project src/AiRaccoon -- serve --help (plus a tools/list probe)",
+     "evidence": [],
+     "id": "ac5",
+     "statement": "The rename is visible to a client: the MCP tool list served by the built server carries the new names.",
+     "status": "unchecked"
+    }
+   ],
+   "depends_on": [],
+   "effort": "high",
+   "files": [
+    "src/AiRaccoon/Tools/**",
+    "tests/AiRaccoon.Tests/Unit/Mcp/**",
+    "tests/AiRaccoon.Tests/BDD/**",
+    "scripts/src/retrieval_tuning/mcp.py",
+    "docs/reference/agent-memory-server.md",
+    "docs/how-to/**"
+   ],
+   "goal": "Rename all 30 MCP tools to the settled names, with no aliases, and update every pinned name in this repository.",
+   "id": "rename-tool-surface",
+   "instructions": "Rename the [McpServerTool] methods and their Tn* constants in src/AiRaccoon/Tools/*.cs to the names in docs/plans/2026-10-21-mcp-tool-surface-rename.md (query, get_index, get_entry, get_store_statistics, get_engine_statistics, get_quality_report, set_query_result_grade, set_memory_usage_record, add_memory, ingest_file, ingest_directory, delete_entry, delete_context, share_memory, trigger_memory_sharing, get_memories_sharing_ranking, delete_memory_from_ranking, trigger_memory_cleanup, set_memory_ttl, initialize_workspace, get_workspace_status, close_workspace, discard_workspace, add_watch, get_watch_status, remove_watch, sync_to_cloud, embed_deferred_entries, get_project_id, save_project_id_token). memory_get and code_get merge into one get_entry; memory_record_followthrough and memory_record_grade split into get_quality_report and set_query_result_grade/set_memory_usage_record. Update: the generated inventory and scope map expectations, McpToolContractTests, ToolInventoryTests, ScopeCheckTests pins, docs/reference/agent-memory-server.md, docs/how-to/*, the BDD step lists under tests/AiRaccoon.Tests/BDD, scripts/src/retrieval_tuning/mcp.py, and every code path that derives behaviour from a tool NAME. Every [McpServerTool] method keeps a [McpToolScope] declaration - a tool without one is a build error (ADR-0139). Do NOT touch the domain search path, the schema, or the entry-type parameter - later steps own those.",
+   "level": "high",
+   "persona": "dotnet-engineer",
+   "resources": [],
+   "status": "pending"
+  },
+  {
+   "acceptance_criteria": [
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~EntryType\"",
+     "evidence": [],
+     "id": "ac1",
+     "statement": "The classifier returns Memory for a manual entry, Memory for a transcript entry, File for an ingested document chunk and Code for a code chunk.",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~EntryTypeBackfill\"",
+     "evidence": [],
+     "id": "ac2",
+     "statement": "A transcript row written before the migration is classified Memory - the backfill reaches historical rows.",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~EntryTypeBackfill\"",
+     "evidence": [],
+     "id": "ac3",
+     "statement": "The backfill is idempotent: running it twice leaves the same classification.",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~EntryType\"",
+     "evidence": [],
+     "id": "ac4",
+     "statement": "No entry row is left with a NULL or unknown entry_type after the migration.",
+     "status": "unchecked"
+    }
+   ],
+   "depends_on": [
+    "rename-tool-surface"
+   ],
+   "effort": "high",
+   "files": [
+    "src/AiRaccoon.Core/Memory/**",
+    "src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs",
+    "src/AiRaccoon.Infrastructure/Sqlite/Memory/**",
+    "src/AiRaccoon.Infrastructure/Sqlite/SqliteMemoryStore*.cs",
+    "tests/AiRaccoon.Tests/Integration/**"
+   ],
+   "goal": "Make Memory | Code | File a first-class, query-path classifier over the bank, with the transcript rows moved onto the Memory side.",
+   "id": "entry-type-classifier",
+   "instructions": "Add the entry type to the domain as a flags enum (Memory=1, Code=2, File=4) with wire names 'memory','code','file' and a sum form. Persist the type where the query needs it: add an entry_type column to entries, backfilled from memory_source.source_type (manual|transcript -> Memory, file -> File), with a ladder step that reaches historical rows - on the live bank 1496 transcript rows must land on Memory, not File. Code is the code_entries table and needs no column. Expose the classifier through a single service used by query, get_entry and set_memory_ttl, so one classifier answers all three. The discriminator must NOT be the denormalised signature source_file IS NULL AND total_chunks = 0 - it cannot express the transcript case. Backfill must be idempotent and must not depend on a row's chunking.",
+   "level": "high",
+   "persona": "dotnet-engineer",
+   "resources": [],
+   "status": "pending"
+  },
+  {
+   "acceptance_criteria": [
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~Search\"",
+     "evidence": [],
+     "id": "ac1",
+     "statement": "query with the default entry type returns the same result set today's default (kind=both) returns.",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~EntryType\"",
+     "evidence": [],
+     "id": "ac2",
+     "statement": "query with type Memory returns only Memory entries, type File only ingested documents, type Code only code chunks - each population measured apart.",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~GetEntry\"",
+     "evidence": [],
+     "id": "ac3",
+     "statement": "get_entry without an entry type is refused; with a type it reads that corpus.",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~EntryType\"",
+     "evidence": [],
+     "id": "ac4",
+     "statement": "An unknown entry-type value is refused as invalid-params, not silently treated as the default.",
+     "status": "unchecked"
+    }
+   ],
+   "depends_on": [
+    "entry-type-classifier"
+   ],
+   "effort": "high",
+   "files": [
+    "src/AiRaccoon/Tools/MemoryTools.cs",
+    "src/AiRaccoon/Tools/CodeTools.cs",
+    "src/AiRaccoon.Core/Memory/**",
+    "tests/AiRaccoon.Tests/Unit/Mcp/**",
+    "tests/AiRaccoon.Tests/Integration/**"
+   ],
+   "goal": "Give query and get_entry the entry-type parameter, with the right defaults and the right refusals.",
+   "id": "entry-type-parameter",
+   "instructions": "query gains an entry-type parameter defaulting to Memory|Code|File (the sum) and filters the search by it; get_entry gains the same parameter with NO default - it is required, and a call without it is refused with a clear message, because a hash alone does not say which corpus to read from. The parameter is a flags enum on the wire; reject an unknown value with the existing invalid-params shape. The type filter composes with the scope filter: a shared-target query with type Code is empty by construction, not an error. The merged get_entry must pick a corpus by hash and must refuse a hash that exists in more than one corpus rather than guessing.",
+   "level": "high",
+   "persona": "dotnet-engineer",
+   "resources": [],
+   "status": "pending"
+  },
+  {
+   "acceptance_criteria": [
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~SearchQuality\"",
+     "evidence": [],
+     "id": "ac1",
+     "statement": "A search recorded under the new taxonomy stores a value the widened CHECK accepts.",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~SearchQualityKindMigration\"",
+     "evidence": [],
+     "id": "ac2",
+     "statement": "The backfill is idempotent and leaves no row with a NULL kind that the migration owns.",
+     "status": "unchecked"
+    },
+    {
+     "check": "git diff -- docs/adr/0097-search-quality-kind-column.md",
+     "evidence": [],
+     "id": "ac3",
+     "statement": "ADR-0097 is amended to state the meaning change of the historical 'memory' value and the backfill chosen.",
+     "status": "unchecked"
+    }
+   ],
+   "depends_on": [
+    "entry-type-classifier"
+   ],
+   "effort": "high",
+   "files": [
+    "src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs",
+    "src/AiRaccoon.Infrastructure/Sqlite/SqliteSearchQualityService.cs",
+    "src/AiRaccoon.Core/SearchQuality/**",
+    "docs/adr/0097-search-quality-kind-column.md",
+    "docs/adr/**",
+    "tests/AiRaccoon.Tests/Integration/**"
+   ],
+   "goal": "Widen the stored search-kind vocabulary to the entry types and migrate the historical rows honestly.",
+   "id": "search-quality-kind",
+   "instructions": "search_quality.kind is CHECK(kind IN ('memory','code','both')) (MemorySchema.cs:141) with a backfill ladder step (v12) behind ADR-0097. The new taxonomy needs the column to carry the entry types actually searched. Decide and implement the vocabulary ('memory','code','file' and a sum form, or a set of flags), widen the CHECK, add the next ladder step, and backfill the historical rows. Be honest about the meaning change: a historical 'memory' row covered agent notes AND ingested chunks, which the new 'memory' does not - say so in the migration and in the ADR amendment, and choose the backfill that does not lie.",
+   "level": "high",
+   "persona": "dotnet-engineer",
+   "resources": [],
+   "status": "pending"
+  },
+  {
+   "acceptance_criteria": [
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~Ttl\"",
+     "evidence": [],
+     "id": "ac1",
+     "statement": "set_memory_ttl on a Memory entry succeeds; on a File entry it is refused and no ttl_days is written.",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~Ttl\"",
+     "evidence": [],
+     "id": "ac2",
+     "statement": "A File row's ttl_days stays NULL after a refused attempt.",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet test tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --filter \"FullyQualifiedName~Sweep\"",
+     "evidence": [],
+     "id": "ac3",
+     "statement": "The sweep still deletes a Memory entry whose rating fell below the threshold and whose TTL passed.",
+     "status": "unchecked"
+    }
+   ],
+   "depends_on": [
+    "entry-type-classifier"
+   ],
+   "effort": "medium",
+   "files": [
+    "src/AiRaccoon/Tools/SweepTools.cs",
+    "src/AiRaccoon.Infrastructure/Sqlite/Memory/**",
+    "tests/AiRaccoon.Tests/Integration/**"
+   ],
+   "goal": "A TTL belongs to Memory only: set_memory_ttl refuses a File entry, and the sweep honours only Memory TTLs.",
+   "id": "ttl-memory-only",
+   "instructions": "set_memory_ttl resolves the entry's type through the same classifier and refuses a File entry (an ingested document is a mirror of a file on disk, re-derivable by re-ingesting). Code entries have no ttl_days column at all. The sweep keeps honouring whatever ttl_days a row carries, and the refusal message must name the entry type rather than the hash. Measured baseline: no row of any type carries a TTL today, so this is a forward-looking rule with no legacy data to migrate.",
+   "level": "medium",
+   "persona": "dotnet-engineer",
+   "resources": [],
+   "status": "pending"
+  },
+  {
+   "acceptance_criteria": [
+    {
+     "check": "cat VERSION && ls docs/changelog | grep 2.0.0",
+     "evidence": [],
+     "id": "ac1",
+     "statement": "VERSION reads 2.0.0 and a changelog entry for it exists with the index updated.",
+     "status": "unchecked"
+    },
+    {
+     "check": "grep -c 'memory_' docs/changelog/2.0.0-*.md",
+     "evidence": [],
+     "id": "ac2",
+     "statement": "The migration note names every old tool and its new name, and says there is no alias.",
+     "status": "unchecked"
+    }
+   ],
+   "depends_on": [
+    "rename-tool-surface",
+    "entry-type-parameter",
+    "ttl-memory-only",
+    "search-quality-kind"
+   ],
+   "effort": "medium",
+   "files": [
+    "VERSION",
+    "docs/changelog/**",
+    "docs/reference/agent-memory-server.md"
+   ],
+   "goal": "Version 2.0.0, a changelog entry, and the client-facing migration note.",
+   "id": "release-docs",
+   "instructions": "Bump VERSION to 2.0.0 (a breaking public-contract change), add docs/changelog/2.0.0-<slug>.md describing the rename, the new entry-type parameter, the new TTL rule, and the search_quality.kind meaning change, and update docs/changelog/README.md. Write the client-facing migration note: every old name to its new name, the behaviour changes (the entry type splits the memory leg; set_memory_ttl now refuses File entries), and the fact that there are no aliases. Update docs/reference/agent-memory-server.md for the new surface.",
+   "level": "medium",
+   "persona": "dotnet-engineer",
+   "resources": [],
+   "status": "pending"
+  },
+  {
+   "acceptance_criteria": [
+    {
+     "check": "dotnet build -warnaserror",
+     "evidence": [],
+     "id": "ac1",
+     "statement": "dotnet build succeeds with warnings as errors.",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet test",
+     "evidence": [],
+     "id": "ac2",
+     "statement": "dotnet test passes with zero failures.",
+     "status": "unchecked"
+    },
+    {
+     "check": "dotnet test --filter \"FullyQualifiedName~EntryType|FullyQualifiedName~Ttl|FullyQualifiedName~ScopeCheck\"",
+     "evidence": [],
+     "id": "ac3",
+     "statement": "The cross-step behaviours above are each covered by a named test that fails when the behaviour breaks.",
+     "status": "unchecked"
+    },
+    {
+     "check": "git grep -n -E '\\b(memory_search|memory_get|memory_list|memory_performance|memory_record_grade|memory_record_followthrough|code_get|memory_write|memory_ingest_file|memory_ingest_directory|memory_delete|memory_share|memory_sweep|memory_set_ttl|memory_workspace_[a-z]+|memory_watch_[a-z]+|memory_sync|memory_embed_pending|memory_stats)\\b' -- src tests scripts docs/reference docs/how-to",
+     "evidence": [],
+     "id": "ac4",
+     "statement": "No old tool name survives in the repository.",
+     "status": "unchecked"
+    }
+   ],
+   "depends_on": [
+    "rename-tool-surface",
+    "entry-type-classifier",
+    "entry-type-parameter",
+    "ttl-memory-only",
+    "search-quality-kind",
+    "release-docs",
+    "framework-tool-names"
+   ],
+   "effort": "high",
+   "files": [
+    "tests/**",
+    "src/**"
+   ],
+   "goal": "Prove the combined result: the whole surface builds, the whole suite passes, and the cross-step behaviours hold together.",
+   "id": "join-integration",
+   "instructions": "Run the full build and the full test suite once on the integrated branch. Then check the combinations that no single step could check: a query with the default entry type equals today's default result set; type Memory excludes both code chunks and ingested documents; a transcript entry is served by a type=Memory query and not by type=File; get_entry without a type is refused and with each type reads that corpus; set_memory_ttl refuses a File entry and accepts a Memory one; the reserved shared target still refuses the ordinary-only tools and still serves an all-scope shared query; no old tool name survives. This is the step that catches two branches that each pass alone. The join also covers the framework sink: the framework PR must be open with the old tool names gone from its hooks, skills and generated agent files, and that check is part of this step because the release must not ship with a framework that calls the retired names.",
+   "level": "high",
+   "persona": "test-engineer",
+   "resources": [],
+   "status": "pending"
+  }
+ ]
+}

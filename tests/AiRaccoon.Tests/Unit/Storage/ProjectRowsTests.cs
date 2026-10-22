@@ -20,7 +20,7 @@ namespace AiRaccoon.Tests.Unit.Storage;
 ///     filter, each with a comment pointing at MemorySql.SelectSourceByHashAndProject as the
 ///     authority. Every one of them read `scope = 'project'`, so a context-labelled entry — which
 ///     ADR-0045 establishes is inside its project — was invisible to share, TTL, extraction and the
-///     project listing, while memory_get and memory_delete found it. These pin the behaviour; the
+///     project listing, while get_entry and delete_entry found it. These pin the behaviour; the
 ///     rule itself now lives in <see cref="ProjectRows" /> (ADR-0046).
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
@@ -62,7 +62,7 @@ public sealed class ProjectRowsTests : IDisposable
 
         var applied = await _store.SetEntryTtlAsync("acme", entry.Hash, 30, TestContext.Current.CancellationToken);
 
-        applied.ShouldBeTrue("memory_get resolves this hash, so memory_set_ttl must not call it unknown");
+        applied.ShouldBeTrue("get_entry resolves this hash, so set_memory_ttl must not call it unknown");
         (await ReadTtlAsync(entry.Hash)).ShouldBe(30);
     }
 

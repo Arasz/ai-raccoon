@@ -14,7 +14,7 @@ library. The harness module `llamaindex_harness.scopes` is a re-export shim —
 this module is the one home.
 
 Bank ground truth (read, not inferred):
-- MemoryTools.cs: memory_search accepts scope all/project/shared only;
+- MemoryTools.cs: query accepts scope all/project/shared only;
   anything else is refused as invalid-params.
 - SearchContexts.cs: scope=project reads the project context PLUS every
   custom-label context, so corpus scope=custom maps to bank scope=project.

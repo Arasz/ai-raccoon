@@ -60,6 +60,29 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         ProjectIdAliasMap.ResetDefault();
     }
 
+    /// <summary>
+    ///     A bank that already holds a private project registered under the reserved NAME blocks
+    ///     the reserved target (ADR-0137). The settings path must say so as a refusal (400), not
+    ///     as a server fault: the caller has to learn which owner to repair.
+    /// </summary>
+    [RetryFact]
+    public async Task Put_ForTheReservedTargetOnABlockedBank_Is400_NotAServerFault()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using (var connection = await _app.Services.GetRequiredService<ISqliteConnectionFactory>()
+            .OpenBankAsync(ct))
+        {
+            await connection.ExecuteAsync(
+                "INSERT INTO projects (id, name, created_at) VALUES ('legacy-guid', 'shared', 1)");
+        }
+
+        var response = await PutAsync("ingest.scope.shared", "[\"/machine\"]");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest,
+            "a blocked reserved target is a refusal, not a server fault");
+        (await response.Content.ReadAsStringAsync(ct)).ShouldContain("shared-project-conflict");
+    }
+
     [RetryTheory]
     [InlineData("ingest.scope.", "[\"/machine\"]")]
     [InlineData("watch.enabled.", "true")]

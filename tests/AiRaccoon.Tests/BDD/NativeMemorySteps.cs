@@ -273,7 +273,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         columns.ShouldContain("agent_id");
     }
 
-    [When(@"I call memory_workspace_begin for project ""([^""]*)""(?! with)")]
+    [When(@"I call initialize_workspace for project ""([^""]*)""(?! with)")]
     public async Task WhenIWorkspaceBegin(string projectId)
     {
         var ws = new SqliteWorkspaceStore(_ctx.Factory, TestData.SharedScope);
@@ -281,7 +281,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         scenarioContext["WorkspaceId"] = "ws-1";
     }
 
-    [When(@"I call memory_workspace_begin for project ""(.*)"" with agent ""(.*)""")]
+    [When(@"I call initialize_workspace for project ""(.*)"" with agent ""(.*)""")]
     public async Task WhenIWorkspaceBeginWithAgent(string projectId, string agent)
     {
         // The agent label is part of the tool contract; begin itself returns a generated id.
@@ -349,7 +349,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             CancellationToken.None);
     }
 
-    [When("I call memory_embed_pending")]
+    [When("I call embed_deferred_entries")]
     public async Task WhenIEmbedPending() => await _store.EmbedPendingAsync((string)scenarioContext["ProjectId"], null, CancellationToken.None);
 
     [Then("the write is embedded with the local engine")]
@@ -402,7 +402,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         state.ShouldBe("pending");
     }
 
-    [Then("memory_stats reports one pending entry")]
+    [Then("get_store_statistics reports one pending entry")]
     public async Task ThenStatsReportsOnePendingEntry()
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -410,7 +410,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         stats.PendingCount.ShouldBe(1);
     }
 
-    [Then("memory_stats reports zero pending entries")]
+    [Then("get_store_statistics reports zero pending entries")]
     public async Task ThenStatsReportsZeroPendingEntries()
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -563,7 +563,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         sql.ShouldContain("(workspace_id IS NULL AND scope IS NOT NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL)");
     }
 
-    [When(@"I call memory_workspace_consolidate with keep=\[""([^""]*)""\]")]
+    [When(@"I call close_workspace with keep=\[""([^""]*)""\]")]
     public async Task WhenIConsolidateWithKeep(string keep)
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -610,7 +610,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         wsStatus.ShouldBe(status);
     }
 
-    [When(@"I call memory_workspace_discard for ""(.*)""")]
+    [When(@"I call discard_workspace for ""(.*)""")]
     public async Task WhenIDiscardWorkspace(string wsId)
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -641,7 +641,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             CancellationToken.None);
     }
 
-    [Then("memory_stats reports one entry")]
+    [Then("get_store_statistics reports one entry")]
     public async Task ThenStatsReportsOneEntry()
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -659,7 +659,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         scenarioContext["ShareHash"] = entry.Hash;
     }
 
-    [When(@"I call memory_share with hash ""(.*)""")]
+    [When(@"I call share_memory with hash ""(.*)""")]
     public async Task WhenIShareWithHash(string hash)
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -723,7 +723,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     // ── FR-NM-8: Sync ──
-    [When("I call memory_sync without sync credentials")]
+    [When("I call sync_to_cloud without sync credentials")]
     public async Task WhenISyncWithoutCredentials()
     {
         try
@@ -743,10 +743,10 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     [Given("sync credentials are configured")]
     public void GivenSyncCredentialsConfigured() => scenarioContext[CloudStoreKey] = new FakeCloudStore();
 
-    [When(@"I call memory_sync for project ""(.*)""")]
+    [When(@"I call sync_to_cloud for project ""(.*)""")]
     public async Task WhenISyncForProject(string projectId) => await RunSyncAsync(CloudStore, CancellationToken.None);
 
-    [When("I call memory_sync")]
+    [When("I call sync_to_cloud")]
     public async Task WhenICallMemorySync()
     {
         if (!scenarioContext.ContainsKey(CloudStoreKey))
@@ -908,7 +908,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     [Then(
-        "memory_write, memory_search, memory_list, memory_stats, memory_share, memory_delete, memory_delete_context, memory_ingest_file, memory_ingest_directory, memory_configure, memory_embed_pending, memory_workspace_begin, memory_workspace_status, memory_workspace_consolidate, memory_workspace_discard, memory_sweep and memory_sync are present")]
+        "add_memory, query, get_index, get_store_statistics, share_memory, delete_entry, delete_context, ingest_file, ingest_directory, memory_configure, embed_deferred_entries, initialize_workspace, get_workspace_status, close_workspace, discard_workspace, trigger_memory_cleanup and sync_to_cloud are present")]
     public void ThenAll17ToolsPresent()
     {
         // memory_configure is deliberately not an MCP tool (CLI-only config channel, src/AiRaccoon/README.md);
@@ -916,10 +916,10 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var toolNames = AllToolNames();
         string[] expected =
         [
-            "memory_write", "memory_search", "memory_list", "memory_stats", "memory_share",
-            "memory_delete", "memory_delete_context", "memory_ingest_file", "memory_ingest_directory",
-            "memory_embed_pending", "memory_workspace_begin", "memory_workspace_status",
-            "memory_workspace_consolidate", "memory_workspace_discard", "memory_sweep", "memory_sync"
+            "add_memory", "query", "get_index", "get_store_statistics", "share_memory",
+            "delete_entry", "delete_context", "ingest_file", "ingest_directory",
+            "embed_deferred_entries", "initialize_workspace", "get_workspace_status",
+            "close_workspace", "discard_workspace", "trigger_memory_cleanup", "sync_to_cloud"
         ];
         foreach (var name in expected)
         {
@@ -972,20 +972,20 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         _lastWrite!.Hash.ShouldNotBeNullOrWhiteSpace();
     }
 
-    [Then(@"memory_delete with a known hash errors with access-denied")]
+    [Then(@"delete_entry with a known hash errors with access-denied")]
     public async Task ThenMemoryDeleteErrorsWithAccessDenied()
     {
         _lastWrite.ShouldNotBeNull();
         var projectId = (string)scenarioContext["ProjectId"];
         await Should.ThrowAsync<AccessDeniedException>(async () =>
-            await Gate.RequireAsync(projectId, AccessRequirement.Destructive, "memory_delete", CancellationToken.None));
+            await Gate.RequireAsync(projectId, AccessRequirement.Destructive, "delete_entry", CancellationToken.None));
     }
 
-    [Then(@"memory_search for project ""(.*)"" still returns results")]
+    [Then(@"query for project ""(.*)"" still returns results")]
     public async Task ThenMemorySearchStillReturnsResults(string projectId)
     {
         // Read is allowed in every mode — the gate must not throw here even while ro denies writes.
-        await Gate.RequireAsync(projectId, AccessRequirement.Read, "memory_search", CancellationToken.None);
+        await Gate.RequireAsync(projectId, AccessRequirement.Read, "query", CancellationToken.None);
         _lastSearch = (await _store.SearchAsync(
             new SearchQuery(projectId, "content"),
             CancellationToken.None)).Results;
@@ -1009,7 +1009,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         await _store.DeleteAsync(projectId, _lastWrite!.Hash, CancellationToken.None);
     }
 
-    [Then("memory_stats reports the entry is gone")]
+    [Then("get_store_statistics reports the entry is gone")]
     public async Task ThenStatsReportsEntryGone()
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -1053,14 +1053,14 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         listed.ShouldContain(e => e.Hash == entry.Hash);
     }
 
-    [Then(@"memory_stats for project ""(.*)"" without workspace shows zero draft entries")]
+    [Then(@"get_store_statistics for project ""(.*)"" without workspace shows zero draft entries")]
     public async Task ThenStatsShowsZeroDraftEntries(string projectId)
     {
         var stats = await _store.GetStatsAsync(projectId, CancellationToken.None);
         stats.EntryCount.ShouldBe(0);
     }
 
-    [Then(@"the entry is listed by memory_workspace_status for ""(.*)""")]
+    [Then(@"the entry is listed by get_workspace_status for ""(.*)""")]
     public async Task ThenEntryListedByWorkspaceStatus(string wsId)
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -1094,12 +1094,12 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     }
 
     // ── FR-NM-2: access-mode-gated write, mirroring MemoryTools.Write's gate-then-store shape ──
-    [When("I call memory_write for project \"(.*)\"")]
+    [When("I call add_memory for project \"(.*)\"")]
     public async Task WhenICallMemoryWrite(string projectId)
     {
         try
         {
-            await Gate.RequireAsync(projectId, AccessRequirement.Write, "memory_write", CancellationToken.None);
+            await Gate.RequireAsync(projectId, AccessRequirement.Write, "add_memory", CancellationToken.None);
             _lastWrite = await _store.WriteAsync(
                 new MemoryWriteRequest(projectId, "generic content"),
                 CancellationToken.None);
@@ -1120,26 +1120,26 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
 
     // ── Tool inventory / MCP surface steps (no current scenario binds this exact text; kept
     // honest so a future scenario that does gets a real assertion, not a stub) ──
-    [Then("memory_workspace_begin, memory_workspace_status, memory_workspace_consolidate, memory_workspace_discard are present")]
+    [Then("initialize_workspace, get_workspace_status, close_workspace, discard_workspace are present")]
     public void ThenWorkspaceToolsPresent()
     {
         var toolNames = AllToolNames();
         foreach (var name in new[]
                  {
-                     "memory_workspace_begin", "memory_workspace_status", "memory_workspace_consolidate",
-                     "memory_workspace_discard"
+                     "initialize_workspace", "get_workspace_status", "close_workspace",
+                     "discard_workspace"
                  })
         {
             toolNames.ShouldContain(name);
         }
     }
 
-    [Then("memory_sweep and memory_sync are present")]
+    [Then("trigger_memory_cleanup and sync_to_cloud are present")]
     public void ThenSweepAndSyncPresent()
     {
         var toolNames = AllToolNames();
-        toolNames.ShouldContain("memory_sweep");
-        toolNames.ShouldContain("memory_sync");
+        toolNames.ShouldContain("trigger_memory_cleanup");
+        toolNames.ShouldContain("sync_to_cloud");
     }
 
     // ── Steps that use "And when..." phrasing (parsed as Then by Gherkin) ──
@@ -1254,7 +1254,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         _lastSearch.ShouldAllBe(r => r.Ranking >= 0.7);
     }
 
-    [Then("memory_stats for project \"acme-web\" is unchanged")]
+    [Then("get_store_statistics for project \"acme-web\" is unchanged")]
     public async Task ThenStatsUnchanged()
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -1440,7 +1440,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             "openai", "text-embedding-3-small", "http://localhost:1234/v1", CancellationToken.None,
             _ctx.TimeProvider);
 
-    [When("I call memory_delete with a known hash")]
+    [When("I call delete_entry with a known hash")]
     public async Task WhenICallMemoryDelete()
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -1448,7 +1448,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         await _store.DeleteAsync(projectId, _lastWrite!.Hash, CancellationToken.None);
     }
 
-    [When("I call memory_search with rrf_k 30 and weights 2:1")]
+    [When("I call query with rrf_k 30 and weights 2:1")]
     public async Task WhenISearchWithRrfK()
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -1470,7 +1470,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
             CancellationToken.None)).Results;
     }
 
-    [When("I call memory_sweep with dry_run false")]
+    [When("I call trigger_memory_cleanup with dry_run false")]
     public async Task WhenISweepDryRunFalse()
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -1558,7 +1558,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         results.Count.ShouldBe(1);
     }
 
-    [Then("memory_stats for project \"acme-web\" without workspace reports exactly one new entry")]
+    [Then("get_store_statistics for project \"acme-web\" without workspace reports exactly one new entry")]
     public async Task ThenStatsOneNewEntry()
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -1566,7 +1566,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         stats.EntryCount.ShouldBe(1);
     }
 
-    [Then("memory_workspace_status for \"ws-2\" returns zero entries")]
+    [Then("get_workspace_status for \"ws-2\" returns zero entries")]
     public async Task ThenWorkspaceStatusZero()
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -1574,12 +1574,12 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         entries.Count.ShouldBe(0);
     }
 
-    [When("I call memory_write without a project_id")]
+    [When("I call add_memory without a project_id")]
     public async Task WhenIWriteWithoutProjectId()
     {
         try
         {
-            await Gate.RequireAsync(string.Empty, AccessRequirement.Write, "memory_write", CancellationToken.None);
+            await Gate.RequireAsync(string.Empty, AccessRequirement.Write, "add_memory", CancellationToken.None);
         }
         catch (McpException ex)
         {
@@ -1635,7 +1635,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         scenarioContext["HighRatedHash"] = entry.Hash;
     }
 
-    [When("I call memory_sweep with dry_run=true")]
+    [When("I call trigger_memory_cleanup with dry_run=true")]
     public async Task WhenISweepDryRun()
     {
         var projectId = (string)scenarioContext["ProjectId"];
@@ -1651,14 +1651,14 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         outcome.Candidates.ShouldContain(c => c.Hash == (string)scenarioContext["AgedHash"]);
     }
 
-    [Then("memory_stats still reports the entry")]
+    [Then("get_store_statistics still reports the entry")]
     public async Task ThenStatsStillReportsEntry()
     {
         var projectId = (string)scenarioContext["ProjectId"];
         (await _store.GetStatsAsync(projectId, CancellationToken.None)).EntryCount.ShouldBeGreaterThan(0);
     }
 
-    [When("I call memory_sweep with dry_run=false")]
+    [When("I call trigger_memory_cleanup with dry_run=false")]
     public async Task WhenISweepDryRunFalse2()
     {
         var projectId = (string)scenarioContext["ProjectId"];

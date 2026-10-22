@@ -34,7 +34,7 @@ public sealed class ToolTelemetryBankFoldTests : IDisposable
     public async Task NoMigrationGate_FoldsBankMeasurementToWinner()
     {
         var recorder = new RecordingRecorder();
-        await ToolTelemetry.RecordAsync(new ToolCallMetrics(), "memory_search", Arguments(Loser),
+        await ToolTelemetry.RecordAsync(new ToolCallMetrics(), "query", Arguments(Loser),
             _ => ValueTask.FromResult(new CallToolResult()), CancellationToken.None, recorder);
         recorder.Recorded.ShouldHaveSingleItem().ProjectId.ShouldBe(Winner);
     }
@@ -45,11 +45,11 @@ public sealed class ToolTelemetryBankFoldTests : IDisposable
         var metrics = new ToolCallMetrics();
         using var collector = new MetricCollector<long>(metrics.Meter, OtlpNames.ToolInvocations);
         var recorder = new RecordingRecorder();
-        await ToolTelemetry.RecordAsync(metrics, "memory_search", Arguments(Loser),
+        await ToolTelemetry.RecordAsync(metrics, "query", Arguments(Loser),
             _ => ValueTask.FromResult(new CallToolResult()), CancellationToken.None, recorder);
         ProjectIdAliasMap.ReplaceDefault(new ProjectIdAliasMap(
             [new ProjectIdAliasEntry(Loser, "another-winner")], ["another-winner"], []));
-        await ToolTelemetry.RecordAsync(metrics, "memory_search", Arguments(Loser),
+        await ToolTelemetry.RecordAsync(metrics, "query", Arguments(Loser),
             _ => ValueTask.FromResult(new CallToolResult()), CancellationToken.None, recorder);
 
         recorder.Recorded.Select(row => row.ProjectId).ShouldBe([Winner, "another-winner"]);
@@ -64,7 +64,7 @@ public sealed class ToolTelemetryBankFoldTests : IDisposable
     public async Task BankMeasurement_CanonicalizesGuidAndPreservesUnknownRawText(string input, string expected)
     {
         var recorder = new RecordingRecorder();
-        await ToolTelemetry.RecordAsync(new ToolCallMetrics(), "memory_search", Arguments(input),
+        await ToolTelemetry.RecordAsync(new ToolCallMetrics(), "query", Arguments(input),
             _ => ValueTask.FromResult(new CallToolResult()), CancellationToken.None, recorder);
         recorder.Recorded.ShouldHaveSingleItem().ProjectId.ShouldBe(expected);
     }
