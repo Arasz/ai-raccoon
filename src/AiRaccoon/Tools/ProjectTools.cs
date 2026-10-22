@@ -34,6 +34,17 @@ public sealed class ProjectTools(
     {
         await gate.RequireBankAvailableAsync(TnSaveProjectIdToken, cancellationToken);
 
+        // The reserved shared target owns the literal "shared" (ADR-0137). Its NAME is reserved
+        // too: a private project registered under that name would shadow it — name lookup keeps
+        // answering with the reserved id, so the private project becomes unreachable by name,
+        // and the reserved target would publish over rows the ADR says must block it. So the
+        // name is not mintable, exactly and case-sensitively.
+        if (name is not null && SharedProjectScope.IsReservedId(name))
+        {
+            throw new ArgumentException(
+                "reserved-name: 'shared' is the reserved shared target; it needs no minted id and cannot be registered under another id. Nothing was registered.");
+        }
+
         var projectId = Guid.CreateVersion7().ToString("D");
         await registry.RegisterAsync(projectId, name, cancellationToken);
 

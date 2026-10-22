@@ -4,6 +4,14 @@ Date: 2026-10-21
 
 Status: Accepted for implementation in 1.62.0.
 
+Amended 2026-10-22 — **the reserved NAME is refused too.** The record reserves the literal
+`shared` as an id; the name was not covered, so `save_project_id_token {name: "shared"}` minted a
+private project under it. Name lookup then answered with the reserved id for ever, so the private
+project became unreachable by name, and the activation guard — which keyed on the reserved *id* —
+let the target publish over rows this record says must block it. The mint tool now refuses the
+reserved name (exact and case-sensitive, like the id), and the activation guard also keys on the
+name, so a bank that already holds such a row blocks the target instead of being published over.
+
 Amended 2026-10-22 — **the reserved target's code refusal moved from the tool to the corpus.**
 The tool that read a code chunk (`code_get`) was merged into `get_entry`, which now reads the
 memory corpus and the code corpus and declares the `All` scope. A `get_entry` call on the
