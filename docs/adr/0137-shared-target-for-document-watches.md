@@ -4,6 +4,13 @@ Date: 2026-10-21
 
 Status: Accepted for implementation in 1.62.0.
 
+Amended 2026-10-22 — **the reserved target's code refusal moved from the tool to the corpus.**
+The tool that read a code chunk (`code_get`) was merged into `get_entry`, which now reads the
+memory corpus and the code corpus and declares the `All` scope. A `get_entry` call on the
+reserved target is therefore allowed, and a call naming a code hash returns nothing: the code
+corpus is project-scoped and holds no shared rows. What this record refused — code on the
+reserved target — is still refused, by the absence of rows rather than by the tool's scope.
+
 Amended 2026-10-21 — **the code-routing sentence below names a method that no longer exists, and
 the reserved target's refusal list now names `memory_delete`.** The Consequences section says
 that `CanSearchCode(SearchQuery)` "separately checks code routing"; that method was removed from

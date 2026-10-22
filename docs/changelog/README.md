@@ -11,6 +11,8 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [2.0.0 — the MCP tool surface is renamed: every tool has a new name, and there are no aliases](2.0.0-mcp-tool-surface-renamed.md)
+
 - [1.63.0 — the reserved shared target refuses a delete, and a new MCP tool must say where it may run](1.63.0-derive-tool-scope.md)
 
 - [1.62.0 — shared document watches](1.62.0-shared-document-watches.md)
