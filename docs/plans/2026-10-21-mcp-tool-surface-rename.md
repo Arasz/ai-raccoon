@@ -104,8 +104,12 @@ moved. That fixes three things at once:
 
 `query` and `get_entry` gain an **entry type** parameter with the values Memory, Code, File.
 
-- `query` defaults to **Memory | Code | File** (the sum), so the default answers exactly what
-  today's default (`kind=both`) answers.
+- `query` defaults to **Memory | Code | File** (the sum), and the sum is **no kind filter** — every
+  row, the unclassified ones included — so the default answers exactly what today's default
+  (`kind=both`) answers. A narrower set is a filter: it selects the rows of the named kinds, and a
+  row that carries no kind is in no kind, so it is outside every narrower set. The doctor counts
+  the unclassified rows (`entries without a kind: N`), so that population is visible rather than
+  quietly missing from a result.
 - `get_entry` has **no default**: the type is required, because a hash alone does not say which
   corpus to read from — and the merged `get_entry` must know where to look.
 
