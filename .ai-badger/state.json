@@ -1,8 +1,18 @@
 {
-  "lastUpdated": "2026-10-21",
+  "lastUpdated": "2026-10-22",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "air-unknown-tool-call-guidance",
+      "title": "A call to a tool this server does not have is answered with the tool to call",
+      "summary": "2.0.0 renamed every MCP tool and shipped no aliases, so a client still speaking the old names got the SDK's own JSON-RPC -32602 ('Unknown tool: memory_search') and nothing it could act on. Such a call is now a normal tool error (CallToolResult.IsError = true) with the wire prefix 'unknown-tool': a pre-2.0.0 name is answered with the name to call instead ('unknown-tool: \\'memory_search\\' was renamed to \\'query\\' in 2.0.0 - call \\'query\\' instead.'), any other name with the general message. The surface decides what exists (McpToolInventory, generated from the [McpServerTool] declarations), the rename map is the 2.0.0 changelog's table and a test compares the two, the refusal is logged at Information like every other expected failure, and the old names stay dead - this is an answer, not an alias. ADR-0140, VERSION 2.0.1.",
+      "pr": "Arasz/ai-raccoon#914",
+      "merged": true,
+      "mergeCommit": "0903256bfca039f8c201e2d31a28e471a3c649ac",
+      "date": "2026-10-22",
+      "hasNotes": true
+    },
     {
       "id": "aip-scaffold-dotnet-proxy-repo",
       "title": "The ai-proxy repository exists: a .NET proxy that detects the provider and passes other traffic through",
