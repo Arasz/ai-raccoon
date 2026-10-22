@@ -45,6 +45,9 @@ The full walkthrough, including indexing your code, is [Get started with AiRacco
 
 ## What's new
 
+- **Every MCP tool has a new name, and the old names are gone (2.0.0).** `memory_search` is now `query`, `memory_get` and `code_get` are one `get_entry`, `memory_write` is `add_memory`, and the whole 30-tool surface moved with them. There are no aliases, so a client that calls an old name gets nothing back. The [old → new map](docs/changelog/2.0.0-mcp-tool-surface-renamed.md) is one table. [Breaking changes](docs/reference/breaking-changes.md)
+- The reserved `shared` document target refuses a delete, and every MCP tool now declares the scope it may run in, so the build fails when a tool declares none. (1.63.0) [ADR-0139](docs/adr/0139-attribute-derived-tool-scope.md)
+- Documents outside a repository can use the built-in `shared` target: configure its path scope, then `ai-raccoon watch add shared /absolute/documents`. No project id to mint. (1.62.0) [Changelog](docs/changelog/1.62.0-shared-document-watches.md)
 - **The embed drain's rows-per-run is configurable from 64 to 4096, and what that value costs is written down (1.61.0).** [ADR-0136](docs/adr/0136-the-embed-drain-rows-per-run-runs-from-64-to-4096.md)
 - `ai-raccoon watch add|remove|status` register and inspect watches from a terminal; the watcher indexes Jupyter notebooks (`.ipynb`) by cell and reports the files it skipped, with the reason. (1.59.0) [CLI reference](docs/reference/cli-reference.md)
 - `ai-raccoon encryption 1password` keys the bank from an SSH Key item in 1Password, read through the `op` CLI. (1.58.0) [ADR-0132](docs/adr/0132-1password-cli-as-a-second-bank-key-source.md) · [how-to](docs/how-to/configure-ai-raccoon-server.md#key-the-bank-from-1password)
@@ -59,7 +62,7 @@ Older releases: [What's new history](docs/reference/whats-new-history.md). A rel
 
 ## Breaking changes
 
-Upgrading from an older version? Check [Breaking changes](docs/reference/breaking-changes.md) for what to do past each version. The latest one is 1.57.0.
+Upgrading from an older version? Check [Breaking changes](docs/reference/breaking-changes.md) for what to do past each version. The latest one is 2.0.0.
 
 ## Performance
 
@@ -136,7 +139,7 @@ Ports, environment variables, encryption and upgrades: [Configure and run the se
 src/AiRaccoon/                 # CLI, proxy and MCP tool handlers (thin)
 src/AiRaccoon.Core/            # Domain: memory, search fusion, chunking, workspaces, rating
 src/AiRaccoon.Infrastructure/  # SQLite store, embeddings, sync, maintenance jobs
-tests/AiRaccoon.Tests/         # xUnit v3 suite (about 2,600 test methods)
+tests/AiRaccoon.Tests/         # xUnit v3 suite (about 5,500 test methods)
 benchmarks/                    # BenchmarkDotNet and retrieval benchmarks
 scripts/                       # Python tooling, see docs/how-to/run-the-python-scripts.md
 ```
