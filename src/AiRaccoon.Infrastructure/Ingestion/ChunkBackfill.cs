@@ -47,7 +47,7 @@ public sealed class ChunkBackfill(
                 SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, source_file AS SourceFile,
                        section AS Section, scope AS Scope, project_id AS ProjectId,
                        context_label AS ContextLabel, workspace_id AS WorkspaceId, source_id AS SourceId,
-                       (SELECT ms.source_type FROM memory_source ms WHERE ms.id = entries.source_id) AS SourceType
+                       entry_type AS EntryType
                 FROM entries WHERE value IS NOT NULL
                 """, cancellationToken: cancellationToken))
         ];
@@ -103,7 +103,10 @@ public sealed class ChunkBackfill(
                             createdAt = now,
                             updatedAt = now,
                             sourceId = row.SourceId,
-                            entryType = EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.Classify(row.Path, row.SourceFile)),
+                            // The row keeps the kind its writer declared; the shape is only the
+                            // fallback for a row that predates the column.
+                            entryType = row.EntryType
+                                        ?? EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.Classify(row.Path, row.SourceFile)),
                             // Position unknown here — the bank-wide recompute below fills it in.
                             chunkIndex = -1,
                             totalChunks = 0
@@ -176,5 +179,5 @@ public sealed class ChunkBackfill(
         string? ContextLabel,
         string? WorkspaceId,
         long? SourceId,
-        string? SourceType);
+        string? EntryType);
 }

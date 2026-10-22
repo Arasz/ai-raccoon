@@ -366,7 +366,8 @@ public sealed partial class ChunkBudgetReconciler(
                         updatedAt = now,
                         sourceId = template.SourceId,
                         ttlDays = template.TtlDays,
-                        entryType = EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.Classify(group.Path, template.SourceFile)),
+                        // A note group is agent-written: a memory, whatever it cites.
+                        entryType = EntryTypeClassifier.ToStoredValue(EntryType.Memory),
                         // Plain notes keep WriteChunks' sentinel; the phase-end repair positions citing notes.
                         chunkIndex = -1,
                         totalChunks = 0

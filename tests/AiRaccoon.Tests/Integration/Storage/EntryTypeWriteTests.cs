@@ -77,6 +77,26 @@ public sealed class EntryTypeWriteTests : IDisposable
         (await ReadEntryTypeAsync("acme")).ShouldBe("memory");
     }
 
+    /// <summary>
+    ///     A note that names its OWN synthetic path - sha256 of its content, the name the write
+    ///     path gives it - is still a MEMORY. The writer declares the row's kind, so a
+    ///     caller-supplied string cannot file an agent's note as a document.
+    /// </summary>
+    [RetryFact]
+    public async Task ANoteNamingItsOwnSyntheticPath_IsAMemory()
+    {
+        var content = "A note the agent wrote whose source file is its own synthetic path.";
+        var syntheticPath = $"{Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(content)))}.md";
+
+        await _store.WriteAsync(
+            new MemoryWriteRequest("acme", content, SourceFile: syntheticPath),
+            TestContext.Current.CancellationToken);
+
+        (await ReadEntryTypeAsync("acme")).ShouldBe("memory",
+            "the writer declares the kind - the shape rule is only the migration's fallback");
+    }
+
     /// <summary>An ingested document is a FILE: it mirrors a file on disk.</summary>
     [RetryFact]
     public async Task AnIngestedDocument_IsAFile()
