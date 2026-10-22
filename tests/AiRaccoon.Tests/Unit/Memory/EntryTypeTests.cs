@@ -25,7 +25,7 @@ public sealed class EntryTypeTests
     [InlineData("code,file", EntryType.Code | EntryType.File)]
     [InlineData("memory,code,file", EntryType.Memory | EntryType.Code | EntryType.File)]
     public void Parse_ReadsEveryAskingSet(string value, EntryType expected) =>
-        EntryTypeWireNames.Parse(value).ShouldBe(expected);
+        EntryTypeParameter.Parse(value).ShouldBe(expected);
 
     /// <summary>The names are read the way the rest of the surface reads them: case-insensitively.</summary>
     [Theory]
@@ -33,7 +33,7 @@ public sealed class EntryTypeTests
     [InlineData("Memory,Code", EntryType.Memory | EntryType.Code)]
     [InlineData(" memory , file ", EntryType.Memory | EntryType.File)]
     public void Parse_IgnoresCaseAndSpacing(string value, EntryType expected) =>
-        EntryTypeWireNames.Parse(value).ShouldBe(expected);
+        EntryTypeParameter.Parse(value).ShouldBe(expected);
 
     /// <summary>
     ///     The default is the sum, and the sum is NO KIND FILTER: every row, the unclassified ones
@@ -41,7 +41,7 @@ public sealed class EntryTypeTests
     /// </summary>
     [Fact]
     public void TheDefault_IsEveryKind() =>
-        EntryTypeWireNames.Default.ShouldBe(EntryType.Memory | EntryType.Code | EntryType.File);
+        EntryTypeParameter.Default.ShouldBe(EntryType.Memory | EntryType.Code | EntryType.File);
 
     /// <summary>
     ///     The empty set is not a question: it would ask for nothing and return nothing, which
@@ -50,18 +50,18 @@ public sealed class EntryTypeTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    [InlineData("none")]
     [InlineData(",")]
     public void Parse_RefusesTheEmptySet(string value) =>
-        Should.Throw<ArgumentException>(() => EntryTypeWireNames.Parse(value));
+        Should.Throw<ArgumentException>(() => EntryTypeParameter.Parse(value));
 
     /// <summary>An unknown name is a typo, not a request: it is refused, never guessed at.</summary>
     [Theory]
     [InlineData("bogus")]
     [InlineData("memory,bogus")]
     [InlineData("notes")]
+    [InlineData("none")]
     public void Parse_RefusesAnUnknownName(string value) =>
-        Should.Throw<ArgumentException>(() => EntryTypeWireNames.Parse(value));
+        Should.Throw<ArgumentException>(() => EntryTypeParameter.Parse(value));
 
     /// <summary>
     ///     A set carrying a bit this build does not know is refused as well. A name can only ever
@@ -71,7 +71,7 @@ public sealed class EntryTypeTests
     [Fact]
     public void ASetWithAnUnknownBit_IsRefused() =>
         Should.Throw<ArgumentException>(() =>
-            EntryTypeWireNames.RefuseUnknownBits(EntryType.Memory | (EntryType)16));
+            EntryTypeParameter.RefuseUnknownBits(EntryType.Memory | (EntryType)16));
 
     /// <summary>
     ///     A lookup asks for exactly one kind: a hash alone does not say which corpus holds it, so
@@ -81,9 +81,9 @@ public sealed class EntryTypeTests
     public void Single_RefusesACompositeLookup()
     {
         Should.Throw<ArgumentException>(() =>
-            EntryTypeWireNames.Single(EntryType.Memory | EntryType.Code));
+            EntryTypeParameter.Single(EntryType.Memory | EntryType.Code));
         Should.Throw<ArgumentException>(() =>
-            EntryTypeWireNames.Single(EntryType.Memory | EntryType.Code | EntryType.File));
+            EntryTypeParameter.Single(EntryType.Memory | EntryType.Code | EntryType.File));
     }
 
     /// <summary>
@@ -94,9 +94,9 @@ public sealed class EntryTypeTests
     public void Single_RefusesAnUnknownBit()
     {
         Should.Throw<ArgumentException>(() =>
-            EntryTypeWireNames.Single((EntryType)16));
+            EntryTypeParameter.Single((EntryType)16));
         Should.Throw<ArgumentException>(() =>
-            EntryTypeWireNames.Single(EntryType.Memory | (EntryType)16));
+            EntryTypeParameter.Single(EntryType.Memory | (EntryType)16));
     }
 
     /// <summary>The one kind a lookup names comes back as itself.</summary>
@@ -105,7 +105,7 @@ public sealed class EntryTypeTests
     [InlineData(EntryType.Code)]
     [InlineData(EntryType.File)]
     public void Single_ReturnsTheOneKind(EntryType type) =>
-        EntryTypeWireNames.Single(type).ShouldBe(type);
+        EntryTypeParameter.Single(type).ShouldBe(type);
 
     /// <summary>
     ///     The parameter's vocabulary and the stored kind's vocabulary share the word "memory" and
@@ -114,7 +114,7 @@ public sealed class EntryTypeTests
     [Fact]
     public void TheParameterAndTheStoredKind_SpellTheSameWay()
     {
-        EntryTypeWireNames.Memory.ShouldBe(EntryKindWireNames.Memory);
-        EntryTypeWireNames.File.ShouldBe(EntryKindWireNames.File);
+        EntryTypeParameter.Memory.ShouldBe(EntryKindWireNames.Memory);
+        EntryTypeParameter.File.ShouldBe(EntryKindWireNames.File);
     }
 }

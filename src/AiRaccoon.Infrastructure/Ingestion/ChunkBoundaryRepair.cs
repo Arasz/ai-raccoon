@@ -377,9 +377,9 @@ public sealed class ChunkBoundaryRepair(
                 updatedAt = now,
                 sourceId = row.SourceId,
                 // The row keeps the kind its writer declared; the shape is only the fallback
-                // for a row that predates the column.
-                entryType = entryTypeClassifier.ToStoredValue(
-                    entryTypeClassifier.Resolve(row.EntryType, row.Path, row.SourceFile)),
+                // for a row that carries no kind.
+                entryType = entryTypeClassifier.ResolveStoredValue(
+                    row.EntryType, row.Path, row.SourceFile),
                 chunkIndex = -1,
                 totalChunks = 0
             }, cancellationToken: cancellationToken));

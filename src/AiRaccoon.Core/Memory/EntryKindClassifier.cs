@@ -66,4 +66,36 @@ public sealed class EntryKindClassifier : IEntryKindClassifier
         EntryKindWireNames.File => EntryKind.File,
         _ => EntryKind.None
     };
+
+    /// <summary>
+    ///     The stored value a rewritten row keeps. Three states, and they are not the same:
+    ///     <list type="bullet">
+    ///         <item>
+    ///             a DECLARED kind — the row named one, and it is kept;
+    ///         </item>
+    ///         <item>
+    ///             an UNDECLARED row (no kind, or the <c>none</c> marker) — its kind comes from its
+    ///             shape;
+    ///         </item>
+    ///         <item>
+    ///             an UNKNOWN value — a kind this build does not know, which is a defect the
+    ///             doctor counts. It is carried through untouched: only the undeclared state may be
+    ///             resolved from the shape, and normalising an unknown value away would leave the
+    ///             doctor with nothing to report.
+    ///         </item>
+    ///     </list>
+    /// </summary>
+    public string ResolveStoredValue(string? storedKind, string? path, string? sourceFile)
+    {
+        // 'none' is the UNDECLARED marker, not an unknown value: it resolves from the shape like a
+        // null does. Anything else this build does not know is a defect, and it is carried through.
+        if (!string.IsNullOrEmpty(storedKind)
+            && storedKind != EntryKindWireNames.None
+            && FromStoredValue(storedKind) == EntryKind.None)
+        {
+            return storedKind;
+        }
+
+        return ToStoredValue(Resolve(storedKind, path, sourceFile));
+    }
 }

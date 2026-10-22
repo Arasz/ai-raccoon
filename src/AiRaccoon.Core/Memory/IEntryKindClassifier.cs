@@ -43,4 +43,11 @@ public interface IEntryKindClassifier
 
     /// <summary>The kind a stored value names; <see cref="EntryKind.None" /> for null or an unknown value.</summary>
     EntryKind FromStoredValue(string? value);
+
+    /// <summary>
+    ///     The stored value a rewritten row keeps: its declared kind, or the kind its shape gives
+    ///     for an undeclared row. An unknown stored value is carried through untouched — it is a
+    ///     defect the doctor counts, and only the undeclared state may be resolved from the shape.
+    /// </summary>
+    string ResolveStoredValue(string? storedKind, string? path, string? sourceFile);
 }

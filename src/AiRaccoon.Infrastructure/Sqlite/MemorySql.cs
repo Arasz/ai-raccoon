@@ -19,6 +19,19 @@ internal static class MemorySql
         $"CASE WHEN {tableAlias}source_file IS NOT NULL AND {tableAlias}source_file <> '' "
         + $"AND {tableAlias}source_file = {tableAlias}path THEN 'file' ELSE 'memory' END";
 
+    /// <summary>
+    ///     The kind a row keeps when it comes from somewhere else: the kind it declares, when it
+    ///     declares one this build knows, and otherwise the kind its shape implies. The SQL twin of
+    ///     the classifier's resolve: a declared kind wins, and only an UNDECLARED row (no kind, or
+    ///     the <c>none</c> marker) is resolved from the shape.
+    ///     <para>
+    ///         The kinds it knows are named by the one vocabulary, so the domain has one home.
+    ///     </para>
+    /// </summary>
+    public static string EntryTypeFromDeclarationOrShape(string tableAlias) =>
+        $"CASE WHEN {tableAlias}entry_type IN ('{EntryKindWireNames.Memory}', '{EntryKindWireNames.File}') "
+        + $"THEN {tableAlias}entry_type ELSE {EntryTypeFromShape(tableAlias)} END";
+
     // ON CONFLICT DO NOTHING is bare — expression/partial indexes can't be a conflict target — so
     // concurrent same-bucket inserts converge; the loser re-reads by bucket key
     // (docs/work/archive/2026-08-06-extraction-followups-plan.md).

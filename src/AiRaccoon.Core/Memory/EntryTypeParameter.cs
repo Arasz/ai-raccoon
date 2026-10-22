@@ -27,7 +27,7 @@ namespace AiRaccoon.Core.Memory;
 ///         visible rather than quietly missing from a result.
 ///     </para>
 /// </summary>
-public static class EntryTypeWireNames
+public static class EntryTypeParameter
 {
     /// <summary>An agent-written memory — a note, or a session transcript the agent wrote.</summary>
     public const string Memory = SearchKindWireNames.Memory;
@@ -55,6 +55,13 @@ public static class EntryTypeWireNames
     /// <summary>
     ///     The set a wire value names: a comma-separated list of kind names, read the way the rest
     ///     of the surface reads them — case-insensitively, ignoring spacing.
+    ///     <para>
+    ///         THE DEFAULT PATH: a QUERY that names no kind asks for <see cref="Default" /> — the
+    ///         tool layer applies the default before it parses. A LOOKUP names no default: it
+    ///         requires one, so it refuses an empty value rather than defaulting to a set it would
+    ///         then refuse as composite. That is why this method refuses an empty value instead of
+    ///         defaulting: the default belongs to the query, not to the parse.
+    ///     </para>
     /// </summary>
     /// <exception cref="ArgumentException">
     ///     The value names a kind this build does not know, or asks for nothing at all. Both are

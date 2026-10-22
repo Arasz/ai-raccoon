@@ -136,6 +136,27 @@ public sealed class EntryKindClassifierTests
     }
 
     /// <summary>
+    ///     Three states, and they are not the same: a DECLARED kind is kept, an UNDECLARED row is
+    ///     classified by its shape, and an UNKNOWN value is a defect the doctor counts — carried
+    ///     through untouched, because normalising it away would leave the doctor with nothing to
+    ///     report.
+    /// </summary>
+    [Fact]
+    public void ResolveStoredValue_TellsTheThreeStatesApart()
+    {
+        var classifier = new EntryKindClassifier();
+
+        classifier.ResolveStoredValue("file", "docs/guide.md", "docs/guide.md").ShouldBe("file",
+            "a declared kind is kept");
+        classifier.ResolveStoredValue("none", "docs/guide.md", "docs/guide.md").ShouldBe("file",
+            "an undeclared row is classified by its shape");
+        classifier.ResolveStoredValue(null, "9f2c.md", null).ShouldBe("memory",
+            "an undeclared row is classified by its shape");
+        classifier.ResolveStoredValue("transcript", "9f2c.md", null).ShouldBe("transcript",
+            "an unknown value is a defect, not a declaration: it is carried through untouched");
+    }
+
+    /// <summary>
     ///     The stored kind carries no flag attribute and no Code member: a code chunk is not a row
     ///     of entries — it lives in the separate code_entries corpus, which the query parameter
     ///     reaches as a corpus, not as a row kind.

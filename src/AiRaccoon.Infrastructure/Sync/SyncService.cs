@@ -465,12 +465,8 @@ public partial class SyncService(
                     // classified by shape too.
                     var remoteHasEntryType = await ColumnExistsAsync(conn, "remote", "entries",
                         "entry_type", cancellationToken);
-                    // The kinds this build knows, named by the one vocabulary rather than spelled
-                    // out here: a second home for the domain is a second home to forget.
-                    var knownKinds = $"'{EntryKindWireNames.Memory}', '{EntryKindWireNames.File}'";
                     var mergedEntryType = remoteHasEntryType
-                        ? $"CASE WHEN r.entry_type IN ({knownKinds}) THEN r.entry_type "
-                          + $"ELSE {MemorySql.EntryTypeFromShape("r.")} END"
+                        ? MemorySql.EntryTypeFromDeclarationOrShape("r.")
                         : MemorySql.EntryTypeFromShape("r.");
                     mergeEntries.CommandText = $"""
                                                INSERT OR IGNORE INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,

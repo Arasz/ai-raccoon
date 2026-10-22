@@ -33,7 +33,13 @@ public sealed class EntryTypeRuleParityTests
         // A manual note: no source file at all.
         new("9f2c.md", null, "memory"),
         // An empty source file is no locator.
-        new("9f2c.md", "", "memory")
+        new("9f2c.md", "", "memory"),
+        // No path at all: the row cannot mirror a file it has no path for.
+        new(null, "docs/guide.md", "memory"),
+        // Neither a path nor a source file.
+        new(null, null, "memory"),
+        // A path that differs only in case is not the same path.
+        new("Docs/Guide.md", "docs/guide.md", "memory")
     ];
 
     [RetryFact]
@@ -82,6 +88,58 @@ public sealed class EntryTypeRuleParityTests
             csharp.ShouldBe(row.Expected, $"the C# rule disagrees about ({row.Path}, {row.SourceFile})");
             sqlKinds[i].ShouldBe(row.Expected, $"the SQL rule disagrees about ({row.Path}, {row.SourceFile})");
             sqlKinds[i].ShouldBe(csharp, $"the two rules disagree about ({row.Path}, {row.SourceFile})");
+        }
+    }
+
+    /// <summary>
+    ///     The other half of the rule: a DECLARED kind wins, and only an undeclared row is resolved
+    ///     from its shape. The sync merge decides a pulled row's kind with this expression, so the
+    ///     two must agree — a merge that filed a declared row by its shape would move it into the
+    ///     wrong corpus.
+    /// </summary>
+    [RetryFact]
+    public async Task TheDeclaredKindWins_InSqlAndInCsharp()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using (var create = connection.CreateCommand())
+        {
+            create.CommandText = "CREATE TABLE rows (entry_type TEXT, path TEXT, source_file TEXT)";
+            await create.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        // A declared kind, an undeclared row, and a kind this build does not know.
+        var stored = new[] { "file", "memory", "none", null, "transcript" };
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.CommandText = "INSERT INTO rows (entry_type, path, source_file) VALUES (@kind, @path, @sourceFile)";
+            foreach (var kind in stored)
+            {
+                insert.Parameters.Clear();
+                insert.Parameters.AddWithValue("@kind", (object?)kind ?? DBNull.Value);
+                insert.Parameters.AddWithValue("@path", "docs/guide.md");
+                insert.Parameters.AddWithValue("@sourceFile", "docs/guide.md");
+                await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+            }
+        }
+
+        var sqlKinds = new List<string?>();
+        await using (var select = connection.CreateCommand())
+        {
+            select.CommandText = $"SELECT {MemorySql.EntryTypeFromDeclarationOrShape(string.Empty)} FROM rows";
+            await using var reader = await select.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+            while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+            {
+                sqlKinds.Add(reader.IsDBNull(0) ? null : reader.GetString(0));
+            }
+        }
+
+        var classifier = new EntryKindClassifier();
+        for (var i = 0; i < stored.Length; i++)
+        {
+            var kind = stored[i];
+            var expected = classifier.ToStoredValue(classifier.Resolve(kind, "docs/guide.md", "docs/guide.md"));
+            sqlKinds[i].ShouldBe(expected, $"the two rules disagree about the stored kind '{kind}'");
         }
     }
 }
