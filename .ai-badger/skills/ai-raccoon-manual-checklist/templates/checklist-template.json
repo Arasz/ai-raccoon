@@ -26,7 +26,7 @@
   "items": [
     {
       "item": "build-and-install-global-package",
-      "expected-result": "Release build and pack succeed; the global ai-raccoon tool force-updates to this build and `ai-raccoon --version` matches derived.version",
+      "expected-result": "Release pack succeeds; install to an isolated tool path, or force-update the global tool when requested; installed --version matches derived.version.",
       "command": "",
       "evidence": "",
       "observed-result": "",
