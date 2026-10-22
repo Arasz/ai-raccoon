@@ -117,8 +117,14 @@ public sealed partial class VecDimensionReconciler : IVecDimensionReconciler
 
         // The six vec triggers survive the DROP and bind to the recreated table by name; the drain's
         // MarkEmbedded refills both tables through them, so there is nothing to repopulate here.
+        // The memory tables come back TYPED: the triggers insert the row's kind as the second
+        // partition key, and a body that names a column its table does not have fails the moment a
+        // row is embedded. The code corpus keeps its own layout - a code chunk carries no row kind.
+        var ddl = MemoryVecTables.Contains(table)
+            ? MemorySchema.TypedVecTableDdl(table, targetDimension)
+            : MemorySchema.VecTableDdl(table, targetDimension);
         await connection.ExecuteAsync(new CommandDefinition(
-            MemorySchema.VecTableDdl(table, targetDimension),
+            ddl,
             transaction, cancellationToken: cancellationToken));
     }
 

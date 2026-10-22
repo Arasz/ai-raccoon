@@ -17,20 +17,23 @@ namespace AiRaccoon.Tests.Integration.Storage;
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class EntryTypeRuleParityTests
 {
+    /// <summary>One row of the fixture: the shape the rule reads, and the kind it must give.</summary>
+    private sealed record RowShape(string? Path, string? SourceFile, string Expected);
+
     /// <summary>The row shapes the rule has to tell apart, and the kind each one carries.</summary>
-    private static readonly (string? Path, string? SourceFile, string Expected)[] Fixture =
+    private static readonly RowShape[] Fixture =
     [
         // A row that mirrors a file on disk: path = source_file.
-        ("docs/guide.md", "docs/guide.md", "file"),
-        ("notes/probe.md", "notes/probe.md", "file"),
+        new("docs/guide.md", "docs/guide.md", "file"),
+        new("notes/probe.md", "notes/probe.md", "file"),
         // A note that CITES a file: a source file, but a path of its own — still a memory.
-        ("9f2c.md", "notes/probe.md", "memory"),
+        new("9f2c.md", "notes/probe.md", "memory"),
         // A note from a transcript: a source file, a synthetic path — still a memory.
-        ("9f2c.md", "hermes/20260806_215718_fd7f66", "memory"),
+        new("9f2c.md", "hermes/20260806_215718_fd7f66", "memory"),
         // A manual note: no source file at all.
-        ("9f2c.md", null, "memory"),
+        new("9f2c.md", null, "memory"),
         // An empty source file is no locator.
-        ("9f2c.md", "", "memory")
+        new("9f2c.md", "", "memory")
     ];
 
     [RetryFact]
@@ -48,11 +51,11 @@ public sealed class EntryTypeRuleParityTests
         await using (var insert = connection.CreateCommand())
         {
             insert.CommandText = "INSERT INTO rows (path, source_file) VALUES (@path, @sourceFile)";
-            foreach (var (path, sourceFile, _) in Fixture)
+            foreach (var row in Fixture)
             {
                 insert.Parameters.Clear();
-                insert.Parameters.AddWithValue("@path", (object?)path ?? DBNull.Value);
-                insert.Parameters.AddWithValue("@sourceFile", (object?)sourceFile ?? DBNull.Value);
+                insert.Parameters.AddWithValue("@path", (object?)row.Path ?? DBNull.Value);
+                insert.Parameters.AddWithValue("@sourceFile", (object?)row.SourceFile ?? DBNull.Value);
                 await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
             }
         }
@@ -73,12 +76,12 @@ public sealed class EntryTypeRuleParityTests
 
         for (var i = 0; i < Fixture.Length; i++)
         {
-            var (path, sourceFile, expected) = Fixture[i];
+            var row = Fixture[i];
 
-            var csharp = classifier.ToStoredValue(classifier.Classify(path, sourceFile));
-            csharp.ShouldBe(expected, $"the C# rule disagrees about ({path}, {sourceFile})");
-            sqlKinds[i].ShouldBe(expected, $"the SQL rule disagrees about ({path}, {sourceFile})");
-            sqlKinds[i].ShouldBe(csharp, $"the two rules disagree about ({path}, {sourceFile})");
+            var csharp = classifier.ToStoredValue(classifier.Classify(row.Path, row.SourceFile));
+            csharp.ShouldBe(row.Expected, $"the C# rule disagrees about ({row.Path}, {row.SourceFile})");
+            sqlKinds[i].ShouldBe(row.Expected, $"the SQL rule disagrees about ({row.Path}, {row.SourceFile})");
+            sqlKinds[i].ShouldBe(csharp, $"the two rules disagree about ({row.Path}, {row.SourceFile})");
         }
     }
 }
