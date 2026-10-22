@@ -170,7 +170,7 @@ ADR_QUERY_SPECS: dict[str, list[tuple[str, str, str, str]]] = {
     ],
     "0046-project-membership-has-one-definition.md": [
         ("context", "ADR (Context)", "medium",
-         "Why did set_memory_ttl and share_memory answer unknown-hash for context-labelled entries?"),
+         "Why did memory_set_ttl and memory_share answer unknown-hash for context-labelled entries?"),
         ("decision", "ADR (Decision)", "medium",
          "Where does the single definition of which rows belong to a project now live?"),
         ("consequences", "ADR (Consequences)", "easy",
@@ -202,9 +202,9 @@ ADR_QUERY_SPECS: dict[str, list[tuple[str, str, str, str]]] = {
     ],
     "0064-memory-write-chunks-like-everything-else.md": [
         ("context", "ADR (Context)", "easy",
-         "Why were long add_memory bodies stored as one row with most of the tokens never embedded?"),
+         "Why were long memory_write bodies stored as one row with most of the tokens never embedded?"),
         ("decision", "ADR (Decision)", "medium",
-         "Does add_memory now route through the same chunker and budget resolution as file ingest?"),
+         "Does memory_write now route through the same chunker and budget resolution as file ingest?"),
         ("consequences", "ADR (Consequences)", "hard",
          "What hash does the caller get back after writing a long body that was split into multiple chunks?"),
     ],
@@ -212,7 +212,7 @@ ADR_QUERY_SPECS: dict[str, list[tuple[str, str, str, str]]] = {
         ("context", "ADR (Context)", "medium",
          "Why was writing with context shared able to put rows straight into the shared tier without review?"),
         ("decision", "ADR (Decision)", "medium",
-         "What does add_memory(context: shared) do now — write to the project scope and queue a promotion request?"),
+         "What does memory_write(context: shared) do now — write to the project scope and queue a promotion request?"),
         ("what-was-rejected", "ADR (Content)", "easy",
          "Can a new shared-scope row still be created by a write?"),
     ],
@@ -250,7 +250,7 @@ ADR_QUERY_SPECS: dict[str, list[tuple[str, str, str, str]]] = {
     ],
     "0080-the-phases-close-against-search-total-not-the-tool-total.md": [
         ("context", "ADR (Context)", "hard",
-         "Why can the six search phases never be made to sum to the query tool total?"),
+         "Why can the six search phases never be made to sum to the memory_search tool total?"),
         ("decision", "ADR (Decision)", "medium",
          "Which total do the search phase timings close against now?"),
         ("consequences", "ADR (Consequences)", "very-hard",
