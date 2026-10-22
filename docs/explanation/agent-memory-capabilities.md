@@ -124,7 +124,7 @@ stateDiagram-v2
 ```
 
 - **Retrieval boost:** Hits in `query` raise an entry's rating.
-- **TTL expiration:** Entries given a TTL via `set_memory_ttl` become eligible for sweeps once aged.
+- **TTL expiration:** `set_memory_ttl` sets or clears TTLs only for Memory entries, including transcripts. File entries refuse both operations. Cleanup still honors explicit File TTLs stored before 2.1.0.
 - **Sweep reaper:** The background reaper (`ai-raccoon settings sweep`) periodically purges low-rated, aged project entries. Shared entries are protected.
 
 ---

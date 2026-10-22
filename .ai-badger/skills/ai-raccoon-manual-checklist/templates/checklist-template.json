@@ -86,7 +86,7 @@
     },
     {
       "item": "keyword-search-across-a-chunk-boundary",
-      "expected-result": "add_memory a note made of\"The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.\" forty-five times, space-joined (ten fit in one chunk since 1.56), then \" Invoice reference vk83jq was filed with the parish council.\" Premise: sqlite shows more than one entries row for the note's path. query {query: \"vk83jq\", kind: memory, minRelativeScore: 0} returns the note with an `fts` leg in evidenceByHash, and one of its rows holds `vk83jq` whole (`instr(value,'vk83jq')`). A vector-only hit does not count: the vector leg finds this note on a broken build too. Then write a note holding one whitespace-free term of about 2,500 characters (40 concatenated SHA-256 hex digests); premise: no row holds the whole term; searching the whole term returns that note with an `fts` leg. A build without ADR-0120 returns both notes by the vector leg only, and no row holds vk83jq (ADR-0120)",
+      "expected-result": "add_memory a note made of\"The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.\" forty-five times, space-joined (ten fit in one chunk since 1.56), then \" Invoice reference vk83jq was filed with the parish council.\" Premise: sqlite shows more than one entries row for the note's path. query {query: \"vk83jq\", entryType: memory, minRelativeScore: 0} returns the note with an `fts` leg in evidenceByHash, and one of its rows holds `vk83jq` whole (`instr(value,'vk83jq')`). A vector-only hit does not count: the vector leg finds this note on a broken build too. Then write a note holding one whitespace-free term of about 2,500 characters (40 concatenated SHA-256 hex digests); premise: no row holds the whole term; searching the whole term returns that note with an `fts` leg. A build without ADR-0120 returns both notes by the vector leg only, and no row holds vk83jq (ADR-0120)",
       "command": "",
       "evidence": "",
       "observed-result": "",
@@ -96,7 +96,7 @@
     },
     {
       "item": "note-opening-chunk-reports-index-zero",
-      "expected-result": "add_memory a note with sourceFile /notes/minutes.md made of 62 paragraphs separated by blank lines (\"Paragraph N of the parish minutes records the treasurer's report on hall repairs, roof slates and the organ fund.\"), the first opening with \"Opening marker zq71\". Premise: sqlite shows more than one row for the note's path. query {query: \"zq71\", kind: memory, minRelativeScore: 0} returns it with chunkIndex 0, and sqlite gives chunk_index 0 for the row where `instr(value,'zq71') > 0`. A build without ADR-0122 puts the opening at the last index (1 of 2 on 1.56.1) (ADR-0122)",
+      "expected-result": "add_memory a note with sourceFile /notes/minutes.md made of 62 paragraphs separated by blank lines (\"Paragraph N of the parish minutes records the treasurer's report on hall repairs, roof slates and the organ fund.\"), the first opening with \"Opening marker zq71\". Premise: sqlite shows more than one row for the note's path. query {query: \"zq71\", entryType: memory, minRelativeScore: 0} returns it with chunkIndex 0, and sqlite gives chunk_index 0 for the row where `instr(value,'zq71') > 0`. A build without ADR-0122 puts the opening at the last index (1 of 2 on 1.56.1) (ADR-0122)",
       "command": "",
       "evidence": "",
       "observed-result": "",
