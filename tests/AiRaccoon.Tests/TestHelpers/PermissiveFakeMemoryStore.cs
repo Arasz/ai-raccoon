@@ -99,7 +99,7 @@ public class PermissiveFakeMemoryStore : FakeMemoryStore
         Task.CompletedTask;
 
     public override Task ReplaceAsync(string projectId, string path, string fileHash, string? context,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default, bool preserveMemoryMetadata = false) =>
         Task.CompletedTask;
 
     public override Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,

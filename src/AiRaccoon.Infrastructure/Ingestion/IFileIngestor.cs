@@ -56,10 +56,10 @@ public interface IFileIngestor
     /// <summary>
     ///     Chunks and inserts <paramref name="path" />, leaving every row `embed_state = 'pending'` —
     ///     the caller enqueues the corpus's embed-drain signal once it is safe to (after any
-    ///     wrapping transaction commits).
+    ///     wrapping transaction commits). Rechunking may preserve the existing Memory declaration and TTL.
     /// </summary>
     Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
-        string? context, CancellationToken cancellationToken);
+        string? context, CancellationToken cancellationToken, bool preserveMemoryMetadata = false);
 
     Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId, string path,
         string? context, CancellationToken cancellationToken);

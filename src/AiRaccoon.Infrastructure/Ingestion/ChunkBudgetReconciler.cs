@@ -169,8 +169,8 @@ public sealed partial class ChunkBudgetReconciler(
             }
 
             await ReplaceNoteGroupAsync(connection, group, rows, pieces, pieceHashes, now,
-                // A note group is agent-written: a memory, whatever it cites.
-                entryTypeClassifier.ToStoredValue(EntryKind.Memory), cancellationToken);
+                entryTypeClassifier.ResolveStoredValue(rows[0].EntryType, group.Path, rows[0].SourceFile),
+                cancellationToken);
             notesRechunked++;
             if (rows[0].SourceFile is not null)
             {
@@ -215,7 +215,8 @@ public sealed partial class ChunkBudgetReconciler(
             // under this group's own scope/context/workspace, and prunes only this bucket — so the
             // same file stored under two contexts keeps both and never silently relabels to project.
             await memoryStore().ReplaceAsync(group.ProjectId, group.SourceFile,
-                WatchDigestExecutor.ComputeHash(group.SourceFile, scan.Content), MirrorContext(group), cancellationToken);
+                WatchDigestExecutor.ComputeHash(group.SourceFile, scan.Content), MirrorContext(group), cancellationToken,
+                preserveMemoryMetadata: true);
             mirrorsRechunked++;
         }
 
@@ -368,7 +369,7 @@ public sealed partial class ChunkBudgetReconciler(
                         createdAt = template.CreatedAt,
                         updatedAt = now,
                         sourceId = template.SourceId,
-                        ttlDays = template.TtlDays,
+                        ttlDays = entryType == EntryKindWireNames.Memory ? template.TtlDays : null,
                         entryType = entryType,
                         // Plain notes keep WriteChunks' sentinel; the phase-end repair positions citing notes.
                         chunkIndex = -1,
@@ -383,7 +384,7 @@ public sealed partial class ChunkBudgetReconciler(
 
     private sealed record GroupRow(long Id, string Hash, string Value, string? SourceFile, string? Section,
         string? Scope, string? ProjectId, string? ContextLabel, string? WorkspaceId, string? AgentId,
-        long CreatedAt, long? SourceId, long ChunkIndex, long? TtlDays);
+        long CreatedAt, long? SourceId, long ChunkIndex, long? TtlDays, string? EntryType);
 
     private sealed record MirrorGroup(string? Scope, string ProjectId, string? ContextLabel, string? WorkspaceId,
         string SourceFile);

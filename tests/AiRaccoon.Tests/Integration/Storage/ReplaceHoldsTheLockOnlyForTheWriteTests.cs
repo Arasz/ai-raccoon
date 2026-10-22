@@ -103,11 +103,11 @@ public sealed class ReplaceHoldsTheLockOnlyForTheWriteTests : IDisposable
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId,
-            string path, string? context, CancellationToken cancellationToken)
+            string path, string? context, CancellationToken cancellationToken, bool preserveMemoryMetadata = false)
         {
             Entered.TrySetResult();
             await _release.Task;
-            return await inner.IngestFileAsync(connection, projectId, path, context, cancellationToken);
+            return await inner.IngestFileAsync(connection, projectId, path, context, cancellationToken, preserveMemoryMetadata);
         }
 
         public Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId,

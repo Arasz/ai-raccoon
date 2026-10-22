@@ -813,6 +813,7 @@ internal static class MemorySql
                      WHERE hash = @hash AND {ProjectRows.Of()}
                      ORDER BY {ProjectRows.CommittedFirst()}, id
                      LIMIT 1)
+           AND ({EntryTypeFromDeclarationOrShape("entries.")}) = 'memory'
          """;
 
     // Reads the same row UpdateEntryTtl writes — the explicit ORDER BY is what makes "the entry
@@ -985,7 +986,7 @@ internal static class MemorySql
                                                         section AS Section, scope AS Scope, project_id AS ProjectId,
                                                         context_label AS ContextLabel, workspace_id AS WorkspaceId,
                                                         agent_id AS AgentId, created_at AS CreatedAt, source_id AS SourceId,
-                                                        chunk_index AS ChunkIndex, ttl_days AS TtlDays
+                                                        chunk_index AS ChunkIndex, ttl_days AS TtlDays, entry_type AS EntryType
                                                  FROM entries
                                                  WHERE path = @path AND scope IS @scope AND project_id IS @projectId
                                                    AND context_label IS @contextLabel AND workspace_id IS @workspaceId

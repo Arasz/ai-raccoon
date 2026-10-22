@@ -475,7 +475,8 @@ public partial class SyncService(
                                                                                embed_state, embedding, chunk_index, entry_type)
                                                SELECT r.hash, r.path, r.value, r.source_file, r.section, r.scope, {scopedFold}, r.context_label,
                                                       r.workspace_id, r.agent_id, r.created_at, r.updated_at,
-                                                      r.access_count, r.last_accessed_at, r.rating, r.ttl_days,
+                                                      r.access_count, r.last_accessed_at, r.rating,
+                                                      CASE WHEN ({mergedEntryType}) = 'memory' THEN r.ttl_days ELSE NULL END,
                                                       'pending', NULL, -1, {mergedEntryType}
                                                FROM remote.entries r
                                                WHERE r.workspace_id IS NULL

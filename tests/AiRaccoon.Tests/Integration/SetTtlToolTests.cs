@@ -1,4 +1,6 @@
 using AiRaccoon.Access;
+using AiRaccoon.Tests.TestHelpers;
+using Dapper;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
@@ -33,7 +35,7 @@ public sealed class SetTtlToolTests : IDisposable
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         _store = TestData.CreateMemoryStore(factory,
-            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), _clock, TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
+            NullLogger<SqliteMemoryStore>.Instance, new SqliteMemorySourceStore(factory), TestData.RealMarkdownChunker(), _clock, new CountingEmbeddingService(), null, null, null, null, null, null, null);
         var guard = new MemoryAccessGuard(_store);
         _tools = new SweepTools(
             new SweepService(_store, _clock),
@@ -91,6 +93,97 @@ public sealed class SetTtlToolTests : IDisposable
         cleared.Data.CanEverExpire.ShouldBeFalse("no TTL means never expires");
         await Should.ThrowAsync<ValidationException>(() =>
             _tools.SetTtl(ProjectId, entry.Hash, 0, TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData(7)]
+    [InlineData(null)]
+    public async Task FileTtlMutation_IsRefusedWithoutChangingHistoricalTtl(int? ttlDays)
+    {
+        await FullAccessAsync();
+        var entry = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "historical file"),
+            TestContext.Current.CancellationToken);
+        var options = TestData.CreateInfrastructureOptions(_dataRoot);
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET entry_type = 'file', ttl_days = 19 WHERE hash = @hash",
+            new { hash = entry.Hash }, cancellationToken: TestContext.Current.CancellationToken));
+
+        await Should.ThrowAsync<UnknownHashException>(() =>
+            _tools.SetTtl(ProjectId, entry.Hash, ttlDays, TestContext.Current.CancellationToken));
+
+        (await _store.GetMetadataAsync(ProjectId, entry.Hash, TestContext.Current.CancellationToken))!
+            .TtlDays.ShouldBe(19);
+    }
+
+    [Fact]
+    public async Task ChunkedTranscript_CanSetAndClearTtl()
+    {
+        await FullAccessAsync();
+        var entry = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "session account",
+            SourceFile: "hermes/session-1"), TestContext.Current.CancellationToken);
+        var options = TestData.CreateInfrastructureOptions(_dataRoot);
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET total_chunks = 5 WHERE hash = @hash", new { hash = entry.Hash },
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        (await _tools.SetTtl(ProjectId, entry.Hash, 7, TestContext.Current.CancellationToken)).Data!.TtlDays.ShouldBe(7);
+        (await _tools.SetTtl(ProjectId, entry.Hash, null, TestContext.Current.CancellationToken)).Data!.TtlDays.ShouldBeNull();
+        (await _store.GetMetadataAsync(ProjectId, entry.Hash, TestContext.Current.CancellationToken))!.TtlDays.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task WrongProjectHash_HasTheSameRefusalAsMissingHash()
+    {
+        await FullAccessAsync();
+        var entry = await _store.WriteAsync(new MemoryWriteRequest("other", "private memory"),
+            TestContext.Current.CancellationToken);
+        await Should.ThrowAsync<UnknownHashException>(() =>
+            _tools.SetTtl(ProjectId, entry.Hash, 7, TestContext.Current.CancellationToken));
+        (await _store.GetMetadataAsync("other", entry.Hash, TestContext.Current.CancellationToken))!.TtlDays.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(36501)]
+    public async Task OutOfRangeTtl_DoesNotChangeStoredTtl(int ttlDays)
+    {
+        await FullAccessAsync();
+        var entry = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "bounded expiry"),
+            TestContext.Current.CancellationToken);
+        await _tools.SetTtl(ProjectId, entry.Hash, 9, TestContext.Current.CancellationToken);
+
+        await Should.ThrowAsync<ValidationException>(() =>
+            _tools.SetTtl(ProjectId, entry.Hash, ttlDays, TestContext.Current.CancellationToken));
+
+        (await _store.GetMetadataAsync(ProjectId, entry.Hash, TestContext.Current.CancellationToken))!.TtlDays.ShouldBe(9);
+    }
+
+    [Fact]
+    public async Task Sweep_HonorsHistoricalExplicitFileTtl()
+    {
+        await FullAccessAsync();
+        var historical = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "historically expiring file"),
+            TestContext.Current.CancellationToken);
+        var permanent = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "file without expiry"),
+            TestContext.Current.CancellationToken);
+        var options = TestData.CreateInfrastructureOptions(_dataRoot);
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET entry_type = 'file', rating = 0.1, ttl_days = CASE WHEN hash = @hash THEN 7 END",
+            new { hash = historical.Hash }, cancellationToken: TestContext.Current.CancellationToken));
+        _clock.Advance(TimeSpan.FromDays(8));
+
+        var result = await _tools.Sweep(ProjectId, dryRun: false, TestContext.Current.CancellationToken);
+
+        result.Data!.Deleted.ShouldBe([historical.Hash]);
+        (await _store.GetMetadataAsync(ProjectId, historical.Hash, TestContext.Current.CancellationToken)).ShouldBeNull();
+        (await _store.GetMetadataAsync(ProjectId, permanent.Hash, TestContext.Current.CancellationToken)).ShouldNotBeNull();
     }
 
     private Task FullAccessAsync() =>
