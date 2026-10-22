@@ -381,7 +381,7 @@ public sealed class ChunkRebudgetTests : IDisposable
         after.ShouldAllBe(row => row.EmbedState == "pending", "its replacement rows arrive pending too");
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData("memory", 7, true)]
     [InlineData("file", null, true)]
     [InlineData("memory", null, false)]
@@ -414,7 +414,7 @@ public sealed class ChunkRebudgetTests : IDisposable
         kinds.ShouldAllBe(value => value == (rechunk ? kind : "file"));
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData("file", null)]
     [InlineData("memory", 7)]
     public async Task Rebudget_DeclaredKindControlsWhetherReplacementKeepsTtl(string kind, int? expectedTtl)

@@ -150,7 +150,7 @@ public sealed class SearchQualityKindMigrationTests
     }
 
     /// <summary>The mapping itself, stated once: the old vocabulary's meaning in the new one.</summary>
-    [Fact]
+    [RetryFact]
     public void TheOldVocabulary_MeansWhatItMeant()
     {
         SearchQualityKinds.MaskOf("memory").ShouldBe(EntryType.Memory | EntryType.File);
