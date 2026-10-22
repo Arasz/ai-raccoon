@@ -404,3 +404,108 @@ Reviewed at `53c7b9b5` (the branch head after the two changes below).
   tuple became a nested `private sealed record VecRebuild`; the property names, and so every
   use of them, are unchanged.
 - `53c7b9b5` — the typed partition probe joins the retry surface (N1).
+
+## Review of `abb21046`: the F8 → F1 → F2 → F5/F6 → F3/F4 chunk
+
+Verified on a clean checkout of that head: `dotnet build` — 8 projects, 0 warnings, 0 errors;
+the fast lane (`--filter "Speed=Fast&Performance!=Benchmark"`) — 5173 passed, 0 failed, 2 skipped.
+
+**Verdict: hold.** The plan's own gate says this PR "merges with the parameter and the TTL rule
+— or not at all", and neither is in the branch. Three findings below are blocking; the rest are
+nits. The GitHub API refuses inline review comments on this PR ("commit_id is not part of the
+pull request", for every commit in it), so the findings live here and in the PR's review summary.
+
+### Blocking
+
+1. **The ladder never revisits a bank the earlier build completed.**
+   `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:1415` — the `ADD COLUMN` and the backfill
+   live in `MigrateToV20Async`, and the ladder skips any step a bank has already passed
+   (`if (storedVersion >= CurrentVersion) { … return; }`, `MemorySchema.cs:774`). A bank that ran
+   the earlier build of this schema — the nullable column, stamped v20 because that build's
+   ladder completed — is at v20, so this step never runs for it again: the column stays nullable
+   and its NULL rows are never classified.
+
+   Reproduced (probe test on that head, the earlier build's end state constructed by hand):
+
+   ```text
+   PROBE: column NOT NULL = 0; row kind = NULL
+   ```
+
+   So the comment above the statement — *"NULL is the marker a bank touched by an earlier build
+   of this schema carries … the backfill has to read both"* — describes a defense that does not
+   fire for the population it names. The dual read is reachable only when the bank is still at
+   v19: the crash between the `ADD COLUMN` and the stamp.
+
+   The test that claims the coverage stamps v19
+   (`tests/AiRaccoon.Tests/Integration/EntryTypeMigrationTests.cs:116`), so it covers the crash
+   case, not the population its doc names. Either stamp that fixture v20 and watch the assertion
+   fail, or state plainly that a bank the earlier build completed is unsupported and a `v21` step
+   will normalise it.
+
+2. **The doctor's unclassified count misses NULL rows.**
+   `src/AiRaccoon.Infrastructure/Sqlite/SchemaDoctor.cs:54` — `entry_type = 'none'` does not match
+   a NULL, and `entry_type NOT IN (…)` is NULL for a NULL row, so a NULL row lands in neither
+   count. On a scratch bank with `'none'`, `'memory'`, `'file'`, `NULL`, `'transcript'`:
+
+   ```text
+   unclassified  unknown        unclassified_fixed  unknown_fixed
+              1        1                       2              1
+   ```
+
+   A NULL row is what a bank with a nullable column holds — the population of finding 1 — so on
+   exactly those banks the doctor reports "entries without a kind: 0" while every row is
+   unclassified, and the doc above the line says this count is "how the omission shows up".
+
+   ```sql
+   SUM(CASE WHEN entry_type IS NULL OR entry_type = 'none' THEN 1 ELSE 0 END),
+   SUM(CASE WHEN entry_type IS NOT NULL AND entry_type NOT IN ('none','memory','file') THEN 1 ELSE 0 END)
+   ```
+
+   One line, plus a test with a NULL row beside the two that exist.
+
+3. **The "a declared kind wins" half has a second home, with a hardcoded domain and no parity
+   test.** `src/AiRaccoon.Infrastructure/Sync/SyncService.cs:469` — `Resolve` is "a declared kind
+   wins, else the shape"; the merge's `CASE` is the SQL twin of the same rule, and the parity
+   test covers only the shape half. Two consequences: the domain here is spelled
+   `IN ('memory', 'file')`, so a kind added to `EntryKind` stops being taken on merge (the row is
+   filed by its shape instead — a silent misfile), and the doctor's domain list
+   (`SchemaDoctor.cs:55`) would report that new kind as "a kind this build does not know"; and
+   nothing compares this SQL against `Resolve`. Derive the list from `EntryKindWireNames`
+   (Infrastructure already references Core) and extend the parity net to the declared half.
+
+### Answers to the three open questions
+
+**The value domain does not need the rebuild.** The domain rides on the ladder's own
+`ADD COLUMN`: `ALTER TABLE entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'none' CHECK(entry_type IN ('none','memory','file'))` is accepted by the repo's own SQLite, keeps `NOT NULL`, defaults to `'none'`, and refuses a value outside the domain (probe test, green). The same CHECK is free in the `CREATE TABLE` for a new bank. So the domain is enforceable now for every bank that does not have the column yet — every released bank, since v20 is unreleased. A rebuild is needed only for the banks that already carry the column, which is exactly the population of finding 1: a `v21` step would land the CHECK, the `NOT NULL` and the backfill together. The owner's open question is smaller than it looks, and it lands where the blocking finding does.
+
+**N3 — the unknown value.** The doctor's counter and the repair path fight each other: `ChunkBackfill` and `ChunkBoundaryRepair` write `ToStoredValue(Resolve(row.EntryType, …))`, and `Resolve` maps an unknown stored value onto the shape, so the repair job rewrites the unknown value into a kind and the doctor's "unknown" count drops to zero for every row the repair has touched. The line built to expose an unknown value is consumed by the thing it was meant to report. Three states, not two — declared / unclassified / unknown — where only the unclassified case is filled in by the shape, and an unknown value is left alone and reported. With the domain CHECK in place, an unknown value can only arrive from a foreign writer or a corruption, which is exactly the case worth surfacing rather than overwriting.
+
+**One fixture is enough for what it claims, and one layer short of the real net.** The fixture is enough to catch a drift between the two homes of the *shape* rule. Three decisions it leaves open: case sensitivity (a path and a source file differing only in case — the C# rule is `Ordinal`, the SQL `=` is SQLite's `BINARY`, they agree today, but on a case-insensitive filesystem `Docs/Guide.md` and `docs/guide.md` are the same file, so the answer is a decision rather than an accident); a null path with a non-null source file (the interface doc says a null path reaches the resolver, and no fixture row has one); and both null. And the net stops one layer short — the declared half now has a SQL home (finding 3) with no test comparing it against `Resolve`.
+
+### Nits
+
+- `src/AiRaccoon.Infrastructure/Sqlite/MemorySql.cs:20` — the kind vocabulary is single-sourced in
+  C# and spelled in six SQL places: `MemorySchema.cs:193`, `:1415`, `:1434`, `MemorySql.cs:20`,
+  `SchemaDoctor.cs:54-55`, `SyncService.cs:469`. `EntryKindWireNames` says "A rename must update
+  this class, not the literals that spell it" — all six can interpolate it.
+- `tests/AiRaccoon.Tests/Integration/Sync/SyncServiceTests.cs:1463` — the comment says "A file row
+  (path = source_file)"; the row is `path = 'doc.md#0'`, `source_file = 'doc.md'`, which under the
+  shape rule is a memory. The test still proves what it means to (the remote's own kind is taken),
+  and the real ingest writes `path = source_file` for both (`FileIngestor.cs:356`), but a reader
+  who takes the comment at its word will believe the fixture is file-shaped.
+- `src/AiRaccoon.Infrastructure/Ingestion/ChunkBackfill.cs:28` — the parameter is still
+  `entryTypeClassifier`; the type is `IEntryKindClassifier`. Same in `ChunkBoundaryRepair`,
+  `ChunkBudgetReconciler`, `FileIngestor`, `SqliteMemoryStore`, `WriteChunks`,
+  `ChunkBoundaryRepairJob` and `ChunkBackfillJob`, and in the `entry_type AS EntryType` aliases.
+- `src/AiRaccoon.Core/Memory/EntryKindClassifier.cs:58` — the default arm's message describes a
+  set, but the parameter is single-valued: the only value that reaches it is an out-of-range one.
+- `tests/AiRaccoon.Tests/Integration/Storage/EntryTypeRuleParityTests.cs:21` — the three unpinned
+  decisions above.
+- `src/AiRaccoon.Core/Memory/IEntryKindClassifier.cs:19` — "215 of the 25,340 rows on the live
+  bank" against the plan's table (File 23,200 + Memory 2,371 = 25,571) and the research record's
+  pinned 25,340: two snapshots, one number each, and no way to tell which is which. Cite the
+  snapshot with the number.
+- `src/AiRaccoon.Core/Memory/EntryKindWireNames.cs:18` — `Memory = SearchKindWireNames.Memory`
+  ties the *stored* word to the *protocol* word. One is data in the user's bank, the other is a
+  wire value: a corpus rename would rewrite the stored kind through this constant. Pin the stored
+  vocabulary on its own and let a test say they agree.
