@@ -36,8 +36,8 @@ public sealed class EntryTypeTests
         EntryTypeWireNames.Parse(value).ShouldBe(expected);
 
     /// <summary>
-    ///     The default is the sum, so the default answers exactly what today's default
-    ///     (<c>kind=both</c>) answers, and more.
+    ///     The default is the sum, and the sum is NO KIND FILTER: every row, the unclassified ones
+    ///     included, so the default answers exactly what today's default (<c>kind=both</c>) answers.
     /// </summary>
     [Fact]
     public void TheDefault_IsEveryKind() =>
@@ -86,6 +86,19 @@ public sealed class EntryTypeTests
             EntryTypeWireNames.Single(EntryType.Memory | EntryType.Code | EntryType.File));
     }
 
+    /// <summary>
+    ///     A lookup names one kind, and that kind has to be one this build knows: a lookup naming a
+    ///     kind the server has no corpus for is refused, not resolved to an arbitrary corpus.
+    /// </summary>
+    [Fact]
+    public void Single_RefusesAnUnknownBit()
+    {
+        Should.Throw<ArgumentException>(() =>
+            EntryTypeWireNames.Single((EntryType)16));
+        Should.Throw<ArgumentException>(() =>
+            EntryTypeWireNames.Single(EntryType.Memory | (EntryType)16));
+    }
+
     /// <summary>The one kind a lookup names comes back as itself.</summary>
     [Theory]
     [InlineData(EntryType.Memory)]
@@ -99,6 +112,9 @@ public sealed class EntryTypeTests
     ///     must not drift apart: a row of kind memory is what a query asking for memory finds.
     /// </summary>
     [Fact]
-    public void TheParameterAndTheStoredKind_SpellMemoryTheSameWay() =>
+    public void TheParameterAndTheStoredKind_SpellTheSameWay()
+    {
         EntryTypeWireNames.Memory.ShouldBe(EntryKindWireNames.Memory);
+        EntryTypeWireNames.File.ShouldBe(EntryKindWireNames.File);
+    }
 }

@@ -1500,6 +1500,18 @@ internal static class MemorySchema
 
         await connection.InWriteTransactionAsync(async () =>
         {
+            // The kinds first: the rebuild files each vector under its row's kind, so a row whose
+            // kind is still NULL would file its vector under a NULL partition - a row no typed
+            // query could reach. A bank that went through the first v20 build carries a NULLABLE
+            // column and its NULL rows, and the ladder never returns early for it, so the
+            // normalization lands here rather than in the v20 step.
+            await connection.ExecuteAsync(new CommandDefinition(
+                $"""
+                 UPDATE entries
+                 SET entry_type = {MemorySql.EntryTypeFromShape("entries.")}
+                 WHERE entry_type IS NULL OR entry_type = 'none'
+                 """, cancellationToken: cancellationToken));
+
             foreach (var r in rebuilds)
             {
                 await RebuildTypedVecTableAsync(connection, r.Table, r.Dimension, r.Source, r.Ctx, r.Column, r.Where,

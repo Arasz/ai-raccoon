@@ -10,6 +10,22 @@ namespace AiRaccoon.Core.Memory;
 ///         single-valued type, and the two meet only where a kind is written to the column, which
 ///         takes one kind and refuses a set.
 ///     </para>
+///     <para>
+///         WHAT EACH BIT SELECTS: <see cref="EntryType.Memory" /> and <see cref="EntryType.File" />
+///         are row kinds inside the memory corpus, so <c>memory</c> alone is NOT today's
+///         <c>kind=memory</c> (which covered agent notes and ingested chunks together).
+///         <see cref="EntryType.Code" /> names the code corpus, which is a table of its own — so a
+///         <c>shared</c> query asking for Code is empty by construction, exactly as a shared query is
+///         empty for the code leg today (ADR-0137).
+///     </para>
+///     <para>
+///         WHAT THE DEFAULT MEANS: the sum is NO KIND FILTER — every row, the unclassified ones
+///         included — so the default answers exactly what today's default (<c>kind=both</c>)
+///         answers. A NARROWER set is a filter: it selects the rows of the named kinds, and a row
+///         that carries no kind is in no kind, so it is outside every narrower set. The doctor
+///         counts the unclassified rows (<c>entries without a kind: N</c>), so that population is
+///         visible rather than quietly missing from a result.
+///     </para>
 /// </summary>
 public static class EntryTypeWireNames
 {
@@ -20,16 +36,21 @@ public static class EntryTypeWireNames
     public const string Code = SearchKindWireNames.Code;
 
     /// <summary>An ingested document: a file's chunk, mirroring a file on disk.</summary>
-    public const string File = "file";
+    public const string File = EntryKindWireNames.File;
 
     /// <summary>
     ///     The set a query asks for when the caller names none: every kind, so the default answers
-    ///     exactly what today's default (<c>kind=both</c>) answers, and more.
+    ///     exactly what today's default (<c>kind=both</c>) answers. The sum means NO KIND FILTER —
+    ///     see the class summary.
     /// </summary>
-    public const EntryType Default = EntryType.Memory | EntryType.Code | EntryType.File;
+    public const EntryType Default = KnownBits;
 
-    /// <summary>Every bit a kind is made of, and nothing else.</summary>
-    private const EntryType KnownBits = Default;
+    /// <summary>
+    ///     Every bit a kind is made of, and nothing else. Named apart from
+    ///     <see cref="Default" />: what this build knows is not the same question as what a query
+    ///     asks for by default, even while the two happen to agree.
+    /// </summary>
+    private const EntryType KnownBits = EntryType.Memory | EntryType.Code | EntryType.File;
 
     /// <summary>
     ///     The set a wire value names: a comma-separated list of kind names, read the way the rest
@@ -77,6 +98,7 @@ public static class EntryTypeWireNames
     /// <exception cref="ArgumentException">The set names more than one kind.</exception>
     public static EntryType Single(EntryType types)
     {
+        RefuseUnknownBits(types);
         if (types == EntryType.None || (types & (types - 1)) != EntryType.None)
         {
             throw new ArgumentException(

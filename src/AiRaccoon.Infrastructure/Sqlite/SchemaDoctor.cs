@@ -51,7 +51,7 @@ internal static class SchemaDoctor
             await using var count = bank.CreateCommand();
             count.CommandText = """
                                 SELECT
-                                    COALESCE(SUM(CASE WHEN entry_type = 'none' THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN entry_type IS NULL OR entry_type = 'none' THEN 1 ELSE 0 END), 0),
                                     COALESCE(SUM(CASE WHEN entry_type NOT IN ('none', 'memory', 'file') THEN 1 ELSE 0 END), 0)
                                 FROM entries
                                 """;

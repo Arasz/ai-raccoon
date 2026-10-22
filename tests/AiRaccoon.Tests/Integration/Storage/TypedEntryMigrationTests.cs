@@ -145,6 +145,53 @@ public sealed class TypedEntryMigrationTests
         }
     }
 
+    /// <summary>
+    ///     A bank that went through the first v20 build carries a NULLABLE kind column and its NULL
+    ///     rows, and the ladder never returns early for it — so the v21 step classifies them. A row
+    ///     whose kind stayed NULL would file its vector under a NULL partition: a row no typed query
+    ///     could reach.
+    /// </summary>
+    [RetryFact]
+    public async Task EnsureAsync_UpgradesANullableV20Bank_ClassifiesEveryRow()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        await SeedAsync(connection,
+            new SeedRow("file-hash", "docs/guide.md", "docs/guide.md", EntryKind.File, Embedding(1f)),
+            new SeedRow("note-hash", "9f2c.md", null, EntryKind.Memory, Embedding(2f)));
+
+        // The first v20 build's shape: a nullable column, and the kinds the backfill never reached.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TRIGGER IF EXISTS vec_entries_au", cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TRIGGER IF EXISTS vec_structure_au", cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "ALTER TABLE entries DROP COLUMN entry_type", cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "ALTER TABLE entries ADD COLUMN entry_type TEXT NULL", cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET entry_type = NULL", cancellationToken: TestContext.Current.CancellationToken));
+        await StampAsync(connection, 20);
+
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+
+        var kinds = await connection.QueryAsync<(string Hash, string? Kind)>(
+            "SELECT hash, entry_type FROM entries");
+        foreach (var (hash, kind) in kinds)
+        {
+            kind.ShouldNotBeNull($"the row {hash} must carry a kind after the upgrade");
+            kind.ShouldNotBe("none", $"the row {hash} must carry a kind after the upgrade");
+        }
+
+        // No vector is filed under a NULL partition.
+        var vectorKinds = await ReadVectorKindsAsync(connection);
+        foreach (var (hash, kind) in vectorKinds)
+        {
+            kind.ShouldNotBeNull($"the vector of {hash} must be filed under a kind");
+        }
+    }
+
     /// <summary>Seeds a row and embeds it, so the vec0 trigger places the vector.</summary>
     private static async Task SeedAsync(SqliteConnection connection, params SeedRow[] rows)
     {

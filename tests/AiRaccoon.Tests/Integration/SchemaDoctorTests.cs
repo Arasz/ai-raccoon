@@ -57,6 +57,38 @@ public sealed class SchemaDoctorTests
     }
 
     /// <summary>
+    ///     A NULL kind is an unclassified row too: a bank touched by the first v20 build carries a
+    ///     nullable column, and a NULL row satisfies neither the 'none' count nor the unknown
+    ///     count. It has to be counted as unclassified, or the doctor would report a population it
+    ///     cannot see.
+    /// </summary>
+    [RetryFact]
+    public async Task DiagnoseAsync_CountsANullKindAsUnclassified()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        // A nullable column, the way the first v20 build left it. The typed embed triggers name the
+        // column, and SQLite refuses to drop a column a trigger refers to.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TRIGGER IF EXISTS vec_entries_au", cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TRIGGER IF EXISTS vec_structure_au", cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "ALTER TABLE entries DROP COLUMN entry_type", cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "ALTER TABLE entries ADD COLUMN entry_type TEXT NULL", cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at) "
+            + "VALUES ('h1', 'p1', 'v', 'project', 'proj', 1, 1)",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        var report = await SchemaDoctor.DiagnoseAsync(connection, TestContext.Current.CancellationToken);
+
+        report.EntryKinds.Unclassified.ShouldBe(1, "a NULL kind is an unclassified row, not an invisible one");
+        report.EntryKinds.Unknown.ShouldBe(0);
+    }
+
+    /// <summary>
     ///     A stored kind this build does not know is a defect, not an unclassified row: it is
     ///     counted apart, so a corrupt value cannot hide inside the 'none' count.
     /// </summary>
