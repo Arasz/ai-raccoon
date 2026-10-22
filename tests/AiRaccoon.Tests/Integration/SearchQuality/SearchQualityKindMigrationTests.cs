@@ -124,6 +124,31 @@ public sealed class SearchQualityKindMigrationTests
         }
     }
 
+    [RetryFact]
+    public async Task TypedQuery_PreservesItsExactSelectionAlongsideLegacyCorpus()
+    {
+        var root = TestData.CreateTempRoot("air-quality-typed-selection");
+        try
+        {
+            var options = new AiRaccoon.Infrastructure.Options.InfrastructureOptions { DataRoot = root, Scope = AiRaccoon.Infrastructure.Options.InstallScope.User };
+            var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+            var service = new SqliteSearchQualityService(factory,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance);
+            await service.RecordSearchAsync("typed", "q", "project", "acme", "memory", "sess", 1,
+                ["/used.md"], TestContext.Current.CancellationToken, entryTypes: EntryType.File);
+            (await service.RecordGradeAsync("acme", "typed", 4, "useful", TestContext.Current.CancellationToken)).ShouldBeTrue();
+            (await service.RecordFollowThroughAsync("acme", "typed", "/used.md", ct: TestContext.Current.CancellationToken)).ShouldBeTrue();
+            await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+            (await ReadMaskAsync(connection, "typed")).ShouldBe(4);
+            (await connection.ExecuteScalarAsync<int>("SELECT usefulness_grade FROM search_quality WHERE correlation_id='typed'"))
+                .ShouldBe(4);
+        }
+        finally
+        {
+            TestData.DeleteTempRoot(root);
+        }
+    }
+
     /// <summary>The mapping itself, stated once: the old vocabulary's meaning in the new one.</summary>
     [Fact]
     public void TheOldVocabulary_MeansWhatItMeant()

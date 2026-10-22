@@ -31,7 +31,8 @@ public interface ISearchQualityService
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
         CancellationToken ct = default,
-        IReadOnlyList<RetrievalEvidence>? evidence = null);
+        IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null);
 
     /// <summary>
     ///     <see cref="RecordSearchAsync" />, best-effort: swallows and logs any failure instead of
@@ -50,7 +51,8 @@ public interface ISearchQualityService
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
         CancellationToken ct = default,
-        IReadOnlyList<RetrievalEvidence>? evidence = null);
+        IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null);
 
     /// <summary>
     ///     Records that the agent read a file that appeared in the search results.

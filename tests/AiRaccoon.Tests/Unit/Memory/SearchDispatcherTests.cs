@@ -219,7 +219,8 @@ public sealed class SearchDispatcherTests
 
         public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
             string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default,
-            IReadOnlyList<RetrievalEvidence>? evidence = null)
+            IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
         {
             LastKind = kind;
             LastSessionId = sessionId;
@@ -228,7 +229,8 @@ public sealed class SearchDispatcherTests
 
         public Task RecordSearchSafeAsync(string correlationId, string query, string? scope, string? projectId,
             string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default,
-            IReadOnlyList<RetrievalEvidence>? evidence = null)
+            IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
         {
             LastKind = kind;
             LastSessionId = sessionId;

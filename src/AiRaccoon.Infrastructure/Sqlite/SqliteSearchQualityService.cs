@@ -26,11 +26,12 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         int resultCount,
         IReadOnlyList<string> topSourceFiles,
         CancellationToken ct = default,
-        IReadOnlyList<RetrievalEvidence>? evidence = null)
+        IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
     {
         try
         {
-            await RecordSearchAsync(correlationId, query, scope, projectId, kind, sessionId, resultCount, topSourceFiles, ct, evidence);
+            await RecordSearchAsync(correlationId, query, scope, projectId, kind, sessionId, resultCount, topSourceFiles, ct, evidence, entryTypes);
         }
         catch (Exception ex) when (ex.IsBankBusy())
         {
@@ -57,7 +58,8 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         CancellationToken ct = default,
         // P6b: the P4 sidecar joined to the served rows in served order. Persisted as compact
         // JSON on the same single INSERT — never a per-result statement (M6/G5).
-        IReadOnlyList<RetrievalEvidence>? evidence = null)
+        IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
     {
         if (kind is not ("memory" or "code" or "both"))
         {
@@ -87,7 +89,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
                 // The entry types the kind stands for, as the query parameter's flag set. The old
                 // corpus kind is still recorded beside it: the two are not the same vocabulary, and
                 // the old 'memory' means Memory AND File.
-                KindMask = (int?)SearchQualityKinds.MaskOf(kind),
+                KindMask = (int?)(entryTypes ?? SearchQualityKinds.MaskOf(kind)),
                 ResultCount = resultCount,
                 TopSourceFiles = topFilesJson,
                 ResultFeatures = resultFeaturesJson,

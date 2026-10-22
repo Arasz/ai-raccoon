@@ -589,7 +589,8 @@ public sealed class MemorySearchKindToolTests
 
         public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
             string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default,
-            IReadOnlyList<RetrievalEvidence>? evidence = null)
+            IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
         {
             RecordedCorrelationIds.Add(correlationId);
             LastQuery = query;
@@ -603,7 +604,8 @@ public sealed class MemorySearchKindToolTests
 
         public Task RecordSearchSafeAsync(string correlationId, string query, string? scope, string? projectId,
             string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default,
-            IReadOnlyList<RetrievalEvidence>? evidence = null)
+            IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
         {
             RecordedCorrelationIds.Add(correlationId);
             LastQuery = query;

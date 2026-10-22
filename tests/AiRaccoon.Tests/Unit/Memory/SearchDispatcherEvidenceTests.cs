@@ -239,7 +239,8 @@ public sealed class SearchDispatcherEvidenceTests
             int resultCount,
             IReadOnlyList<string> topSourceFiles,
             CancellationToken ct = default,
-            IReadOnlyList<RetrievalEvidence>? evidence = null)
+            IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
         {
             LastResultCount = resultCount;
             LastTopSourceFiles = topSourceFiles;
@@ -257,7 +258,8 @@ public sealed class SearchDispatcherEvidenceTests
             int resultCount,
             IReadOnlyList<string> topSourceFiles,
             CancellationToken ct = default,
-            IReadOnlyList<RetrievalEvidence>? evidence = null)
+            IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
         {
             LastResultCount = resultCount;
             LastTopSourceFiles = topSourceFiles;

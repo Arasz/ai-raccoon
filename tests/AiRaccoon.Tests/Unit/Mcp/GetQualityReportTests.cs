@@ -171,7 +171,8 @@ public sealed class GetQualityReportTests
 
         public Task RecordSearchAsync(string correlationId, string query, string? scope, string? projectId,
             string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default,
-            IReadOnlyList<RetrievalEvidence>? evidence = null)
+            IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
         {
             RecordSearchCalls++;
             return Task.CompletedTask;
@@ -179,7 +180,8 @@ public sealed class GetQualityReportTests
 
         public Task RecordSearchSafeAsync(string correlationId, string query, string? scope, string? projectId,
             string kind, string sessionId, int resultCount, IReadOnlyList<string> topSourceFiles, CancellationToken ct = default,
-            IReadOnlyList<RetrievalEvidence>? evidence = null) =>
+            IReadOnlyList<RetrievalEvidence>? evidence = null,
+        AiRaccoon.Core.Memory.EntryType? entryTypes = null) =>
             Task.CompletedTask;
 
         public Task<bool> RecordFollowThroughAsync(string projectId, string correlationId, string filePath,
