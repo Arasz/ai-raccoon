@@ -16,7 +16,8 @@ public sealed record SearchQuery(
     double? SourceLambda = null,
     double? ConsolidationThreshold = null,
     DocScoreFormula? DocScoreFormula = null,
-    CandidateWindowMode? CandidateWindow = null) : ISearchParametersSource
+    CandidateWindowMode? CandidateWindow = null,
+    EntryType EntryTypes = EntryTypeParameter.Default) : ISearchParametersSource
 {
     public const int DefaultRrfK = 60;
 
