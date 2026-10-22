@@ -41,8 +41,8 @@ catch (Exception ex) when (ex is not McpException)   // <-- the hole
   `error_type` tags, no counter/histogram record. Verified reachable:
   `MemoryAccessGuard.EnsureAsync` throws `new McpException("access-denied: ...")`.
 
-Affected paths: `memory_watch_add/status/remove` (missing projectId) and
-`memory_watch_add/remove` + `memory_sync` (access-denied, Write tier). The other
+Affected paths: `add_watch/status/remove` (missing projectId) and
+`add_watch/remove` + `sync_to_cloud` (access-denied, Write tier). The other
 15 tools used plain `catch (Exception ex)` and recorded everything.
 
 ## Why grep "N helper sites" didn't catch it
@@ -100,8 +100,8 @@ recommended in-PR (~10 lines) or a tracked follow-up issue.
 ## Companion checks that paid off in the same review
 
 - **"19/19 over the wire" verification**: literal `CallAsync("name")` grep of the
-  sibling E2E file showed 9 names, but `memory_sync` was round-tripped via a
-  direct `CallToolAsync("memory_sync", ...)` — always enumerate across all test
+  sibling E2E file showed 9 names, but `sync_to_cloud` was round-tripped via a
+  direct `CallToolAsync("sync_to_cloud", ...)` — always enumerate across all test
   files and both call styles before trusting an N/N claim.
 - **CI blind spot**: the new parity test was `[Speed=Slow]` while `build.yml`
   runs `--filter "Speed=Fast"` → the gate is nightly-only; the Fast

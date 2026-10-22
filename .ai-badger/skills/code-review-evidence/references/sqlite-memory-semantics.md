@@ -40,19 +40,19 @@ curl -sL https://raw.githubusercontent.com/sqliteai/sqlite-memory/main/src/dbmem
      "configure then writes embed immediately" path breaks on the next
      connection.
 
-3. **`memory_embed_pending(n)` requires a positive INTEGER when given 1 arg.**
+3. **`embed_deferred_entries(n)` requires a positive INTEGER when given 1 arg.**
    - `dbmem_embed_pending` (sqlite-memory.c:4030): with one arg, non-integer
      or `<= 0` → error "expects a positive INTEGER limit". Binding `NULL`
      (C# `DBNull`) errors. Call the 0-arg form or bind `-1` (means "all").
 
-4. **`memory_delete(hash)` is GLOBAL across contexts.**
+4. **`delete_entry(hash)` is GLOBAL across contexts.**
    - `dbmem_database_delete_hash` (sqlite-memory.c:730): deletes
      `dbmem_vault_fts`, `dbmem_vault`, `dbmem_content_source`, `dbmem_content`
-     rows WHERE hash matches — every context. `memory_delete_context(ctx)` is
+     rows WHERE hash matches — every context. `delete_context(ctx)` is
      the context-scoped variant. A sweep that deletes by hash can remove a
      `shared` copy of the same content.
 
-5. **`memory_search` is an eponymous virtual table with hidden columns.**
+5. **`query` is an eponymous virtual table with hidden columns.**
    - `dbmem-search.c:467`: `CREATE TABLE x(query hidden, max_entries hidden,
      context hidden, hash, seq, ranking, path, snippet)`.
    - The `context` hidden column takes a **comma-separated list**, matched via
@@ -89,7 +89,7 @@ via Microsoft.Data.Sqlite. Two of the reference's fix directions were incomplete
 4. **`memory_get_option('provider')` returns empty (not NULL) when no model configured** —
    usable as the "is a model configured?" gate for per-open option defaults.
 
-5. **`memory_embed_pending()` 0-arg form works** ("process all"); the 1-arg form rejects
+5. **`embed_deferred_entries()` 0-arg form works** ("process all"); the 1-arg form rejects
    NULL/≤0. Both error with "no embedding model configured" when no model is set — that is
    the expected deferred-mode error, not a wiring bug.
 

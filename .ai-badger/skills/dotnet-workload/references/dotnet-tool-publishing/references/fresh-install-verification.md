@@ -54,8 +54,8 @@ a SUBSTRING (`1.0.6`), never exact equality — the version flag prints
 
 The single most important lesson. `embedding.provider` is NEVER auto-seeded on a fresh
 bank (only `model set local` / `model set openai` write it). With provider empty:
-`memory_write` skips embedding entirely (`EmbedIfConfiguredAsync` early-returns) and
-`memory_search` runs FTS5-only — an exact-keyword query still returns the entry. A
+`add_memory` skips embedding entirely (`EmbedIfConfiguredAsync` early-returns) and
+`query` runs FTS5-only — an exact-keyword query still returns the entry. A
 completely model-less install therefore PASSES a naive "search works" check.
 
 This empty-provider state is deliberate and user-surfaced (`model reset` prints "embedding
@@ -65,7 +65,7 @@ honestly:
 
 1. Run the documented setup verb as part of the happy path: `<tool> --data-root
    $DATAROOT model set local` (bundled engine, no download needed).
-2. Assert the engine actually ran: `memory_stats` must show `entries >= 1` AND
+2. Assert the engine actually ran: `get_store_statistics` must show `entries >= 1` AND
    `pending == 0`. `pending > 0` means writes were deferred, never embedded — the
    "no missing models" claim is void.
 3. Assert stderr contains NO "Downloading bundled model asset", NO "Bundled embedding
@@ -135,9 +135,9 @@ pins against source constants rather than hardcoding, so a model swap fails loud
 3. `--version` (2>&1, substring)
 4. `--help` (2>&1, verb tree: access/model/retrieval/sync/watch/encryption + --data-root)
 5. `model set local` (setup verb, confirmation on stdout)
-6-9. MCP: initialize (< 10 s) → notifications/initialized → memory_write (unique
-   timestamped string, projectId required or `invalid-params`) → memory_search (hash
-   identity) → memory_stats (entries >= 1, pending == 0)
+6-9. MCP: initialize (< 10 s) → notifications/initialized → add_memory (unique
+   timestamped string, projectId required or `invalid-params`) → query (hash
+   identity) → get_store_statistics (entries >= 1, pending == 0)
 10. stderr assertions (no download/unavailable/failed lines)
 11. dual-instance concurrent initialize
 12. close stdin → exit 0 (both instances)

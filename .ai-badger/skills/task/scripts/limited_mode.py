@@ -30,7 +30,7 @@ Your organisation's policy disables Claude Code hooks here, so ai-badger's autom
 - From the project root, at session start and again before opening a PR or finishing a task, run `python3 .ai-badger/skills/task/scripts/limited_mode.py checkin`; when a turn finishes a task, run it with `--end`. A non-zero exit means the check-in did not happen: read its stderr.
 - Prompt markers (`f:`, `q:`, `i!:` ...) are not expanded, not even by `checkin`: apply them yourself per the Prompt markers section.
 - Every Agent dispatch names its `model` (see `.ai-badger/delegation.md`); nothing checks it.
-- Where the ai-raccoon memory server is configured, search memory (`memory_search`) before repo text search; nothing checks it.
+- Where the ai-raccoon memory server is configured, search memory (`query`) before repo text search; nothing checks it.
 - Never hand-edit files under `.git/` or the generated `.ai-badger/` output: use git commands, and change `.ai-badger/config.json` and re-scaffold instead.
 - Before killing processes or clearing shared caches while other agents run, scope the kill to your own lane.
 - Commit small and often, run each test suite once, and cite failing output before a fix: the invariants still apply, only their reminders are gone.

@@ -23,7 +23,7 @@ other repo — re-verify everything against the code you're auditing.
   provider's rows then writes `provider=<name>`; `sync remove` prefix-deletes
   ALL `sync.*` rows; `sync show` prints `provider: <raw row>` first, then
   provider-specific fields, secrets as `set`/`unset`.
-- `MemoryTools.cs`: `memory_sync` description is provider-neutral ("sync add s3 …
+- `MemoryTools.cs`: `sync_to_cloud` description is provider-neutral ("sync add s3 …
   or `sync add azure …`"); error prefixes `sync-not-configured`, `sync-auth-failed`,
   `sync-conflict`, `sync-network:`, `sync-corrupt-file:`; object-key default
   `memory-<projectId>.db` applied per call.

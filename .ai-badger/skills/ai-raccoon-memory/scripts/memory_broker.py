@@ -1,7 +1,7 @@
 """Per-session memory broker: one `ai-raccoon` proxy per session instead of one per search.
 
 A SessionStart hook starts `memory_broker.py serve` detached; it holds one proxy session open and
-answers `memory_search` calls from the session's other hooks over a unix socket in an owner-only
+answers `query` calls from the session's other hooks over a unix socket in an owner-only
 directory under `~/.ai-badger/memory-broker/`, keyed by the sanitized session id. Concurrent
 requests are multiplexed onto the one proxy stdio stream under distinct JSON-RPC ids and routed
 back by id, so none waits behind another and a client that gives up costs the others nothing.
@@ -46,7 +46,7 @@ LINE_MAX_BYTES = 1024 * 1024
 # AF_UNIX paths are capped near 104 bytes on macOS and 108 on Linux.
 SOCKET_PATH_MAX = 100
 ALLOWED_METHOD = "tools/call"
-ALLOWED_TOOL = "memory_search"
+ALLOWED_TOOL = "query"
 CONTEXT_STEM = "memory_context"
 
 
@@ -411,7 +411,7 @@ class Multiplexer:
 
 
 def _allowed_call(params: Any, seconds: Any) -> bool:
-    """True for a `memory_search` call with a sane time budget; the broker forwards nothing else."""
+    """True for a `query` call with a sane time budget; the broker forwards nothing else."""
     if not isinstance(params, dict) or params.get("name") != ALLOWED_TOOL:
         return False
     if isinstance(seconds, bool) or not isinstance(seconds, (int, float)):

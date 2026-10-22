@@ -87,10 +87,10 @@ tested at the SQL-string + fake level only).
 
 - **Port-gap analysis** (spec `docs/features/agent-memory/spec-issue-1.md` §4.1, 17 tools):
   `IMemoryStore` (Core) covers write/search/share/delete/delete-context/stats only. Tools needing
-  NEW port methods (TDD) or documented stubs: `memory_list`, `memory_ingest_file`,
-  `memory_ingest_directory`, `memory_configure`, `memory_embed_pending`, `memory_workspace_begin`,
-  `memory_workspace_status`, `memory_workspace_consolidate`, `memory_workspace_discard`,
-  `memory_sweep`. `DegradationPolicy` exists in Core but has no service surface → `memory_sweep`
+  NEW port methods (TDD) or documented stubs: `get_index`, `ingest_file`,
+  `ingest_directory`, `memory_configure`, `embed_deferred_entries`, `initialize_workspace`,
+  `get_workspace_status`, `close_workspace`, `discard_workspace`,
+  `trigger_memory_cleanup`. `DegradationPolicy` exists in Core but has no service surface → `trigger_memory_cleanup`
   stubs unless a sweep service is added. Task brief claims NSubstitute is already a testing dep —
   **it is not** (`Directory.Packages.props` has no NSubstitute); existing tests use hand-written
   fakes (see `tests/AgentMemoryServer.Tests/Domain/MemoryStorePortTests.cs` `RecordingStore`).

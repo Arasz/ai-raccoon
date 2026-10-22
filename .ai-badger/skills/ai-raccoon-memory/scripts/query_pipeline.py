@@ -126,7 +126,7 @@ the final object must still be complete and valid."""
 PLANNER_USER_PREFIX = (
     "You are a retrieval-query planner for an ai-raccoon memory bank. Do not use any tools. Do "
     "not read files. Do not search memory. Analyze the USER REQUEST below and produce focused "
-    "memory_search queries for a hybrid (keyword + embedding) bank.\n"
+    "query queries for a hybrid (keyword + embedding) bank.\n"
     "\n"
     "Constraints:\n"
     "- Group queries by core concept. One concept may need several angles; several concepts "

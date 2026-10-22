@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: record a memory_search for the memory-first gate.
+"""PostToolUse hook: record a query for the memory-first gate.
 
 The call's query is recorded as memory-searched for the project, so a grep for a pattern
 the query contains passes the gate (memory_first_gate_hook.py); the session's telemetry row
@@ -39,7 +39,7 @@ def _failed(payload: Dict[str, Any]) -> bool:
 
 
 def main(argv: Optional[list] = None) -> int:
-    """Read the hook payload from stdin; record a memory_search's query; exit 0."""
+    """Read the hook payload from stdin; record a query's query; exit 0."""
     del argv
     try:
         payload: Dict[str, Any] = json.load(sys.stdin)
@@ -48,7 +48,7 @@ def main(argv: Optional[list] = None) -> int:
     if not isinstance(payload, dict):
         return 0
     tool_name = payload.get("tool_name") or payload.get("toolName") or ""
-    if not gate.is_memory_search(tool_name):
+    if not gate.is_query(tool_name):
         return 0
     gate.record_search(payload.get("session_id") or payload.get("sessionId"))
     gate.credit_search(gate.project_id(str(payload.get("cwd") or "")), _args(payload),

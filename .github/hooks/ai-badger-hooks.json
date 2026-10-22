@@ -77,13 +77,13 @@
         "type": "command",
         "bash": "if [ -f \".ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py\" ]; then python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py not found - hook skipped\"}'; fi",
         "timeoutSec": 10,
-        "matcher": "^(mcp__.+__|.+-)?memory_search$"
+        "matcher": "^(mcp__.+__|.+-)?query$"
       },
       {
         "type": "command",
         "bash": "if [ -f \".ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\" ]; then python3 \".ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/ai-raccoon-memory/scripts/memory_grade_hook.py not found - hook skipped\"}'; fi",
         "timeoutSec": 10,
-        "matcher": "^(mcp__.+__|.+-)?memory_search$"
+        "matcher": "^(mcp__.+__|.+-)?query$"
       },
       {
         "type": "command",

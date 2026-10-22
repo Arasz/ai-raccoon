@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""PostToolUse hook: after memory_search stash results, after Read detect follow-through.
+"""PostToolUse hook: after query stash results, after Read detect follow-through.
 
 Agent-agnostic passive follow-through measurement (Joachims implicit feedback):
-1. After memory_search: append {correlationId, sourceFiles, ts} as one `searches` row.
+1. After query: append {correlationId, sourceFiles, ts} as one `searches` row.
 2. After Read/ReadFile/read_file: check the stash for a path match within 60s.
 3. Match → write follow_through_count/files to the search_quality table via direct SQLite.
 
@@ -48,22 +48,22 @@ def open_store() -> "badger_store.Store":
     return badger_store.open_user(families=families)
 
 
-def _is_memory_search(tool_name: str) -> bool:
-    """True for any naming spelling of the memory_search tool."""
+def _is_query(tool_name: str) -> bool:
+    """True for any naming spelling of the query tool."""
     name = tool_name
     if name.startswith("mcp__"):
         name = name[len("mcp__"):].split("__", 1)[-1]
     if ":" in name:
         name = name.rsplit(":", 1)[-1]
-    if name == "memory_search":
+    if name == "query":
         return True
     # pi spells MCP tool names `mcp_<server>_<tool>` (single underscores) and a server name
     # may itself contain underscores, so the tool part is matched as any trailing `_`-joined
-    # tail of the spelling (verified live: pi carries `mcp_ai-raccoon_memory_search`).
+    # tail of the spelling (verified live: pi carries `mcp_ai-raccoon_query`).
     if not tool_name.startswith("mcp_") or tool_name.startswith("mcp__"):
         return False
     parts = tool_name[len("mcp_"):].split("_")
-    return any("_".join(parts[i:]) == "memory_search" for i in range(1, len(parts)))
+    return any("_".join(parts[i:]) == "query" for i in range(1, len(parts)))
 
 
 def _is_read_file(tool_name: str) -> bool:
@@ -99,7 +99,7 @@ def _extract_file_path(result: Dict[str, Any]) -> str:
 
 
 def _stash_search_sources(result: Dict[str, Any]) -> None:
-    """After memory_search, append {correlationId, sourceFiles, ts} as one searches row.
+    """After query, append {correlationId, sourceFiles, ts} as one searches row.
 
     The row's ts column is the entry's own ts as ISO-8601 (the prune must parse it); the
     payload keeps the entry verbatim, ts field included. A legacy searches.json is
@@ -301,7 +301,7 @@ def main(argv: Optional[list] = None) -> int:
 
     tool_name = payload.get("tool_name") or payload.get("toolName") or ""
 
-    if _is_memory_search(tool_name):
+    if _is_query(tool_name):
         try:
             _stash_search_sources(_hook_result(payload))
         except Exception:  # pylint: disable=broad-exception-caught

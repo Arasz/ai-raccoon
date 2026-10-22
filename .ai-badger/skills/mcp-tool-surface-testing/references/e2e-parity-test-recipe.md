@@ -37,7 +37,7 @@ Same `McpServerFactory` + `McpClient` harness as the sibling E2E suite:
   Fix: cast — `(ModelContextProtocol.RequestOptions?)null`. `CallToolAsync` has no such
   problem (string overload wins).
 - **Watch tools fail `watching-disabled` until config is seeded.** Watching defaults
-  OFF; scope defaults empty. Before `memory_watch_add`, seed per-project settings into
+  OFF; scope defaults empty. Before `add_watch`, seed per-project settings into
   the server's store (open a second `SqliteMemoryStore` on `_factory.DataRoot` while
   the server runs — same pattern the sibling suite's config-CLI helper uses):
   `watch.enabled.{projectId}` = `"true"`, `watch.scope.{projectId}` =
@@ -51,9 +51,9 @@ Same `McpServerFactory` + `McpClient` harness as the sibling E2E suite:
   `root.GetProperty("candidates").ValueKind == JsonValueKind.Array` and same for
   `deleted`. Fresh rows are never candidates (below threshold + older than TTL), so
   don't assert non-empty.
-- **Delete round trips**: `memory_delete` by hash → `{"deleted":1}`;
-  `memory_delete_context` by `"project:{id}"` → `{"deleted":1}`. Write the row first.
-- **Ingest**: `memory_ingest_file` → `{"indexed":1}`, `memory_ingest_directory` →
+- **Delete round trips**: `delete_entry` by hash → `{"deleted":1}`;
+  `delete_context` by `"project:{id}"` → `{"deleted":1}`. Write the row first.
+- **Ingest**: `ingest_file` → `{"indexed":1}`, `ingest_directory` →
   `{"scanned":1}`. Temp files/dirs in `try/finally`; `Directory.CreateTempSubdirectory`
   for dirs.
 

@@ -45,9 +45,9 @@ internal sealed class MemoryPrompts
   answered from memory); (2) the full tool map with WHEN to use each (ingest/stats/sync
   included, not just search/write); (3) setup PREREQUISITES for CLI-configured features —
   e.g. the watch scope allowlist + enablement are CLI-only (`watch scope add` + `watch
-  enable`), and `memory_watch_add` fails with `watching-disabled`/`path-outside-scope` until
+  enable`), and `add_watch` fails with `watching-disabled`/`path-outside-scope` until
   they exist, so the guide must say so. Pin the guide's load-bearing sentences with
-  content-assertion tests (`guide.ShouldContain("memory_watch_add")`) — prompt copy is the
+  content-assertion tests (`guide.ShouldContain("add_watch")`) — prompt copy is the
   agent contract and TDD applies to it like any behavior (2 new facts pinned a memory-first
   ladder + watch usage; the old guide said only "search before asking").
 
@@ -104,7 +104,7 @@ protocol traffic counts.
 ### Tool name derivation
 
 Method name → tool name: `Async` suffix stripped, then `JsonNamingPolicy.SnakeCaseLower`
-(`MemoryWrite` → `memory_write`; `WriteAsync` → `write`). Pin the contract with
+(`MemoryWrite` → `add_memory`; `WriteAsync` → `write`). Pin the contract with
 `[McpServerTool(Name = "…")]` so renames can't silently change the agent-facing name.
 
 ### Constructor injection (verified)

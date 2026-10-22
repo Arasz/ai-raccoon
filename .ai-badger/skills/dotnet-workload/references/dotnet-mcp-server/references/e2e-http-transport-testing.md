@@ -102,7 +102,7 @@ if (!_factory.HasNativeExtensions)
 ## Client call shapes
 
 ```csharp
-var result = await client.CallToolAsync("memory_write",
+var result = await client.CallToolAsync("add_memory",
     new Dictionary<string, object?> { ["projectId"] = "acme", ["content"] = "..." },
     progress: null, options: null, CancellationToken.None);
 ```
@@ -118,8 +118,8 @@ var result = await client.CallToolAsync("memory_write",
 
 If search requires a configured embedding model and the test env has none, don't assert via
 search. Prove the same behavior model-free:
-- save → assert `memory_stats` shows `"entries":1` and the committed context name
-- isolation → assert `memory_workspace_status` sees the write AND `memory_stats` still shows
+- save → assert `get_store_statistics` shows `"entries":1` and the committed context name
+- isolation → assert `get_workspace_status` sees the write AND `get_store_statistics` still shows
   `"entries":0` (workspace scratch is not committed)
 - consolidate → assert `"promoted":N` + stats entries count + post-status `"count":0`
 - share → assert `"shared"` in the result + stats lists `shared`

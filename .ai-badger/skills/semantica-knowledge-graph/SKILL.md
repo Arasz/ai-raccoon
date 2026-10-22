@@ -21,9 +21,9 @@ Semantica is a session-scoped knowledge graph MCP server (MIT, v0.6.5+). In-memo
 
 ## When NOT to Use
 
-- A one-off fact lookup — use `memory_search` (AiRaccoon) first.
+- A one-off fact lookup — use `query` (AiRaccoon) first.
 - No decision or extraction needed — skip graph ceremony.
-- Durable facts outliving the session — write to AiRaccoon (`memory_write`).
+- Durable facts outliving the session — write to AiRaccoon (`add_memory`).
 
 ## Workflows
 
@@ -47,9 +47,9 @@ Semantica is a session-scoped knowledge graph MCP server (MIT, v0.6.5+). In-memo
 ### 4. Graph export & AiRaccoon persistence pattern
 To prevent data loss from Semantica's ephemeral process:
 1. **Export auto-saves per session**: the hook saves each `export_graph` result to `.semantica/<session>.json`, per-session and timestamped, so parallel sessions never collide. Wired but inert on 0.6.6 — see Gotchas.
-2. **Watch the directory once**: The `ai-raccoon-memory` skill registers a one-time directory watch on `.semantica/` via `memory_watch_add(projectId, <absolute path to .semantica>)`; re-adding is a no-op.
+2. **Watch the directory once**: The `ai-raccoon-memory` skill registers a one-time directory watch on `.semantica/` via `add_watch(projectId, <absolute path to .semantica>)`; re-adding is a no-op.
 3. **Structural JSON Integration**: AiRaccoon ingests every `.semantica/` file, parses graphs and decisions, and embeds them into its persistent SQLite memory bank (`memory.db`).
-4. **Cross-Session Retrieval**: `memory_search` in AiRaccoon returns both textual decision rationale and structural JSON graph relations.
+4. **Cross-Session Retrieval**: `query` in AiRaccoon returns both textual decision rationale and structural JSON graph relations.
 5. **`.semantica/` is local staging**: gitignore `.semantica/` in the consumer repo — the durable record lives in ai-raccoon memory, not the repo.
 
 ## Escalation by result
@@ -60,9 +60,9 @@ To prevent data loss from Semantica's ephemeral process:
 
 ## AiRaccoon complementarity
 
-- AiRaccoon (`memory_search`): "what do we know?" — semantic recall over indexed docs
+- AiRaccoon (`query`): "what do we know?" — semantic recall over indexed docs
 - Semantica (`query_decisions`): "how are things connected?" — structured reasoning over graph
-- Durable facts → `memory_write` (AiRaccoon); ephemeral causal reasoning → Semantica
+- Durable facts → `add_memory` (AiRaccoon); ephemeral causal reasoning → Semantica
 
 ## Gotchas
 
@@ -82,5 +82,5 @@ To prevent data loss from Semantica's ephemeral process:
 
 - [ ] `get_graph_summary` returns node/edge counts reflecting session activity
 - [ ] At least one decision recorded and findable via `query_decisions`
-- [ ] AiRaccoon `memory_search` and Semantica `query_decisions` return complementary results
+- [ ] AiRaccoon `query` and Semantica `query_decisions` return complementary results
 - [ ] `export_graph` auto-saves to `.semantica/` (per-session, timestamped) for AiRaccoon directory-watch ingestion

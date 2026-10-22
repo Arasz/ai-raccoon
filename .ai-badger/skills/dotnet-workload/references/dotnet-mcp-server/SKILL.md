@@ -169,7 +169,7 @@ server registers them. A dropped `.WithTools<T>()` passes every class-level test
 host paths") removed `.WithTools<WatchTools>()` from BOTH `ServerSetup` host paths
 (stdio app host + web host). The class-level `WatchToolsInventoryTests` stayed green; the
 shipped binary exposed **16 tools instead of 19** — MCP clients lost
-`memory_watch_add/status/remove` while docs and prompts still advertised them. Only a live
+`add_watch/status/remove` while docs and prompts still advertised them. Only a live
 `tools/list` probe caught it. `ServerSetupHostTests` pinned transport shape only, never
 the registered tool set — that was the gap.
 

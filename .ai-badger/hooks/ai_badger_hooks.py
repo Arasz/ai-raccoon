@@ -9,7 +9,7 @@ Provides feature-parity with Claude Code hooks:
 - on_session_start: drift notice (Tier 1, ADR-0001 decision 5) + Hermes subagent-isolation notice
 - pre_llm_call: inject framework version context, usage hints, and MCP tool index recommendations
   + message-bus per-turn delivery
-- pre_tool_call: memory-first gate — block text search until the session consulted memory_search
+- pre_tool_call: memory-first gate — block text search until the session consulted query
 - post_tool_call: log tool usage, index hit/miss metrics, and learned-skill sync
 - on_session_end: message-bus close is a no-op (D3); the cursor dies via the 4-day prune only
 
@@ -339,8 +339,8 @@ def _gate_project() -> str:
     return _project_cwd("")
 
 
-def _is_memory_search(tool_name: Any) -> bool:
-    """True for any naming spelling of the memory_search tool; never matches other tools."""
+def _is_query(tool_name: Any) -> bool:
+    """True for any naming spelling of the query tool; never matches other tools."""
     if not isinstance(tool_name, str):
         return False
     name = tool_name
@@ -348,7 +348,7 @@ def _is_memory_search(tool_name: Any) -> bool:
         name = name[len("mcp__"):].split("__", 1)[-1]
     if ":" in name:
         name = name.rsplit(":", 1)[-1]
-    return name == "memory_search"
+    return name == "query"
 
 
 # Hermes post_tool_call statuses that mean the tool ran; anything else is a failed call.
@@ -357,8 +357,8 @@ _OK_STATUSES = ("ok", "success", "")
 
 def _maybe_record_memory_consult(tool_name: str, args: Dict[str, Any], cwd: str,
                                  session_id: Optional[str] = None, status: str = "ok") -> None:
-    """After a memory_search call, record its query as searched for the project."""
-    if not _is_memory_search(tool_name):
+    """After a query call, record its query as searched for the project."""
+    if not _is_query(tool_name):
         return
     gate = _load_memory_first_gate()
     if gate is not None:
@@ -1022,7 +1022,7 @@ def _load_follow_through() -> Optional[Any]:
 
 
 def _stash_search_sources(tool_name: str, result: str, cwd: str) -> None:
-    """After memory_search, stash results for follow-through correlation."""
+    """After query, stash results for follow-through correlation."""
     ft = _load_follow_through()
     if ft is not None:
         ft.stash_search_sources(tool_name, result, cwd, debug_fn=_debug)

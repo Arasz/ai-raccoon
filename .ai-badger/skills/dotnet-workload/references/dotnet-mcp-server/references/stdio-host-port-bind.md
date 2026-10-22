@@ -112,6 +112,6 @@ The test must stay RED on any machine, whether or not the environment already ho
 
 Build the binary, hold 5000 with a running instance (or the host's own watchdog), then drive
 the real stdio handshake: `initialize` + `tools/list` must both respond (19 tools incl.
-`memory_search`). Pre-fix the same probe dies after `initialize`. Probe shape: write both
+`query`). Pre-fix the same probe dies after `initialize`. Probe shape: write both
 frames to stdin with ~2-3 s sleeps between them; keep stdin open until the response flushes
 (EOF closes the transport before the frame is written).

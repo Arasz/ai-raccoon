@@ -36,7 +36,7 @@ the exact list of new tests the fix batch must add.
      `DefaultBaseScore` (0.5). Fakes must return null for unknown data, and a
      test must pin the real fallback.
    - A fake that records "which contexts were queried" can only prove the loop
-     never calls X. It cannot model backend semantics like `memory_delete(hash)`
+     never calls X. It cannot model backend semantics like `delete_entry(hash)`
      being GLOBAL across contexts — so the "shared is sweep-exempt" guarantee
      was reduced to a loop-shape check while a real sweep still deletes the
      shared copy of identical content.
@@ -49,7 +49,7 @@ the exact list of new tests the fix batch must add.
 5. **Snapshot tests.** `MemorySql.InsertText.ShouldBe("SELECT ...")` fails only
    on a literal text edit — it never validates executability. Cross-check which
    constants have NO snapshot and NO behavior test: the broken statements
-   (`memory_embed_pending`, `defer_embeddings`, `set_model`, `set_apikey`,
+   (`embed_deferred_entries`, `defer_embeddings`, `set_model`, `set_apikey`,
    ingest, `list_files`) had none.
 6. **AC trace table.** Per AC: scenario → implementation path → test that fails
    if reverted. When none exists, write the exact new test: `name — asserts —
@@ -65,7 +65,7 @@ the exact list of new tests the fix batch must add.
    share test asserted the code-constructed return (`shared.Context`).
    Fix-test: re-query `ListContextAsync(shared)` and
    `GetStatsAsync().Contexts` after sharing.
-2. **`embed_pending(NULL)` hits a strict-argument error.** `memory_embed_pending(@limit)`
+2. **`embed_pending(NULL)` hits a strict-argument error.** `embed_deferred_entries(@limit)`
    with `DBNull` errors upstream ("expects a positive INTEGER"). No test called
    `EmbedPendingAsync` at all. Fix-test: call with null limit, assert
    `Processed >= 1 && Pending == 0`.
@@ -75,7 +75,7 @@ the exact list of new tests the fix batch must add.
    next connection. No test opened a second connection after configure (factory
    tests even used a no-op extension loader, so the defer default itself was
    untested). Fix-test: configure → NEW factory/store → write → pending stays 0.
-4. **Global delete vs sweep exemption.** `memory_delete(hash)` is global; sweep
+4. **Global delete vs sweep exemption.** `delete_entry(hash)` is global; sweep
    exempts `shared` only by never listing it, so a project sweep deletes the
    shared copy of identical content. Fake-side "shared never queried" can't see
    it. Fix-test: real sweep with shared+project copies of one hash, assert the
