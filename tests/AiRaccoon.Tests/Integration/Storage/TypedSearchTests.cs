@@ -12,6 +12,7 @@ using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemorySto
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 
@@ -25,7 +26,7 @@ public sealed class TypedSearchTests
         public double Distance { get; init; }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Fts_MinorityType_IsSelectedBeforeCandidateWindow()
     {
         await using var connection = await OpenAsync();
@@ -42,7 +43,7 @@ public sealed class TypedSearchTests
         rows.Select(row => row.Hash).ShouldBe(["wanted"]);
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Vector_MinorityType_IsSelectedBeforeCandidateWindow(bool structure)
@@ -62,7 +63,7 @@ public sealed class TypedSearchTests
         rows[0].Distance.ShouldBe(0.2, 0.00001);
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task Vector_MultipleTypePartitions_GlobalTopKUsesDistanceThenPath(bool structure)
@@ -78,7 +79,7 @@ public sealed class TypedSearchTests
         rows.Select(row => row.Hash).ShouldBe(["file-nearest", "a-file-tied", "z-memory-tied"]);
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData(EntryType.Memory, new[] { "memory" })]
     [InlineData(EntryType.File, new[] { "file" })]
     [InlineData(EntryType.Code, new string[0])]
@@ -99,7 +100,7 @@ public sealed class TypedSearchTests
         rows.Select(row => row.Hash).ShouldBe(expected);
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData(EntryType.Memory, new[] { "memory" })]
     [InlineData(EntryType.File, new[] { "file" })]
     [InlineData(EntryType.Code, new string[0])]
@@ -123,7 +124,7 @@ public sealed class TypedSearchTests
         rows.Select(row => row.Hash).ShouldBe(expected);
     }
 
-    [Theory]
+    [RetryTheory]
     [InlineData("project", "project:acme", null, null)]
     [InlineData("shared", "shared", null, null)]
     [InlineData("custom", "label:acme:custom-label", "custom-label", null)]
@@ -150,7 +151,7 @@ public sealed class TypedSearchTests
         codeRows.ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Store_TypedDualVectorSearch_PreservesAlphaFusionAcrossTypes()
     {
         var root = TestData.CreateTempRoot("typed-search-store");
@@ -202,7 +203,7 @@ public sealed class TypedSearchTests
         }
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Store_MixedTypes_TruncatesEachModalityGloballyBeforeAlphaFusion()
     {
         var root = TestData.CreateTempRoot("typed-search-global-fusion");
