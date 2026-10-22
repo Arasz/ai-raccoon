@@ -64,7 +64,7 @@ public sealed class ChunkRebudgetTests : IDisposable
     /// <summary>One reconciler shape, so a test can swap only the clock the phase measures itself with.</summary>
     private ChunkBudgetReconciler NewReconciler(TimeProvider timeProvider) =>
         new(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(), _embeddings, timeProvider, () => _store, _log,
-            new EntryTypeClassifier());
+            new EntryKindClassifier());
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
@@ -514,7 +514,7 @@ public sealed class ChunkRebudgetTests : IDisposable
         var scanSpan = TimeSpan.FromSeconds(305.5);
         var clock = new FakeTimeProvider(FixedNow);
         var reconciler = new ChunkBudgetReconciler(TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
-            new BudgetScanAdvancingEmbeddingService(_embeddings, clock, scanSpan), clock, () => _store, _log, new EntryTypeClassifier());
+            new BudgetScanAdvancingEmbeddingService(_embeddings, clock, scanSpan), clock, () => _store, _log, new EntryKindClassifier());
 
         var report = await reconciler.RunAsync(connection, Ct);
 

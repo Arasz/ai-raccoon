@@ -31,7 +31,7 @@ public sealed class FileIngestor(
     IEventPump<EmbedDrainRequest> embedDrainPump,
     IndexableFileWalk walk,
     ISharedProjectScope scope,
-    IEntryTypeClassifier entryTypeClassifier) : IFileIngestor
+    IEntryKindClassifier entryTypeClassifier) : IFileIngestor
 {
     private static readonly FileSniffer Sniffer = new();
 

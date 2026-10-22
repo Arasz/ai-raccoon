@@ -74,7 +74,7 @@ public sealed partial class ChunkBudgetReconciler(
     TimeProvider timeProvider,
     Func<IMemoryStore> memoryStore,
     ILogger<ChunkBudgetReconciler> logger,
-    IEntryTypeClassifier entryTypeClassifier) : IChunkBudgetReconciler
+    IEntryKindClassifier entryTypeClassifier) : IChunkBudgetReconciler
 {
     /// <summary>How many server starts a permanently-unprovable group may withhold the stamp before it is
     /// left terminal for this budget (config-D F5) — the bound that stops the migration re-opening forever.</summary>

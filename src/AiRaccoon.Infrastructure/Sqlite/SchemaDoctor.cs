@@ -24,13 +24,50 @@ internal static class SchemaDoctor
         if (storedVersion > MemorySchema.CurrentVersion)
         {
             return new SchemaDoctorReport(SchemaDoctorStatus.VersionAheadOfBinary, storedVersion,
-                MemorySchema.CurrentVersion, storedDigest, MemorySchema.SchemaDigest, []);
+                MemorySchema.CurrentVersion, storedDigest, MemorySchema.SchemaDigest, [], new EntryKindCounts(0, 0));
         }
 
         await using var expected = await BuildExpectedSchemaConnectionAsync(cancellationToken);
         var findings = await CompareAsync(expected, bank, cancellationToken);
         var status = findings.Count == 0 ? SchemaDoctorStatus.Healthy : SchemaDoctorStatus.ShapeMismatch;
-        return new SchemaDoctorReport(status, storedVersion, MemorySchema.CurrentVersion, storedDigest, MemorySchema.SchemaDigest, findings);
+        var kinds = await CountEntryKindsAsync(bank, cancellationToken);
+        return new SchemaDoctorReport(status, storedVersion, MemorySchema.CurrentVersion, storedDigest, MemorySchema.SchemaDigest, findings, kinds);
+    }
+
+    /// <summary>
+    ///     The rows the typed query cannot place, and the rows carrying a kind this build does not
+    ///     know. A write path that omits the column lands <c>none</c> silently, so the count is how
+    ///     the omission shows up; a value outside the domain is a defect, not an unclassified row.
+    ///     <para>
+    ///         Guarded: a bank too broken to have the column must still be diagnosable, so a
+    ///         missing table or column reads as zero rather than failing the whole report.
+    ///     </para>
+    /// </summary>
+    private static async Task<EntryKindCounts> CountEntryKindsAsync(SqliteConnection bank,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var count = bank.CreateCommand();
+            count.CommandText = """
+                                SELECT
+                                    COALESCE(SUM(CASE WHEN entry_type = 'none' THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN entry_type NOT IN ('none', 'memory', 'file') THEN 1 ELSE 0 END), 0)
+                                FROM entries
+                                """;
+            await using var reader = await count.ExecuteReaderAsync(cancellationToken);
+            if (await reader.ReadAsync(cancellationToken))
+            {
+                return new EntryKindCounts(reader.GetInt64(0), reader.GetInt64(1));
+            }
+        }
+        catch (SqliteException)
+        {
+            // A bank whose entries table is missing or has no kind column is a shape finding, and
+            // the shape comparison already reports it.
+        }
+
+        return new EntryKindCounts(0, 0);
     }
 
     /// <summary>The expected shape: the real <c>Ddl</c> applied to a throwaway in-memory bank via <see cref="MemorySchema.EnsureAsync" />.</summary>
@@ -136,6 +173,9 @@ internal static class SchemaDoctor
     private readonly record struct SchemaObject(string Type, string Name);
 }
 
+/// <summary>How many rows carry no kind, and how many carry a kind this build does not know.</summary>
+internal readonly record struct EntryKindCounts(long Unclassified, long Unknown);
+
 internal enum SchemaDoctorStatus
 {
     Healthy,
@@ -152,4 +192,5 @@ internal sealed record SchemaDoctorReport(
     int CurrentVersion,
     int StoredDigest,
     int ExpectedDigest,
-    IReadOnlyList<SchemaFinding> Findings);
+    IReadOnlyList<SchemaFinding> Findings,
+    EntryKindCounts EntryKinds);

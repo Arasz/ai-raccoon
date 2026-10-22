@@ -34,6 +34,49 @@ public sealed class SchemaDoctorTests
     }
 
     /// <summary>
+    ///     The unclassified population is visible: a write path that omits the column lands 'none'
+    ///     silently, so the count is how the omission shows up in a bank nobody has queried yet.
+    /// </summary>
+    [RetryFact]
+    public async Task DiagnoseAsync_CountsTheRowsThatCarryNoKind()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at, entry_type) "
+            + "VALUES ('h1', 'p1', 'v', 'project', 'proj', 1, 1, 'none'), "
+            + "('h2', 'p2', 'v', 'project', 'proj', 1, 1, 'none'), "
+            + "('h3', 'p3', 'v', 'project', 'proj', 1, 1, 'memory'), "
+            + "('h4', 'p4', 'v', 'project', 'proj', 1, 1, 'file')",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        var report = await SchemaDoctor.DiagnoseAsync(connection, TestContext.Current.CancellationToken);
+
+        report.EntryKinds.Unclassified.ShouldBe(2, "the rows that carry no kind are the rows the typed query cannot place");
+        report.EntryKinds.Unknown.ShouldBe(0);
+    }
+
+    /// <summary>
+    ///     A stored kind this build does not know is a defect, not an unclassified row: it is
+    ///     counted apart, so a corrupt value cannot hide inside the 'none' count.
+    /// </summary>
+    [RetryFact]
+    public async Task DiagnoseAsync_CountsAKindItDoesNotKnow()
+    {
+        await using var connection = await OpenAsync();
+        await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at, entry_type) "
+            + "VALUES ('h1', 'p1', 'v', 'project', 'proj', 1, 1, 'transcript')",
+            cancellationToken: TestContext.Current.CancellationToken));
+
+        var report = await SchemaDoctor.DiagnoseAsync(connection, TestContext.Current.CancellationToken);
+
+        report.EntryKinds.Unknown.ShouldBe(1, "a kind this build does not know is a defect, not an unclassified row");
+        report.EntryKinds.Unclassified.ShouldBe(0);
+    }
+
+    /// <summary>
     ///     The exact GH #357 repro: an `entries` table that already exists with a narrower shape
     ///     than the real DDL. `CREATE TABLE IF NOT EXISTS` silently no-ops against it — EnsureAsync
     ///     alone would report this bank as fine.

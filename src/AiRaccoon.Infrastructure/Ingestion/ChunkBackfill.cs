@@ -25,7 +25,7 @@ public sealed record ChunkBackfillReport(
 ///     (D9/ADR-0036).
 /// </summary>
 public sealed class ChunkBackfill(
-    IEntryTypeClassifier entryTypeClassifier,
+    IEntryKindClassifier entryTypeClassifier,
     IFileTypeMatcher fileTypeMatcher,
     IMarkdownChunker noteChunker,
     IPlainTextChunker fallbackChunker,

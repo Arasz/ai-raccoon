@@ -83,7 +83,7 @@ public static partial class AppRegistrations
             // write paths that declare a kind and the repair paths that carry one all ask the same
             // object. Registered in the CORE graph, not the server-only one — the CLI graph builds
             // the same stores, and the store and the file ingestor both take it.
-            services.AddRequiredSingleton<IEntryTypeClassifier, EntryTypeClassifier>();
+            services.AddRequiredSingleton<IEntryKindClassifier, EntryKindClassifier>();
             services.RegisterStores();
         }
 
@@ -203,13 +203,13 @@ public static partial class AppRegistrations
             // pass instead of the next one.
             services.AddSingleton<IReadOnlyList<IMaintenanceJob>>(sp =>
             [
-                new ChunkBackfillJob(sp.GetRequiredService<IEntryTypeClassifier>(), sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IMarkdownChunker>(),
+                new ChunkBackfillJob(sp.GetRequiredService<IEntryKindClassifier>(), sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IMarkdownChunker>(),
                     sp.GetRequiredService<IPlainTextChunker>(), sp.GetRequiredService<TimeProvider>(),
                     sp.GetRequiredService<IEmbeddingService>()),
                 // Once ever, before the boundary repair: that repair renumbers a note from the positions it holds.
                 new NoteChunkOrderRepairJob(sp.GetRequiredService<ILogger<NoteChunkOrderRepairJob>>()),
                 // Once ever, right after the backfill for the same reason: it leaves re-chunked rows pending.
-                new ChunkBoundaryRepairJob(sp.GetRequiredService<IEntryTypeClassifier>(), sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IMarkdownChunker>(),
+                new ChunkBoundaryRepairJob(sp.GetRequiredService<IEntryKindClassifier>(), sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IMarkdownChunker>(),
                     sp.GetRequiredService<IPlainTextChunker>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<IMemoryStore>(), sp.GetRequiredService<TimeProvider>(),
                     sp.GetRequiredService<ILogger<ChunkBoundaryRepairJob>>()),
@@ -427,7 +427,7 @@ public static partial class AppRegistrations
                     sp.GetRequiredService<TimeProvider>(),
                     () => sp.GetRequiredService<IMemoryStore>(),
                     sp.GetRequiredService<ILogger<ChunkBudgetReconciler>>(),
-                    sp.GetRequiredService<IEntryTypeClassifier>()));
+                    sp.GetRequiredService<IEntryKindClassifier>()));
             // The drain's one log + metric surface (LANE P4): registered beside EntryEmbedder so
             // the narrower CLI graph RegisterCoreMemoryServices builds on its own can resolve it
             // too — EmbedDrainService (RegisterEmbedDrainServices) resolves the same singleton.

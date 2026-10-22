@@ -18,7 +18,7 @@ internal static class WriteChunks
         public async Task InsertAsync(string hash, string path, string chunk,
             MemorySource source, MemoryWriteRequest request,
             BucketColumns bucket, long now,
-            IEntryTypeClassifier entryTypeClassifier,
+            IEntryKindClassifier entryTypeClassifier,
             CancellationToken cancellationToken)
         {
             var exists = await connection.ExecuteScalarAsync<long?>(

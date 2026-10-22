@@ -135,7 +135,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
         File.Copy(spmPath, Path.Combine(dir, "sp.model"), overwrite: true);
         await using var connection = await OpenBankWithSettingsAsync("local", dir, TestContext.Current.CancellationToken);
 
-        var backfill = new ChunkBackfill(new AiRaccoon.Core.Memory.EntryTypeClassifier(), Matcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
+        var backfill = new ChunkBackfill(new AiRaccoon.Core.Memory.EntryKindClassifier(), Matcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
             TimeProvider.System, Service());
         var (budget, _, countTokens) = await backfill.BudgetAsync(connection, TestContext.Current.CancellationToken);
 
@@ -169,7 +169,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
 
         var scanner = new ChunkPositionScanner(Matcher(), Service());
         var scannerBudget = await scanner.BudgetAsync(connection, TestContext.Current.CancellationToken);
-        var backfill = new ChunkBackfill(new AiRaccoon.Core.Memory.EntryTypeClassifier(), Matcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
+        var backfill = new ChunkBackfill(new AiRaccoon.Core.Memory.EntryKindClassifier(), Matcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
             TimeProvider.System, Service());
         var backfillBudget = await backfill.BudgetAsync(connection, TestContext.Current.CancellationToken);
 
@@ -185,7 +185,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
         await using var connection = await OpenBankWithSettingsAsync("openai", "text-embedding-3-small",
             TestContext.Current.CancellationToken);
 
-        var backfill = new ChunkBackfill(new AiRaccoon.Core.Memory.EntryTypeClassifier(), Matcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
+        var backfill = new ChunkBackfill(new AiRaccoon.Core.Memory.EntryKindClassifier(), Matcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
             TimeProvider.System, Service());
         var budget = await backfill.BudgetAsync(connection, TestContext.Current.CancellationToken);
 

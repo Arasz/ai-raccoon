@@ -41,7 +41,7 @@ public sealed class SqliteProjectRegistryTests : IDisposable
             Substitute.For<IEntryEmbedder>(), new FakeTimeProvider(FixedNow),
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]),
             Substitute.For<ISettingsStore>(), Substitute.For<IEventPump<EmbedDrainRequest>>(),
-            NoOpMeasurementRecorder.Instance, TestData.SharedScope, new EntryTypeClassifier());
+            NoOpMeasurementRecorder.Instance, TestData.SharedScope, new EntryKindClassifier());
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

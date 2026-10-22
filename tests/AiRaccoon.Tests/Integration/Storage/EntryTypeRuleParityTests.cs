@@ -56,7 +56,7 @@ public sealed class EntryTypeRuleParityTests
             }
         }
 
-        var classifier = new EntryTypeClassifier();
+        var classifier = new EntryKindClassifier();
         var sqlKinds = new List<string>();
         await using (var select = connection.CreateCommand())
         {

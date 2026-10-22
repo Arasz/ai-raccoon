@@ -41,10 +41,10 @@ public sealed class DirectIngestEmbedDeferralTests : IDisposable
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
         var fileIngestor = new FileIngestor(matcher, sourceStore, TimeProvider.System, _embeddings,
             NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, _pump, new IndexableFileWalk(), TestData.SharedScope, new EntryTypeClassifier());
+            NullWatchStore.Instance, _pump, new IndexableFileWalk(), TestData.SharedScope, new EntryKindClassifier());
         _store = new SqliteMemoryStore(_factory, sourceStore, fileIngestor, _entryEmbedder, TimeProvider.System,
             NullLogger<SqliteMemoryStore>.Instance, new NoiseFilteringService([]), new SqliteSettingsStore(_factory),
-            _pump, NoOpMeasurementRecorder.Instance, TestData.SharedScope, new EntryTypeClassifier());
+            _pump, NoOpMeasurementRecorder.Instance, TestData.SharedScope, new EntryKindClassifier());
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);

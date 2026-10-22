@@ -20,7 +20,7 @@ namespace AiRaccoon.Core.Memory;
 ///         25,340 rows on the live bank — which is the ordinary shape of an agent-written note.
 ///     </para>
 /// </summary>
-public interface IEntryTypeClassifier
+public interface IEntryKindClassifier
 {
     /// <summary>
     ///     The kind a row holds. A declared kind is preserved; a row with no declared kind is

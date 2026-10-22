@@ -33,7 +33,7 @@ public sealed partial class SqliteMemoryStore(
     IEventPump<EmbedDrainRequest> embedDrainPump,
     IMeasurementRecorder measurements,
     ISharedProjectScope scope,
-    IEntryTypeClassifier entryTypeClassifier)
+    IEntryKindClassifier entryTypeClassifier)
     : IMemoryStore
 {
     private const string SharedScope = "shared";
@@ -55,7 +55,7 @@ public sealed partial class SqliteMemoryStore(
         INoiseShadowObserver noiseShadowObserver,
         INoiseEntryStore noiseEntryStore,
         ISharedProjectScope scope,
-        IEntryTypeClassifier entryTypeClassifier)
+        IEntryKindClassifier entryTypeClassifier)
         : this(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService, settings,
             embedDrainPump, measurements, scope, entryTypeClassifier)
     {

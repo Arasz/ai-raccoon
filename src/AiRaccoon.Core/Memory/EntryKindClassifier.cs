@@ -4,17 +4,8 @@ namespace AiRaccoon.Core.Memory;
 ///     Resolves the kind a row holds: the kind its writer declared, or — for a row that carries
 ///     none — the kind the row's own shape implies.
 /// </summary>
-public sealed class EntryTypeClassifier : IEntryTypeClassifier
+public sealed class EntryKindClassifier : IEntryKindClassifier
 {
-    /// <summary>The stored name of a memory.</summary>
-    public const string MemoryName = "memory";
-
-    /// <summary>The stored name of an ingested document.</summary>
-    public const string FileName = "file";
-
-    /// <summary>The stored name of a row that carries no kind yet.</summary>
-    public const string NoneName = "none";
-
     /// <summary>
     ///     The kind a row holds. A declared kind wins; a row with none is classified by its own
     ///     shape. The stored value is read through <see cref="FromStoredValue" />, so a row whose
@@ -61,9 +52,9 @@ public sealed class EntryTypeClassifier : IEntryTypeClassifier
     /// </summary>
     public string ToStoredValue(EntryKind kind) => kind switch
     {
-        EntryKind.None => NoneName,
-        EntryKind.Memory => MemoryName,
-        EntryKind.File => FileName,
+        EntryKind.None => EntryKindWireNames.None,
+        EntryKind.Memory => EntryKindWireNames.Memory,
+        EntryKind.File => EntryKindWireNames.File,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind,
             "A row holds one kind; a set of kinds is the query parameter's vocabulary, not a row's")
     };
@@ -71,8 +62,8 @@ public sealed class EntryTypeClassifier : IEntryTypeClassifier
     /// <summary>The kind a stored value names; <see cref="EntryKind.None" /> for null or an unknown value.</summary>
     public EntryKind FromStoredValue(string? value) => value switch
     {
-        MemoryName => EntryKind.Memory,
-        FileName => EntryKind.File,
+        EntryKindWireNames.Memory => EntryKind.Memory,
+        EntryKindWireNames.File => EntryKind.File,
         _ => EntryKind.None
     };
 }

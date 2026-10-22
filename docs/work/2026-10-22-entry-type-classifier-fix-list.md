@@ -20,16 +20,45 @@ line.
 
 ## The list
 
-| # | Severity | Location | Defect | Fix |
-|---|---|---|---|---|
-| F1 | SHOULD | `src/AiRaccoon.Infrastructure/Sync/SyncService.cs:461` | the sync pull inserts rows without a type, so they land `none` | classify in the pull, or carry the type in the payload |
-| F2 | SHOULD | `src/AiRaccoon.Core/Memory/EntryTypeClassifier.cs:41-45`, `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:1425-1435` | the rule exists twice, in C# and in SQL | one rule, or a test that compares the two |
-| F3 | SHOULD | `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:1390-1404` | `MigrateToV19Async` lost its doc comment, `MigrateToV20Async` carries two | move the v18 to v19 block back |
-| F4 | SHOULD | `tests/AiRaccoon.Tests/Integration/EntryTypeMigrationTests.cs:10-15`, `tests/AiRaccoon.Tests/Unit/Memory/EntryTypeClassifierTests.cs:7-12` | both class summaries describe the rejected source-based rule | rewrite both summaries to the shape rule |
-| F5 | SHOULD (owner-ruled) | `src/AiRaccoon.Core/Memory/EntryType.cs:9-22`, `src/AiRaccoon.Core/Memory/EntryTypeClassifier.cs:46-62` | one enum does two jobs: the parameter wants a flag set, the stored column holds one kind, and the stored form swallows a set as null | the stored kind is single-valued with a `none` state; the flag set is a separate type |
-| F6 | SHOULD | `src/AiRaccoon.Core/Memory/EntryType.cs:19`, `src/AiRaccoon/Tools/EntryTools.cs:48,52,60-67` | a second "entry type" with different meaning; the wire names are duplicated | one source for the wire names |
-| F7 | SHOULD (gate) | `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:71`, `docs/plans/2026-10-21-mcp-tool-surface-rename.md:205-215` | the branch migrates user banks to v20, which the released 2.0.x cannot open, and nothing in the branch reads the column | merge only with the query parameter, or record the gate |
-| F8 | SHOULD (owner-ruled) | `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:193,1414-1435`, `src/AiRaccoon.Infrastructure/Ingestion/ChunkBackfill.cs:108-109`, `src/AiRaccoon.Infrastructure/Ingestion/ChunkBoundaryRepair.cs:380-381` | the column admits a missing kind and any string; the backfill selects on null; the shape fallback dies on a non-null column | `NOT NULL DEFAULT 'none'`, a checked value domain, and the fallback re-expressed on `none` |
+| # | Severity | Location | Defect | Fix | State |
+|---|---|---|---|---|---|
+| F1 | SHOULD | `src/AiRaccoon.Infrastructure/Sync/SyncService.cs:461` | the sync pull inserts rows without a type, so they land `none` | classify in the pull, or carry the type in the payload | **Fixed** |
+| F2 | SHOULD | `src/AiRaccoon.Core/Memory/EntryTypeClassifier.cs:41-45`, `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:1425-1435` | the rule exists twice, in C# and in SQL | one rule, or a test that compares the two | **Fixed** |
+| F3 | SHOULD | `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:1390-1404` | `MigrateToV19Async` lost its doc comment, `MigrateToV20Async` carries two | move the v18 to v19 block back | **Fixed** |
+| F4 | SHOULD | `tests/AiRaccoon.Tests/Integration/EntryTypeMigrationTests.cs:10-15`, `tests/AiRaccoon.Tests/Unit/Memory/EntryTypeClassifierTests.cs:7-12` | both class summaries describe the rejected source-based rule | rewrite both summaries to the shape rule | **Fixed** |
+| F5 | SHOULD (owner-ruled) | `src/AiRaccoon.Core/Memory/EntryType.cs:9-22`, `src/AiRaccoon.Core/Memory/EntryTypeClassifier.cs:46-62` | one enum does two jobs: the parameter wants a flag set, the stored column holds one kind, and the stored form swallows a set as null | the stored kind is single-valued with a `none` state; the flag set is a separate type | **Fixed** |
+| F6 | SHOULD | `src/AiRaccoon.Core/Memory/EntryType.cs:19`, `src/AiRaccoon/Tools/EntryTools.cs:48,52,60-67` | a second "entry type" with different meaning; the wire names are duplicated | one source for the wire names | **Fixed** |
+| F7 | SHOULD (gate) | `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:71`, `docs/plans/2026-10-21-mcp-tool-surface-rename.md:205-215` | the branch migrates user banks to v20, which the released 2.0.x cannot open, and nothing in the branch reads the column | merge only with the query parameter, or record the gate | **Recorded** |
+| F8 | SHOULD (owner-ruled) | `src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs:193,1414-1435`, `src/AiRaccoon.Infrastructure/Ingestion/ChunkBackfill.cs:108-109`, `src/AiRaccoon.Infrastructure/Ingestion/ChunkBoundaryRepair.cs:380-381` | the column admits a missing kind and any string; the backfill selects on null; the shape fallback dies on a non-null column | `NOT NULL DEFAULT 'none'`, a checked value domain, and the fallback re-expressed on `none` | **Fixed, except the CHECK constraint (open)** |
+
+### How the fixes landed (2026-10-22)
+
+- **F8** — the column is `entry_type TEXT NOT NULL DEFAULT 'none'` in both the `CREATE TABLE` and
+  the ladder's `ADD COLUMN`. The backfill reads both ways of saying "no kind" (`NULL` for a bank
+  touched by the earlier nullable build, `'none'` for the shipped schema) and never clobbers an
+  explicit kind. The two repair paths already re-express the fallback on the VALUE: they call
+  `Resolve`, which treats `'none'` as unclassified and classifies the row by its shape. The
+  stored form gained `'none'`. The value DOMAIN is still open — SQLite cannot add a CHECK to an
+  existing table without a rebuild, and the rebuild is the owner's open question.
+- **F1** — the merge carries the kind: it takes the remote's own kind when the remote names one,
+  and files a row from an older peer (which has no kind column) by its shape. Two tests cover the
+  two peers, and both fail without the fix.
+- **F2** — the shape rule has one SQL home (`MemorySql.EntryTypeFromShape`) beside the C#
+  classifier, and `EntryTypeRuleParityTests` runs both over one fixture, so the two cannot drift.
+- **F5** — the stored kind is its own single-valued type (`EntryKind`: none, memory, file) with no
+  flag attribute and no `Code` member; `EntryType` stays the query parameter's flag set; the
+  stored form refuses a set loudly.
+- **F6** — the wire names live in `EntryKindWireNames` (the stored vocabulary) and
+  `SearchKindWireNames` (the corpus vocabulary), and `EntryTools` reads the latter.
+- **F7** — recorded in the plan: PR #913 ships as groundwork with no version bump, and it merges
+  with the parameter and the TTL rule or not at all.
+
+### The invariant is observable
+
+`SchemaDoctor` now reports the rows that carry no kind (`entries without a kind: N`) and the rows
+carrying a kind this build does not know. A write path that omits the column lands `'none'`
+silently, so the count is how the omission shows up in a bank nobody has queried yet.
+
 
 ## F1: the sync pull writes rows with no type
 

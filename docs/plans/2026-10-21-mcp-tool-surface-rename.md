@@ -129,11 +129,16 @@ any sum. It replaces `kind` (`memory|code|both`).
 | entry type | rows | how it is stored today |
 |---|---|---|
 | Code | 72,290 rows on the live bank | the `code_entries` table — a separate corpus, own FTS and vec0 |
-| File | 25,089 rows on the live bank | `entries` where `source_file` is set and `total_chunks > 0` |
-| Memory | 214 rows on the live bank | `entries` where `source_file` is NULL and `total_chunks = 0` |
+| File | 23,200 rows on the live bank | `entries` where the row mirrors a file: `path = source_file` |
+| Memory | 2,371 rows on the live bank | every other `entries` row: 661 citing a file, 1,496 from a transcript, 215 manual |
 
-The `entries` partition is exact — zero rows in the two mixed cells — so no migration is needed
-to *read* the distinction. Two derivations are available and the plan must pick one:
+The `entries` partition is by SHAPE, not by provenance: a row that mirrors a file on disk has
+`path = source_file`, and every other row is agent-written memory. The provenance channel cannot
+make that distinction — the write path calls anything with a non-transcript source file a file,
+which filed 654 of 2,150 agent notes as documents — and the derived signature
+(`source_file IS NULL` AND `total_chunks = 0`) misses the 661 notes that cite a file.
+
+Two derivations are available and the plan must pick one:
 
 1. a join on `entries.source_id` → `memory_source.source_type` (`file` | `transcript` |
    `manual`), or
@@ -216,3 +221,10 @@ exchange for a type no client can ask about, and a rollback is a dead end rather
 rollback. 2.1.0 therefore ships the schema v20, the entry-type parameter and the TTL rule
 together. The breaking-changes entry for 2.1.0 says so in as many words: "2.1.0 migrates your
 bank to v20; 2.0.0 can no longer open it."
+
+**The gate, as it applies to this branch.** The schema v20 work lives on
+`task/air-type-partition-search-ttl-measurement` (PR #913). It carries the classifier, the
+column, the ladder step and the write-path declarations — and no release. It must not be released
+on its own: the ladder step migrates a user's bank to v20 on the first read-write open, and
+nothing in 2.0.0 can read a v20 bank. PR #913 therefore ships as groundwork with no version bump
+and no changelog entry, and it merges with the parameter and the TTL rule — or not at all.

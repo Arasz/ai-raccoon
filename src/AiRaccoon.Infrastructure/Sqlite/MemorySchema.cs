@@ -1388,11 +1388,6 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     v18→v19 (ADR-0133): rebuilds vec_entries, vec_structure and vec_code with `ctx` as the vec0
-    ///     partition key, so a KNN prunes every other context's chunks before reading them. A table
-    ///     already partitioned is left alone, which makes the step safe to re-run after a crash.
-    /// </summary>
-    /// <summary>
     ///     v19→v20: the entry KIND a row holds, denormalised onto <c>entries.entry_type</c> so the
     ///     query path can filter by it without a join. An entry has exactly one kind (the owner's
     ///     ruling of 2026-10-22), so the column is NOT NULL with the default <c>none</c>: a row that
@@ -1447,6 +1442,11 @@ internal static class MemorySchema
     /// </summary>
     private sealed record VecRebuild(string Table, string Source, string Ctx, string Column, string Where, int Dimension = 0);
 
+    /// <summary>
+    ///     v18→v19 (ADR-0133): rebuilds vec_entries, vec_structure and vec_code with `ctx` as the vec0
+    ///     partition key, so a KNN prunes every other context's chunks before reading them. A table
+    ///     already partitioned is left alone, which makes the step safe to re-run after a crash.
+    /// </summary>
     private static async Task MigrateToV19Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var rebuilds = new List<VecRebuild>();

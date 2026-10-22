@@ -32,7 +32,7 @@ public class FileIngestorNotebookIntegrationTests : IDisposable
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker()), new NotebookFileTypeHandler(new NotebookChunker(TestData.RealMarkdownChunker()))]);
         _ingestor = new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
             NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance, NullCodeIngestor.Instance,
-            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope, new EntryTypeClassifier());
+            NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope, new EntryKindClassifier());
 
         // Configure global scope to include testDir
         using var scopeCmd = _conn.CreateCommand();

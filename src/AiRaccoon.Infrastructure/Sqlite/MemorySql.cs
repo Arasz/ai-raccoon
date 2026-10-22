@@ -10,7 +10,7 @@ internal static class MemorySql
     ///     that MIRRORS a file on disk has path = source_file; every other row is agent-written
     ///     memory.
     ///     <para>
-    ///         This is the SQL twin of <see cref="EntryTypeClassifier.Classify" />, and the two must
+    ///         This is the SQL twin of <see cref="EntryKindClassifier.Classify" />, and the two must
     ///         agree — a comparison test runs both over one fixture. Two call sites need it: the v20
     ///         backfill and the sync merge, so the rule is written once rather than twice.
     ///     </para>

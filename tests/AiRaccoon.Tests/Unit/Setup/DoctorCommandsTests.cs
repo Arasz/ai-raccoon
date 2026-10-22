@@ -104,6 +104,7 @@ public sealed class DoctorCommandsTests : IDisposable
             "memory rows pending: 0",
             "code rows pending: 0",
             "model migration: none open",
+            "entries without a kind: 0",
             "doctor verifies schema shape only; it never repairs a bank",
             "status: HEALTHY"
         ]);

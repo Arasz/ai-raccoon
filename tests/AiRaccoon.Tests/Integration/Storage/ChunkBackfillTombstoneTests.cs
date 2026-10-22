@@ -46,7 +46,7 @@ public sealed class ChunkBackfillTombstoneTests : IDisposable
         var hash = ContentHash.Of(Path, value);
         await using var connection = await OpenSeededAsync(Path, hash, value);
 
-        await new ChunkBackfill(new AiRaccoon.Core.Memory.EntryTypeClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+        await new ChunkBackfill(new AiRaccoon.Core.Memory.EntryKindClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
                 TestData.RealPlainTextChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService())
             .RunAsync(connection, dryRun: false, TestContext.Current.CancellationToken);
 
@@ -71,7 +71,7 @@ public sealed class ChunkBackfillTombstoneTests : IDisposable
         var hash = ContentHash.Of(Path, value);
         await using var connection = await OpenSeededAsync(Path, hash, value);
 
-        await new ChunkBackfill(new AiRaccoon.Core.Memory.EntryTypeClassifier(), TestData.RealFileTypeMatcher(new ReprintingChunker(value)), TestData.RealMarkdownChunker(),
+        await new ChunkBackfill(new AiRaccoon.Core.Memory.EntryKindClassifier(), TestData.RealFileTypeMatcher(new ReprintingChunker(value)), TestData.RealMarkdownChunker(),
                 TestData.RealPlainTextChunker(), new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService())
             .RunAsync(connection, dryRun: false, TestContext.Current.CancellationToken);
 

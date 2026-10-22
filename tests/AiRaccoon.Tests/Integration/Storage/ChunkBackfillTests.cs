@@ -121,7 +121,7 @@ public sealed class ChunkBackfillTests : IDisposable
     }
 
     private static ChunkBackfill Backfill() =>
-        new(new AiRaccoon.Core.Memory.EntryTypeClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
+        new(new AiRaccoon.Core.Memory.EntryKindClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(), TestData.RealPlainTextChunker(),
             new FakeTimeProvider(FixedNow), TestData.CreateEmbeddingService());
 
     private static string Paragraphs(int count) =>

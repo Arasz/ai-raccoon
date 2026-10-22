@@ -42,9 +42,9 @@ public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch
         }
 
         var result = entry is not null
-            ? new GetEntryResult(entry.Hash, entry.Value, entry.Path, entry.Context, entry.CreatedAt, null, null, "memory")
+            ? new GetEntryResult(entry.Hash, entry.Value, entry.Path, entry.Context, entry.CreatedAt, null, null, SearchKindWireNames.Memory)
             : code is not null
-                ? new GetEntryResult(code.Hash, code.Value, code.Path, null, 0, code.LineStart, code.LineEnd, "code")
+                ? new GetEntryResult(code.Hash, code.Value, code.Path, null, 0, code.LineStart, code.LineEnd, SearchKindWireNames.Code)
                 : throw new UnknownHashException(hash, canonical);
 
         return await gate.WrapAsync(canonical, result, cancellationToken);
@@ -54,6 +54,11 @@ public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch
     ///     One shape for both corpora. The code-only fields are null for a memory entry and the
     ///     context and creation time are null for a code chunk — a code chunk has no memory
     ///     context and no creation timestamp of its own.
+    ///     <para>
+    ///         <c>EntryType</c> names the CORPUS that owns the hash, not the kind a row holds: a
+    ///         code chunk is not a row of <c>entries</c> — it lives in the code corpus — so it has
+    ///         no row kind to carry.
+    ///     </para>
     /// </summary>
     public sealed record GetEntryResult(
         string Hash,

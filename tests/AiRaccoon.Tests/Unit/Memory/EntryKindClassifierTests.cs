@@ -5,13 +5,15 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Memory;
 
 /// <summary>
-///     The one rule that says which kind a row holds. A transcript is a MEMORY — the agent wrote
-///     it — even though it carries a source file and is chunked like an ingested document.
-///     Legacy rows use path/source-file equality; declarations take precedence.
+///     The one rule that says which kind a row holds: a row that mirrors a file on disk has
+///     path = source_file, and every other row is agent-written memory. A transcript is a MEMORY —
+///     the agent wrote it — even though it carries a source file and is chunked like an ingested
+///     document. A declared kind takes precedence over the shape; the shape is the fallback for a
+///     row that carries none.
 /// </summary>
 [Trait(TestCategories.Category, TestCategories.Unit)]
 [Trait(TestCategories.Speed, TestCategories.Fast)]
-public sealed class EntryTypeClassifierTests
+public sealed class EntryKindClassifierTests
 {
     [Theory]
     [InlineData("memory", "docs/guide.md", "docs/guide.md", EntryKind.Memory)]
@@ -23,7 +25,7 @@ public sealed class EntryTypeClassifierTests
     public void Resolve_PreservesDeclarationsAndOnlyClassifiesUnclassifiedRows(
         string? storedKind, string? path, string? sourceFile, EntryKind expected)
     {
-        IEntryTypeClassifier classifier = new EntryTypeClassifier();
+        IEntryKindClassifier classifier = new EntryKindClassifier();
         classifier.Resolve(storedKind, path, sourceFile).ShouldBe(expected);
     }
 
@@ -34,7 +36,7 @@ public sealed class EntryTypeClassifierTests
     [Fact]
     public void Resolve_AnUnknownStoredValue_FallsBackToTheShape()
     {
-        IEntryTypeClassifier classifier = new EntryTypeClassifier();
+        IEntryKindClassifier classifier = new EntryKindClassifier();
         classifier.Resolve("transcript", "docs/guide.md", "docs/guide.md").ShouldBe(EntryKind.File);
     }
 
@@ -51,7 +53,7 @@ public sealed class EntryTypeClassifierTests
     public void Resolve_AcceptsEveryMissingInput(
         string? storedKind, string? path, string? sourceFile, EntryKind expected)
     {
-        IEntryTypeClassifier classifier = new EntryTypeClassifier();
+        IEntryKindClassifier classifier = new EntryKindClassifier();
         classifier.Resolve(storedKind, path, sourceFile).ShouldBe(expected);
     }
 
@@ -67,12 +69,12 @@ public sealed class EntryTypeClassifierTests
     [InlineData("9f2c.md", "hermes/20260806_215718_fd7f66", EntryKind.Memory)]
     [InlineData("9f2c.md", null, EntryKind.Memory)]
     public void Classify_KeysOnTheRowsShape(string? path, string? sourceFile, EntryKind expected) =>
-        new EntryTypeClassifier().Classify(path, sourceFile).ShouldBe(expected);
+        new EntryKindClassifier().Classify(path, sourceFile).ShouldBe(expected);
 
     /// <summary>An empty source file is no locator at all: the row is a memory.</summary>
     [Fact]
     public void Classify_AnEmptySourceFile_IsAMemory() =>
-        new EntryTypeClassifier().Classify("docs/guide.md", "").ShouldBe(EntryKind.Memory);
+        new EntryKindClassifier().Classify("docs/guide.md", "").ShouldBe(EntryKind.Memory);
 
     /// <summary>The stored form and the wire form agree in both directions.</summary>
     [Theory]
@@ -80,12 +82,12 @@ public sealed class EntryTypeClassifierTests
     [InlineData(EntryKind.File, "file")]
     [InlineData(EntryKind.None, "none")]
     public void ToStoredValue_NamesEveryKind(EntryKind kind, string expected) =>
-        new EntryTypeClassifier().ToStoredValue(kind).ShouldBe(expected);
+        new EntryKindClassifier().ToStoredValue(kind).ShouldBe(expected);
 
     [Fact]
     public void FromStoredValue_ReadsBackWhatToStoredValueWrote()
     {
-        var classifier = new EntryTypeClassifier();
+        var classifier = new EntryKindClassifier();
         foreach (var kind in new[] { EntryKind.Memory, EntryKind.File, EntryKind.None })
         {
             classifier.FromStoredValue(classifier.ToStoredValue(kind)).ShouldBe(kind);
@@ -99,7 +101,7 @@ public sealed class EntryTypeClassifierTests
     [Fact]
     public void AnUnknownStoredValue_IsNone()
     {
-        var classifier = new EntryTypeClassifier();
+        var classifier = new EntryKindClassifier();
         classifier.FromStoredValue(null).ShouldBe(EntryKind.None);
         classifier.FromStoredValue("transcript").ShouldBe(EntryKind.None);
         classifier.ToStoredValue(EntryKind.None).ShouldBe("none");
@@ -114,7 +116,7 @@ public sealed class EntryTypeClassifierTests
     [Fact]
     public void ToStoredValue_ASet_RefusesLoudly()
     {
-        var classifier = new EntryTypeClassifier();
+        var classifier = new EntryKindClassifier();
         Should.Throw<ArgumentOutOfRangeException>(() =>
             classifier.ToStoredValue((EntryKind)(EntryKind.Memory | EntryKind.File)));
     }

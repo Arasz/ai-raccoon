@@ -104,7 +104,7 @@ public sealed class Vec0ReclaimJob : IMaintenanceJob
 ///     rule gained per-file-type chunkers, so every bank still runs it once more under the new rule.
 /// </summary>
 public sealed class ChunkBackfillJob(
-    IEntryTypeClassifier entryTypeClassifier,
+    IEntryKindClassifier entryTypeClassifier,
     IFileTypeMatcher fileTypeMatcher,
     IMarkdownChunker chunker,
     IPlainTextChunker fallbackChunker,

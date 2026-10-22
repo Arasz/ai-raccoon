@@ -95,13 +95,13 @@ public static class TestData
         var fileIngestor = codeChunker is null
             ? new FileIngestor(matcher, sourceStore, timeProvider, embeddings,
                 ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance, NullCodeFileTypeMatcher.Instance,
-                NullCodeIngestor.Instance, NullWatchStore.Instance, pump, new IndexableFileWalk(), SharedScope, new EntryTypeClassifier())
+                NullCodeIngestor.Instance, NullWatchStore.Instance, pump, new IndexableFileWalk(), SharedScope, new EntryKindClassifier())
             : new FileIngestor(matcher, sourceStore, timeProvider, embeddings,
                 ignoreRulesProvider ?? NullIgnoreRulesProvider.Instance, new CodeFileTypeMatcher(),
-                new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider), NullWatchStore.Instance, pump, new IndexableFileWalk(), SharedScope, new EntryTypeClassifier());
+                new CodeIngestor(new CodeFileTypeMatcher(), codeChunker, timeProvider), NullWatchStore.Instance, pump, new IndexableFileWalk(), SharedScope, new EntryKindClassifier());
         var noiseFilteringService = new NoiseFilteringService(noisePolicies ?? []);
         return new SqliteMemoryStore(factory, sourceStore, fileIngestor, embedder, timeProvider, logger, noiseFilteringService,
-            settings ?? new SqliteSettingsStore(factory), pump, measurements ?? NoOpMeasurementRecorder.Instance, SharedScope, new EntryTypeClassifier());
+            settings ?? new SqliteSettingsStore(factory), pump, measurements ?? NoOpMeasurementRecorder.Instance, SharedScope, new EntryKindClassifier());
     }
 
     /// <summary>

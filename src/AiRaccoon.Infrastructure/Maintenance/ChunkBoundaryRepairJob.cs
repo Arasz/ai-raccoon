@@ -13,7 +13,7 @@ namespace AiRaccoon.Infrastructure.Maintenance;
 ///     which the write paths no longer create. Sits before PendingEmbedJob, which embeds what it leaves.
 /// </summary>
 public sealed partial class ChunkBoundaryRepairJob(
-    IEntryTypeClassifier entryTypeClassifier,
+    IEntryKindClassifier entryTypeClassifier,
     IFileTypeMatcher fileTypeMatcher,
     IMarkdownChunker noteChunker,
     IPlainTextChunker fallbackChunker,

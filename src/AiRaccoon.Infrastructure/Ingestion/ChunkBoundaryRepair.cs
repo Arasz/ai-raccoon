@@ -24,7 +24,7 @@ public sealed record ChunkBoundaryRepairReport(int FilesReingested, int GroupsRe
 ///     New rows are left pending for the embed drain.
 /// </summary>
 public sealed class ChunkBoundaryRepair(
-    IEntryTypeClassifier entryTypeClassifier,
+    IEntryKindClassifier entryTypeClassifier,
     IFileTypeMatcher fileTypeMatcher,
     IMarkdownChunker noteChunker,
     IPlainTextChunker fallbackChunker,

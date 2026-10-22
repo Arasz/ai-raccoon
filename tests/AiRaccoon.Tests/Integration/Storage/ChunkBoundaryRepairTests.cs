@@ -516,7 +516,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         }
 
         await using var repairConnection = await _factory.OpenBankAsync(ct);
-        var report = await new ChunkBoundaryRepair(new AiRaccoon.Core.Memory.EntryTypeClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+        var report = await new ChunkBoundaryRepair(new AiRaccoon.Core.Memory.EntryKindClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
                 TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow))
             .RunAsync(repairConnection, codeStore, ct);
 
@@ -550,7 +550,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         }
 
         await using var repairConnection = await _factory.OpenBankAsync(ct);
-        var report = await new ChunkBoundaryRepair(new AiRaccoon.Core.Memory.EntryTypeClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+        var report = await new ChunkBoundaryRepair(new AiRaccoon.Core.Memory.EntryKindClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
                 TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow))
             .RunAsync(repairConnection, codeStore, ct);
 
@@ -581,7 +581,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         var path = await WriteNoteAsync(text);
         var (head, tail) = CutInside(text, "vk83jq");
         await ResplitAsync(path, [head, tail], noteOrder: true);
-        var job = new ChunkBoundaryRepairJob(new AiRaccoon.Core.Memory.EntryTypeClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+        var job = new ChunkBoundaryRepairJob(new AiRaccoon.Core.Memory.EntryKindClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
             TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow),
             NullLogger<ChunkBoundaryRepairJob>.Instance);
         job.Interval.ShouldBeNull("once ever: it heals rows the write paths no longer create");
@@ -602,7 +602,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         var (head, tail) = CutInside(LongNote(), "vk83jq");
         await ResplitAsync(path, ["Opening line that was never part of the note.\n", head, tail], noteOrder: true);
         var logger = new FakeLogger<ChunkBoundaryRepairJob>();
-        var job = new ChunkBoundaryRepairJob(new AiRaccoon.Core.Memory.EntryTypeClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+        var job = new ChunkBoundaryRepairJob(new AiRaccoon.Core.Memory.EntryKindClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
             TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow), logger);
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -621,7 +621,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
         var ids = await IdsAsync(file);
         await SetPositionAsync(ids[^1], 1);
         var logger = new FakeLogger<ChunkBoundaryRepairJob>();
-        var job = new ChunkBoundaryRepairJob(new AiRaccoon.Core.Memory.EntryTypeClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+        var job = new ChunkBoundaryRepairJob(new AiRaccoon.Core.Memory.EntryKindClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
             TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), _store, new FakeTimeProvider(FixedNow), logger);
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -635,7 +635,7 @@ public sealed class ChunkBoundaryRepairTests : IAsyncLifetime
     private async Task<ChunkBoundaryRepairReport> RepairAsync()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
-        return await new ChunkBoundaryRepair(new AiRaccoon.Core.Memory.EntryTypeClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
+        return await new ChunkBoundaryRepair(new AiRaccoon.Core.Memory.EntryKindClassifier(), TestData.RealFileTypeMatcher(), TestData.RealMarkdownChunker(),
                 TestData.RealPlainTextChunker(), TestData.CreateEmbeddingService(), new FakeTimeProvider(FixedNow))
             .RunAsync(connection, _store, TestContext.Current.CancellationToken);
     }
