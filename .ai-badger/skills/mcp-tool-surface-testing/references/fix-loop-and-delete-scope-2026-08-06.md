@@ -6,13 +6,13 @@ answer to an owner question.
 
 ## Response-shape fixes (TDD, both RED first)
 
-1. `memory_list` returned `files` as a stringified JSON string.
+1. `get_index` returned `files` as a stringified JSON string.
    Fix: `ListResult(string Files)` → `ListResult(JsonNode Files)`; the tool parses the store's
    JSON tree (`JsonNode.Parse(files) ?? new JsonObject()`). Tool-layer change only — the
    store interface (`ListFilesAsync` → `Task<string>`) stayed untouched, which kept ~10
    fakes/call-sites compiling. New unit tests: `List_ReturnsFilesAsJsonObject`,
    `List_PreservesNestedFileTree` (fake store with settable `FilesJson`).
-2. `memory_workspace_discard` returned `{deleted: n}`; docs + sibling `consolidate` say
+2. `discard_workspace` returned `{deleted: n}`; docs + sibling `consolidate` say
    `discarded`. Fix: dedicated `WorkspaceDiscardResult(int Discarded)` record (DeleteContext
    keeps `DeletedContextResult`). New unit test `WorkspaceDiscard_ReportsDiscardedKey`; E2E
    pin `Worktree_Discard_RemovesTheOutbox` updated `"deleted":1` → `"discarded":1`.
@@ -21,7 +21,7 @@ answer to an owner question.
 
 - **Access guard denies destructive tools in unit tests unless full mode is seeded.** Default
   project mode is rw; `WorkspaceDiscard` (AccessRequirement.Destructive) throws
-  `access-denied: memory_workspace_discard requires mode full (current rw)` from the guard,
+  `access-denied: discard_workspace requires mode full (current rw)` from the guard,
   not your test. Seed `_store.Settings[AccessModePolicy.ProjectSettingKey("acme")] = "full"`
   like the sibling consolidate test does.
 - **Same-message test file, two writers:** another session's patch, applied against a stale
@@ -42,16 +42,16 @@ answer to an owner question.
 
 ## Delete-scope semantics (the "is delete project-only?" answer)
 
-- `memory_delete(projectId, hash)` = `DELETE FROM entries WHERE hash = @hash AND project_id =
+- `delete_entry(projectId, hash)` = `DELETE FROM entries WHERE hash = @hash AND project_id =
   @projectId` (MemorySql.cs). Project-scoped by the **column**, not the context: it can delete
   committed rows AND that project's shared rows (shared rows keep the sharer's project_id).
   Other projects' rows are never touched. To delete a shared row, pass its OWN hash (differs
   from the source row's — path gains `shared/` prefix, hash = SHA256(path+content)), e.g. from
   a scope=shared search.
-- `memory_delete_context(projectId, context)` builds the DELETE from `FilterFor`:
+- `delete_context(projectId, context)` builds the DELETE from `FilterFor`:
   `project:` / `workspace:` / custom labels / `label:` prefixes all carry `project_id`.
 - **HAZARD (owner decision pending):** the `"shared"` branch of `FilterFor` emits only
-  `scope = 'shared'` — NO project filter. `memory_delete_context(<anyProjectId>, "shared")`
+  `scope = 'shared'` — NO project filter. `delete_context(<anyProjectId>, "shared")`
   deletes every shared row in the bank across all projects. The destructive-access gate checks
   only the caller's project mode. Candidate fixes: scope the shared branch to the caller's
   project_id, or gate the shared tier separately.

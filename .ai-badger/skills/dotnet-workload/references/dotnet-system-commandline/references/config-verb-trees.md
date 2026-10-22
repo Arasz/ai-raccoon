@@ -54,7 +54,7 @@ tree):
   sync) is invisible to it. A read command must expose only the PERSISTED view
   (project, path, registered, lastChange — `0` → `never`), be NAMED for what it
   shows (`watch registered`, not `watch status`) so users aren't promised live
-  state, and point to the live surface (`memory_watch_status`) in its description.
+  state, and point to the live surface (`get_watch_status`) in its description.
   The rows come from the store's list API (`IWatchStore.ListWatchesAsync`),
   injected as a trailing optional `RunAsync` parameter (precedent: bank/bws/env;
   all call sites compile unchanged), sorted `OrderBy(projectId, Ordinal).ThenBy(path,

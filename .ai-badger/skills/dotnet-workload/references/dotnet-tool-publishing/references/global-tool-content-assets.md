@@ -4,7 +4,7 @@ Full worked case behind the "Bundled content assets" section of SKILL.md.
 
 ## Incident
 
-The installed tool (<pkg-id> 1.0.4, macOS arm64) ran but `memory_search` failed:
+The installed tool (<pkg-id> 1.0.4, macOS arm64) ran but `query` failed:
 the embedding model could not be resolved. Two independent layers:
 
 1. **Settings value resolved as a cwd-relative path.** The bank's settings table held
@@ -58,7 +58,7 @@ copy the SHA-verified ONNX (sha256 == the pinned `ModelSha256`) into exactly tha
   `src/<Tool>/Models/` is valid by construction.
 - Live proof over MCP Streamable HTTP with curl:
   `POST /mcp` with `Accept: application/json, text/event-stream`; initialize first, then
-  `tools/call memory_search` — SSE body, `data:` line holds the JSON-RPC result. A
+  `tools/call query` — SSE body, `data:` line holds the JSON-RPC result. A
   healthy hybrid search returns fused ranking scores (~1.0 / 0.98 / 0.96) — a single
   modality would show 1.0 / 0.5 / 0.33, so the vector path demonstrably ran.
 

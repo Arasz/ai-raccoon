@@ -88,7 +88,7 @@ feature merge's state.json change; needs a rebase.
 - SKILL.md §8 (memory-grade, default off, `AI_BADGER_MEMORY_GRADE=1`) present in
   features + `.ai-badger` mirror + plugin `SKILL.full.md`.
 - Wiring verified: hooks-manifest memory-grade entry (claude/copilot/hermes);
-  hooks.json + `.claude/settings.json` `memory_search` PostToolUse matcher;
+  hooks.json + `.claude/settings.json` `query` PostToolUse matcher;
   `.github/hooks/ai-badger-hooks.json` postToolUse matcher; `ai_badger_hooks.py`
   lazy `memory_grade` import + `pop_ask`; `adjust_hooks.py` SHARED_SKILL_MODULES
   entry.

@@ -18,19 +18,19 @@ metadata:
 
 ## When NOT to Use
 
-- A one-off lookup ("have we seen X before?") — run `memory_search` and be done, no watch ritual, no write-back
+- A one-off lookup ("have we seen X before?") — run `query` and be done, no watch ritual, no write-back
 - No docs directory to watch and no durable fact to write — the ritual adds ceremony, not value
 - The memory-grade hook when you only need one answer — it is opt-in by env var; don't enable it for a single search
 
 ## 1. Watch-on-docs ritual (do this first)
 
-On session start, run `memory_watch_status(projectId)` for this project. If the docs directory
-is not in the watched list, run `memory_watch_add(projectId, <absolute path to docs>)` to mirror
+On session start, run `get_watch_status(projectId)` for this project. If the docs directory
+is not in the watched list, run `add_watch(projectId, <absolute path to docs>)` to mirror
 it into memory. The watch starts `scanning` and settles to `healthy`; an already-watched path is
 a no-op.
 
 Also watch `.semantica/` (one-time per project): `mkdir -p .semantica`, then
-`memory_watch_add(projectId, <absolute path to .semantica>)`. Re-adding is a no-op; the durable
+`add_watch(projectId, <absolute path to .semantica>)`. Re-adding is a no-op; the durable
 record lives in memory, so gitignore `.semantica/` in the consumer repo.
 
 **CLI prerequisite (only when the watch errors):** `watching-disabled` or `path-outside-scope`
@@ -41,21 +41,21 @@ all (older tool build on another machine), update the tool: `dotnet tool update 
 
 ## 2. Search-first workflow
 
-Always pass `projectId` and `sessionId`. Pass your session id on every search. The server rejects a blank one and stores the value verbatim on the search row. Before web search, code search, or asking the user, run `memory_search(projectId, sessionId, scope=all)` with 2-3 formulations. Try the exact phrase first, then keywords, then a plain restatement. Entries carry source paths. Cite them as evidence. Every reply carries `meta.correlationId`. Keep that id. You need it to grade the search or to record that you opened one of its files.
+Always pass `projectId` and `sessionId`. Pass your session id on every search. The server rejects a blank one and stores the value verbatim on the search row. Before web search, code search, or asking the user, run `query(projectId, sessionId, scope=all)` with 2-3 formulations. Try the exact phrase first, then keywords, then a plain restatement. Entries carry source paths. Cite them as evidence. Every reply carries `meta.correlationId`. Keep that id. You need it to grade the search or to record that you opened one of its files.
 
 ## 3. Escalation by result
 
 - Decisive hit → use it; cite the source path.
 - Partial hit → one targeted external search, then reconcile.
-- No hit → search externally, then write the finding back with `memory_write` (source path included).
+- No hit → search externally, then write the finding back with `add_memory` (source path included).
 
 ## 4. Write discipline
 
 Durable facts only, one per entry, source included. Plain writes land in committed project
 memory (`project:<id>`). For in-progress notes use workspace isolation:
-`memory_workspace_begin` → `memory_workspace_status` → `memory_workspace_consolidate(keep=[...])`
-(or `["all"]` to promote everything; `memory_workspace_discard` to drop). Promote durable
-cross-project facts with `memory_share` — never automatically. `memory_sweep` removes old
+`initialize_workspace` → `get_workspace_status` → `close_workspace(keep=[...])`
+(or `["all"]` to promote everything; `discard_workspace` to drop). Promote durable
+cross-project facts with `share_memory` — never automatically. `trigger_memory_cleanup` removes old
 low-rated entries; shared entries are exempt.
 
 ## 5. Scopes and kinds
@@ -64,13 +64,13 @@ low-rated entries; shared entries are exempt.
 
 ## 6. Gotchas
 
-- `memory_write` has **no `path` param** — the entry path is derived from its content.
+- `add_memory` has **no `path` param** — the entry path is derived from its content.
 - **Never pass `context`** unless workspace isolation is intended: it silently sets
   `scope='custom'`, invisible to project-scoped search.
-- `memory_embed_pending`: omit `limit` to process all pending entries.
-- `memory_delete_context` requires full access mode.
-- When you open a file the search returned, call `memory_record_followthrough` with the same `correlationId`, the file path, and `servedRank` when you saw one. Rank is 1-based. Under `kind=both` a bare rank cannot name its section. That ambiguity is intentional, so send no section qualifier. Grade with `memory_record_grade` (1-5) on the same id when you have a judgment.
-- A `memory_search` result (`kind=code` or `kind=both`) carrying a warning starting
+- `embed_deferred_entries`: omit `limit` to process all pending entries.
+- `delete_context` requires full access mode.
+- When you open a file the search returned, call `set_memory_usage_record` with the same `correlationId`, the file path, and `servedRank` when you saw one. Rank is 1-based. Under `kind=both` a bare rank cannot name its section. That ambiguity is intentional, so send no section qualifier. Grade with `set_query_result_grade` (1-5) on the same id when you have a judgment.
+- A `query` result (`kind=code` or `kind=both`) carrying a warning starting
   `code engine not configured` means its code section is FTS5 keyword matches only — semantic
   code hits are missing, not absent; don't read it as a complete answer. Tell the user, once
   per session, verbatim: run `ai-raccoon model set code default` (downloads and activates the
@@ -80,8 +80,8 @@ low-rated entries; shared entries are exempt.
 
 ## 7. Bulk ops
 
-`memory_ingest_file` / `memory_ingest_directory` bulk-load files; `memory_stats` reports bank
-size; `memory_sync` exchanges snapshots with cloud storage when configured.
+`ingest_file` / `ingest_directory` bulk-load files; `get_store_statistics` reports bank
+size; `sync_to_cloud` exchanges snapshots with cloud storage when configured.
 
 ## 8. Per-prompt memory context (automatic)
 
@@ -159,9 +159,9 @@ the search it demands cannot point at two different projects.
 **Repo text search: memory first.** The gate keys on the search pattern. A grep/egrep/fgrep/
 rg/find anywhere in a shell command (every segment of `a; b | c` counts, a piped search
 included), or a Grep/Glob/search_files call, passes only when every pattern was already
-memory-searched for this project. This includes `rg` and `rtk rg`.
+memory-searched for this project. This includes `rg`.
 
-On a pattern's first sighting the gate runs one `memory_search` and hands the result to the
+On a pattern's first sighting the gate runs one `query` and hands the result to the
 agent. On a host whose tool-call seam carries model-side context (Claude Code, Codex and pi)
 the search is **allowed** and the memory block arrives as `additionalContext`: the agent gets
 the data and the user sees nothing. A host without that seam (Copilot CLI, Hermes CLI) gets a
@@ -179,21 +179,21 @@ needed, use the `get-raw-text-search` skill or run its script with `--pattern-ha
 a known pattern can also be fetched with `--pattern <pattern>`. The result is JSON and may be
 `pending` if capture has not finished yet. After reading the memory hits, re-issue the search
 only if it is still needed. When the hook could not search (no
-`ai-raccoon`, timeout), it records nothing and asks you to run `memory_search` with that
+`ai-raccoon`, timeout), it records nothing and asks you to run `query` with that
 pattern as the query; your search's query is recorded, and a pattern that is a whole-word run
 of it counts as searched (comparison ignores case, `^ $ \b`, grouping parentheses and regex
 escapes such as `\.`). Searched patterns persist per project and are never reset.
 
 **Excluded list.** A grep/egrep/fgrep/rg reading a pipe from git, gh, ps, ls, env, printenv,
 history, docker, kubectl, pip, npm, lsof, brew, dotnet is not repo search:
-`git log | grep fix` is excluded from repo search, including through `rtk`/`sudo` wrappers.
+`git log | grep fix` is excluded from repo search, including through `sudo` wrappers.
 Only the program immediately before the grep counts (`git log | head -50 | grep fix` is gated:
 `head` is not listed). A grep with a file operand, `-r`/`-R`/`-d recurse`, `rg --files`, an
 input redirect, or run by `xargs` stays gated, as does any file grep elsewhere in the command.
 Exception: a listed program that prints repo files is not exempt — `git ls-files`, `git ls-tree`, `git grep` (subcommand found past `-C`/`-c`/`--git-dir`/`--work-tree`) and `ls -R`/`--recursive`; a grep over their output stays gated.
-A `memory_search` credits its query only when the call succeeded (not Claude's `PostToolUseFailure`, a Copilot `resultType` other than `success`, or a Hermes status other than ok) and its `projectId` equals the project the gate resolved; a search of another project, or one with no `projectId`, unlocks nothing. A `grep -f`/`rg -f`/`--file` search takes its patterns from a file the gate cannot read, so it is keyed on its own words.
+A `query` credits its query only when the call succeeded (not Claude's `PostToolUseFailure`, a Copilot `resultType` other than `success`, or a Hermes status other than ok) and its `projectId` equals the project the gate resolved; a search of another project, or one with no `projectId`, unlocks nothing. A `grep -f`/`rg -f`/`--file` search takes its patterns from a file the gate cannot read, so it is keyed on its own words.
 
-**Search log.** Each enriched prompt, and each planned query, is a real `memory_search` and
+**Search log.** Each enriched prompt, and each planned query, is a real `query` and
 lands in ai-raccoon's search log like any other search.
 
 **Per agent.**
@@ -227,6 +227,6 @@ at 32 characters. The "Parity with pi" section of ADR-0031 lists every divergenc
 
 ## 9. Verification Checklist
 
-- [ ] `memory_watch_status` shows the docs dir `healthy`
-- [ ] `memory_search(projectId, sessionId, scope=all)` returns docs-derived hits
-- [ ] A durable finding was written back with `memory_write`, source path included
+- [ ] `get_watch_status` shows the docs dir `healthy`
+- [ ] `query(projectId, sessionId, scope=all)` returns docs-derived hits
+- [ ] A durable finding was written back with `add_memory`, source path included

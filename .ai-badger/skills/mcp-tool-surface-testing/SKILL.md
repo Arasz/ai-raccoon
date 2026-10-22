@@ -41,7 +41,7 @@ exploratory guessing.
 3. **Safety first.** Use a DEDICATED test project id (never a real project's data).
    Destructive tools (delete, delete_context, sweep, discard, share) get positive AND
    negative controls (bogus hash → `{deleted: 0}`). Watch/ingest tests use temp dirs.
-   Clean up afterwards and verify zero residue (`memory_stats` shows the test context
+   Clean up afterwards and verify zero residue (`get_store_statistics` shows the test context
    gone). If the server needs per-project config (watch enable/scope), restore it after.
 4. **Execute in dependency order, batching independents.** Write → search (verify hash
    round-trip at rank 1) → share → search shared; workspace begin → write → status →
@@ -70,9 +70,9 @@ exploratory guessing.
   the finish protocol (state.json entry, tracker finish).
 
 ## Gotchas
-- **Docs tables lag the live contract.** Verified on a real server: `memory_workspace_discard`
-  documented as `{discarded}`, actual `{deleted}`; `memory_list` documented as a json
-  tree, actual a stringified string; `memory_write` schema has params the docs table
+- **Docs tables lag the live contract.** Verified on a real server: `discard_workspace`
+  documented as `{discarded}`, actual `{deleted}`; `get_index` documented as a json
+  tree, actual a stringified string; `add_memory` schema has params the docs table
   lacks. The live schema + response is the contract.
 - **Access-tier claims are deployment-dependent.** An index intent saying "denied in rw"
   may be false on a full-access deployment — probe once, don't promise a denial.

@@ -1,6 +1,6 @@
 {
   "$schema": "./schemas/model-groups.schema.json",
-  "frameworkVersion": "0.212.0",
+  "frameworkVersion": "0.214.0",
   "registryVersion": 3,
   "measuredAt": "2026-10-21",
   "families": [

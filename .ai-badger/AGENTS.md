@@ -4,7 +4,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github, ai-raccoon, changelog
-> Scaffolded by ai-badger 0.212.0. Source of truth for this file: `.ai-badger/AGENTS.md`.
+> Scaffolded by ai-badger 0.214.0. Source of truth for this file: `.ai-badger/AGENTS.md`.
 
 ## Commands
 
@@ -57,14 +57,14 @@ Grep/Glob/Read only where the graph doesn't reach. Each tool's own description c
 ## MCP Tools: ai-raccoon
 
 AiRaccoon is the project memory server. Search memory FIRST — before web search, code search, or
-asking the user — with `memory_search` (projectId, scope=all) and 2-3 query formulations. Entries
+asking the user — with `query` (projectId, scope=all) and 2-3 query formulations. Entries
 carry source paths, so a decisive hit is evidence: cite it. Escalate by result — a partial hit gets
 one targeted external search; no hit means search externally, then write the finding back with
-`memory_write` including the source path.
+`add_memory` including the source path.
 
 Every call passes projectId. Plain writes land in committed project memory; active workspaces
-isolate in-progress notes and consolidate on finish; `memory_share` promotes durable cross-project
-facts. Keep the docs directory searchable: check `memory_watch_status`, then `memory_watch_add`
+isolate in-progress notes and consolidate on finish; `share_memory` promotes durable cross-project
+facts. Keep the docs directory searchable: check `get_watch_status`, then `add_watch`
 (projectId + absolute path) when no watch exists.
 
 <!-- semantica MCP tools -->

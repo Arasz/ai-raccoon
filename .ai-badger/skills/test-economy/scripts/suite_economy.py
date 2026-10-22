@@ -80,24 +80,6 @@ def _argv(command: str) -> List[str]:
         return command.split()
 
 
-# rtk subcommands that run the command after them (`rtk test cargo test`).
-_RTK_RUNNERS = frozenset({"err", "test", "summary", "run", "bypass", "proxy"})
-
-
-def _without_rtk(argv: List[str]) -> List[str]:
-    """*argv* past an `rtk` prefix: its options and a runner subcommand with its options."""
-    if not argv or PurePosixPath(argv[0]).name != "rtk":
-        return argv
-    rest = argv[1:]
-    while rest and rest[0].startswith("-"):
-        rest = rest[1:]
-    if rest and rest[0] in _RTK_RUNNERS:
-        rest = rest[1:]
-        while rest and rest[0].startswith("-"):
-            rest = rest[1:]
-    return rest
-
-
 def _has_selector(argv: List[str], start: int, positional_is_selector: bool = True) -> bool:
     """Do the tokens after the runner phrase name a subset of the suite?
 
@@ -135,7 +117,7 @@ def is_test_run(command: str) -> Optional[Dict[str, str]]:
     ``python3``, and a runner invoked by an absolute or relative path must count the same
     as one found on PATH.
     """
-    argv = _without_rtk(_argv(command or ""))
+    argv = _argv(command or "")
     if not argv:
         return None
     first = PurePosixPath(argv[0]).name

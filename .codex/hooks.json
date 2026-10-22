@@ -174,7 +174,7 @@
             "command": "env AI_BADGER_CODEX_HOOK=1 python3 -I -c 'import os,pathlib,runpy,sys; root=pathlib.Path(sys.argv[1]); os.environ['\"'\"'AI_BADGER_PROJECT_DIR'\"'\"']=str(root); script=root/'\"'\"'.ai-badger'\"'\"'/sys.argv[2]; sys.exit(0) if not script.is_file() or not script.resolve().is_relative_to(root) or any(p.is_symlink() for p in (script,*script.parents) if p!=root and root in p.parents) else None; sys.exit(0) if any(p.is_symlink() for tree in (script.parent.parent,root/'\"'\"'.ai-badger/hooks'\"'\"') for p in (tree,*tree.rglob('\"'\"'*'\"'\"'))) else None; sys.path.insert(0,str(script.parent)); runpy.run_path(str(script),run_name='\"'\"'__main__'\"'\"')' /Users/arasz/RiderProjects/ai-raccoon hooks/codex_memory_first_gate_post_hook.py /Users/arasz/RiderProjects/ai-raccoon/.ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py"
           }
         ],
-        "matcher": "^(mcp__.+__)?memory_search$"
+        "matcher": "^(mcp__.+__)?query$"
       }
     ],
     "SessionStart": [

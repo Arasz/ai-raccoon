@@ -48,12 +48,7 @@ WRAPPERS: Dict[str, Wrapper] = {
     "stdbuf": Wrapper("ioe", ("--input", "--output", "--error")),
     "xargs": Wrapper("adEILnPs", ("--arg-file", "--delimiter", "--max-lines", "--max-args",
                                   "--max-procs", "--max-chars")),
-    "rtk": Wrapper(),
 }
-# rtk subcommands that run the command after them; with a shell-string option they run that
-# string through a shell instead (`rtk run -c TEXT`, `rtk err --shell bash TEXT`).
-RTK_RUNNERS = frozenset(("err", "test", "summary", "run", "bypass", "proxy"))
-RTK_SCRIPT_OPTIONS = ("-c", "--command", "--shell")
 
 
 class ShellSyntaxError(ValueError):
@@ -115,41 +110,6 @@ def _wrapper_end(name: str, wrapper: Wrapper, words: Sequence[str], index: int) 
     return index + wrapper.operands
 
 
-def _rtk_runner_end(words: Sequence[str], index: int) -> int:
-    """Index just past the rtk runner subcommand at *index* and its options; the runner itself
-    when it runs a shell string; *index* unchanged when no runner is there."""
-    if index >= len(words) or words[index] not in RTK_RUNNERS:
-        return index
-    runner = index
-    index += 1
-    while index < len(words) and words[index].startswith("-"):
-        arg = words[index]
-        index += 1
-        if arg == "--":
-            break
-        if arg.split("=", 1)[0] in RTK_SCRIPT_OPTIONS or arg.startswith("-c"):
-            return runner
-    return index
-
-
-def _rtk_script(args: Sequence[str]) -> Optional[str]:
-    """The shell text an rtk runner's *args* hand a shell: the `-c`/`--command` value, else
-    the first operand after `--shell SHELL`."""
-    index = 0
-    while index < len(args):
-        arg = args[index]
-        if arg in ("-c", "--command"):
-            return args[index + 1] if index + 1 < len(args) else None
-        if arg.startswith("--command="):
-            return arg.split("=", 1)[1]
-        if arg.startswith("-c") and not arg.startswith("--"):
-            return arg[2:]
-        index += 2 if arg == "--shell" else 1
-        if not arg.startswith("-"):
-            return " ".join(args[index - 1:])
-    return None
-
-
 def program_index(words: Sequence[str]) -> int:
     """Index of the word that runs, past assignments, reserved words and wrappers with their
     options and option values; len(words) when nothing runs."""
@@ -164,8 +124,6 @@ def program_index(words: Sequence[str]) -> int:
         if wrapper is None:
             return index
         index = _wrapper_end(name, wrapper, words, index + 1)
-        if name == "rtk":
-            index = _rtk_runner_end(words, index)
     return len(words)
 
 
@@ -206,9 +164,6 @@ def _script(command: Command) -> Optional[str]:
     args = command.args
     if command.program == "eval":
         return " ".join(args) or None
-    if command.program in RTK_RUNNERS and "rtk" in (
-            word.rsplit("/", 1)[-1] for word in command.words[:command.start]):
-        return _rtk_script(args)
     if command.program in SHELLS:
         index = dash_c_index(args)
         if index is not None and index + 1 < len(args):

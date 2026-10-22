@@ -145,7 +145,7 @@ tool; full detail: read `references/fresh-install-verification.md` when verifyin
   `--version`/`--help` print to stderr by design — capture `2>&1`, assert substring
   (`1.0.6+<commit>`), never exact equality.
 - **THE FALSE-PASS TRAP — a config-gated engine degrades silently.** On a fresh bank the
-  embedding provider is unset, so `memory_write` SKIPS embedding and `memory_search` runs
+  embedding provider is unset, so `add_memory` SKIPS embedding and `query` runs
   FTS5-only — an exact-keyword query still returns the entry, so a completely model-less
   install passes "search works". The empty-provider state is deliberate and user-surfaced
   (`model reset` prints "no engine (FTS5-only search)"), so the fix is not to change the
