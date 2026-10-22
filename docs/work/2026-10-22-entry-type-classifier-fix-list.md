@@ -579,3 +579,109 @@ In Core, beside the other rules — the place is right, and the *reason* is the 
 - `src/AiRaccoon.Core/Memory/EntryTypeWireNames.cs:45` — `Parse` refuses null with *"The entry type is required"*, which is right for the lookup and wrong for the defaulted query. The tool layer must substitute the default before parsing, and the class doc says nothing about a default path.
 - `tests/AiRaccoon.Tests/Unit/Memory/EntryTypeTests.cs:55` — `Parse_RefusesTheEmptySet` includes `"none"`, which is refused as an **unknown name**, not as the empty set. Two different rejections under one test name; split them, because if the vocabulary ever grows a `none` spelling the test would still pass while the meaning moved.
 - The bits mix two axes: `Memory` and `File` are row kinds inside the memory corpus, `Code` is a corpus. So `Memory | File` is today's whole memory corpus, and `memory` alone is **not** today's `kind=memory` (which returns file rows too). A client migrating from `kind=memory` to `entryType=memory` loses file rows silently. The class doc should say what each bit selects.
+
+## What needs to be done at `a7445a41`
+
+The list is written against the head this branch carried when the PR description was last
+rewritten. Everything here is open unless it says otherwise.
+
+### Done in this round
+
+- The PR description was stale — it was written for `4c71eba8` and still claimed "F1–F7 are fixed
+  at this head", quoted the old surface numbers (3280 passed of 3291), and omitted the parameter's
+  contract entirely. It now describes the head, quotes the current lanes (fast 5197 / slow 1599,
+  both 0 failed), documents the parameter contract as *here but unwired*, and lists the open items
+  below instead of the old F-list claim.
+- The description's claim that "SQLite cannot add a constraint to an existing table — it needs a
+  rebuild" was wrong for the ladder's own path: the value-domain `CHECK` rides on
+  `ALTER TABLE ... ADD COLUMN` without a rebuild, verified against a scratch bank. Only the banks
+  that already carry the column need one.
+
+### A. The merge gate (F7) — the PR cannot merge without these
+
+- **A1. The parameter's wiring (the plan's S6).** `query` takes the entry-type parameter with the
+  sum as its default; `get_entry` takes it with no default; the tool layer parses the string with
+  `EntryTypeWireNames.Parse` and turns the `ArgumentException` into `invalid-params: …`. The wire
+  form is a string, not a JSON array — the comma-separated list is the SDK's own flags encoding.
+- **A2. The Memory-only TTL rule**, on the one classifier: a transcript is Memory and may carry a
+  TTL, a File entry may not.
+
+### B. Blocking findings from the review of `abb21046`
+
+- **B1. The nullable-v20 population.** `CurrentVersion` was 20 and the ladder returns early for a
+  bank already at 20, so a bank that went through the first v20 build keeps a nullable column and
+  its NULL rows, and the backfill never runs on it. A v21 normalization step — or an explicit
+  "that population is unsupported" ruling — is needed.
+  *This became load-bearing with the in-flight v21 work:* the typed vec0 rebuild reads the row's
+  `entry_type` to choose the partition, so a NULL kind would file a vector under a NULL partition.
+  The peer's `EnsureEntryTypeColumnAsync` does not close this: it returns early when the column
+  already exists, so a nullable column stays nullable.
+- **B2. The doctor cannot count a NULL row.** Its unclassified predicate is `entry_type = 'none'`
+  and a NULL row satisfies neither it nor the unknown predicate, so it is counted as neither.
+  A NULL-row test belongs with the fix.
+- **B3. The sync merge's declared-kind branch is a second SQL home** for the kind domain
+  (`SyncService.cs:469` spells `'memory', 'file'` out). It must derive the domain from the one
+  vocabulary, and the parity coverage must reach it: a declared value, a `none` value, an unknown
+  value.
+- **B4. N3 — the repair paths normalise an unknown stored value away**, so the doctor's unknown
+  count can never report one. Unknown, undeclared and declared are three states; only the
+  undeclared one may be resolved from shape.
+
+### C. Blocking findings from the review of `10108e39`
+
+- **C1. The default's meaning is undecided.** The plan and the chunk both claim the sum "answers
+  exactly what today's default (`kind=both`) answers", but `kind=both` applies no kind filter
+  while the sum is a filter over three bits — so a row whose kind is `none` is in no bit and the
+  new default answers *less*. The contract has to say which it is: no filter, the three kinds, or
+  every *classified* row — and the plan's claim is amended to match.
+- **C2. `Single` does not refuse unknown bits.** `Single((EntryType)16)` returns the value
+  unchanged. One line (`Single` calls `RefuseUnknownBits` before the single-bit test) plus a case.
+
+### D. Nits, from both reviews
+
+- **D1.** The word `file` is spelled in two places (`EntryKindWireNames.cs:21`,
+  `EntryTypeWireNames.cs:23`); the test pins `memory` only. Derive one from the other, or pin both.
+- **D2.** `KnownBits = Default` couples "the kinds this build knows" to "the set a query asks for
+  by default". Name them separately.
+- **D3.** The class says "names" but carries the parameter's rules (parse, two refusals). A name
+  like `EntryTypeParameter` says what the thing is.
+- **D4.** `Parse(null)` refuses with "required" — right for the lookup, wrong for the defaulted
+  query. The doc says nothing about a default path.
+- **D5.** `Parse_RefusesTheEmptySet` includes `"none"`, which is refused as an unknown name, not
+  as the empty set. Two rejections under one test name.
+- **D6.** The bits mix two axes (`Memory` and `File` are row kinds inside the memory corpus,
+  `Code` is a corpus), so `memory` alone is not today's `kind=memory`. The plan's move #1 already
+  flags the old rows' meaning; the class doc should say what each bit selects.
+- **D7.** The parity fixture omits case sensitivity, a null path with a non-null source, and both
+  null; and it does not compare the sync "declared kind wins" half with `Resolve`.
+
+### E. The value domain — a decision, now framed correctly
+
+- **E1.** Put `CHECK (entry_type IN ('none','memory','file'))` on the DDL and on the ladder's
+  `ADD COLUMN` (both verified possible without a rebuild); the normalization step in B1 carries it
+  for the banks that already have the column. The reason it is worth doing is B4: while the repair
+  paths normalise unknown values away, the doctor can never report one.
+
+### F. The steps beyond this PR
+
+- **F1. The typed query** — the search filters on the stored kind, with the scope composition the
+  plan fixes: a `shared` query with type `Code` is empty by construction, and the refusal text
+  must not pretend otherwise.
+- **F2. The production typed vector partitions** — in flight in the branch worktree (v21,
+  ADR-0141: `type` as the second vec0 partition key). When it lands, the PR description's
+  "not here" table changes: native typed partitions move from *not here* to *here*.
+
+### G. Release chores, after the gate is met
+
+- **G1.** Bump `VERSION` to 2.1.0 (the release split: 2.0.0 is the rename alone, the entry types
+  ride in 2.1.0), add `docs/changelog/2.1.0-*.md`, and update the changelog index.
+- **G2.** The framework side that speaks the new names (ai-badger #650, the feed-badger change)
+  must land before the release ships.
+
+### H. PR hygiene
+
+- **H1.** Done — the description is rewritten against this head.
+- **H2.** GitHub refuses every inline review comment on this PR with "commit_id is not part of the
+  pull request" (and "The commitOID is not part of the pull request"), for every commit in it, and
+  the endpoint accepts neither `position` nor `subject_type`. The findings therefore live in the
+  two review summaries and in this record. That is a GitHub-side question, not a code one.
