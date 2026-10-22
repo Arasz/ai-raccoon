@@ -61,6 +61,22 @@ public sealed class EntryTypeWriteTests : IDisposable
         (await ReadEntryTypeAsync("acme")).ShouldBe("memory");
     }
 
+    /// <summary>
+    ///     A note that cites an ordinary file is still a MEMORY: the agent wrote it, and
+    ///     re-ingesting that file would not bring it back. The write path's provenance channel
+    ///     calls anything with a non-transcript source file a file, which filed 654 of 2,150
+    ///     agent notes on a live bank as documents.
+    /// </summary>
+    [RetryFact]
+    public async Task ANoteCitingAnOrdinaryFile_IsAMemory()
+    {
+        await _store.WriteAsync(
+            new MemoryWriteRequest("acme", "what the file said", SourceFile: "notes/probe.md"),
+            TestContext.Current.CancellationToken);
+
+        (await ReadEntryTypeAsync("acme")).ShouldBe("memory");
+    }
+
     /// <summary>An ingested document is a FILE: it mirrors a file on disk.</summary>
     [RetryFact]
     public async Task AnIngestedDocument_IsAFile()

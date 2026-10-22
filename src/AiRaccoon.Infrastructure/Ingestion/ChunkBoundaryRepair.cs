@@ -375,7 +375,7 @@ public sealed class ChunkBoundaryRepair(
                 createdAt = row.CreatedAt,
                 updatedAt = now,
                 sourceId = row.SourceId,
-                entryType = EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.FromSourceName(row.SourceType)),
+                entryType = EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.Classify(row.Path, row.SourceFile)),
                 chunkIndex = -1,
                 totalChunks = 0
             }, cancellationToken: cancellationToken));

@@ -178,3 +178,25 @@ indexable.
   reaches the 1,496 historical rows if the type is denormalised). See the section above.
 - **(c) The two placeholder names** — settled by the owner on 2026-10-21
   (`trigger_memory_sharing`, `get_memories_sharing_ranking`).
+
+## The release split (decided 2026-10-22)
+
+**2.0.0 is the rename alone. The entry types ride in 2.1.0.**
+
+The rename is a client-side string change with no effect on the engine and **no schema change at
+all** — the bank is untouched by an upgrade to 2.0.0. The entry-type wave brings schema v20: the
+denormalised `entry_type`, the ladder step, and the 1,496 transcript rows moving onto the Memory
+side — with its own failure shapes (a half-done backfill that must resume, a row with no
+provenance falling back to its shape). Carrying both in one release would let an upgrade fail in
+two independent ways and make a rollback of either drag the other.
+
+The parameter also lands on the search's hot path, and a rename release is the wrong debugging
+story for it: "did this ranking regression come from the rename or from the new parameter?" is a
+question a release should not create.
+
+And the contract is already public: ai-raccoon #909 is up, ai-badger #650 is timed against it,
+and "2.0.0 = the 30 new names" is what callers are writing against. Keeping that claim true is
+worth more than saving one minor version.
+
+The entry-type work continues on `task/air-entry-type-classifier`, which builds on the rename —
+so it is 2.1.0 by construction, and the rename's own verification pass is not invalidated by it.

@@ -14,12 +14,24 @@ namespace AiRaccoon.Tests.Unit.Memory;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class EntryTypeClassifierTests
 {
+    /// <summary>
+    ///     A row that mirrors a file on disk has path = source_file: it IS the file's chunk. Every
+    ///     other row is agent-written memory — a note that cites a file has a source file and is
+    ///     still a memory, because re-ingesting that file would not bring the note back.
+    /// </summary>
     [Theory]
-    [InlineData(SourceType.Manual, EntryType.Memory)]
-    [InlineData(SourceType.Transcript, EntryType.Memory)]
-    [InlineData(SourceType.File, EntryType.File)]
-    public void FromSource_MapsEverySourceType(SourceType source, EntryType expected) =>
-        EntryTypeClassifier.FromSource(source).ShouldBe(expected);
+    [InlineData("docs/guide.md", "docs/guide.md", EntryType.File)]
+    [InlineData("notes/probe.md", "notes/probe.md", EntryType.File)]
+    [InlineData("9f2c.md", "notes/probe.md", EntryType.Memory)]
+    [InlineData("9f2c.md", "hermes/20260806_215718_fd7f66", EntryType.Memory)]
+    [InlineData("9f2c.md", null, EntryType.Memory)]
+    public void Classify_KeysOnTheRowsShape(string? path, string? sourceFile, EntryType expected) =>
+        EntryTypeClassifier.Classify(path, sourceFile).ShouldBe(expected);
+
+    /// <summary>An empty source file is no locator at all: the row is a memory.</summary>
+    [Fact]
+    public void Classify_AnEmptySourceFile_IsAMemory() =>
+        EntryTypeClassifier.Classify("docs/guide.md", "").ShouldBe(EntryType.Memory);
 
     /// <summary>The stored form and the wire form agree in both directions.</summary>
     [Theory]

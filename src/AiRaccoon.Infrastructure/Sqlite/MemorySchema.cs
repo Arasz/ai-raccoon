@@ -1394,11 +1394,12 @@ internal static class MemorySchema
     /// </summary>
     /// <summary>
     ///     v19→v20: the entry type a row holds, denormalised onto <c>entries.entry_type</c> so the
-    ///     query path can filter by it without a join. The backfill classifies by the row's SOURCE
-    ///     (memory_source.source_type): a manual source and a TRANSCRIPT source are memories (the
-    ///     agent wrote both), a file source is an ingested document. The row's own shape cannot
-    ///     say it — a transcript carries a source file and is chunked like a document — so the
-    ///     shape is only the fallback for a row with no provenance at all.
+    ///     query path can filter by it without a join. The backfill classifies every row by its
+    ///     SHAPE: a row that MIRRORS a file on disk has <c>path = source_file</c> and is a document;
+    ///     every other row is agent-written memory — its path is a synthetic <c>&lt;sha256&gt;.md</c>
+    ///     and its source file is a locator (a transcript it came from, or a file it cites). The
+    ///     provenance channel cannot make that distinction: the write path calls anything with a
+    ///     non-transcript source file a file, which filed 654 of 2,150 agent notes as documents.
     /// </summary>
     private static async Task MigrateToV20Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -1425,12 +1426,8 @@ internal static class MemorySchema
             """
             UPDATE entries
             SET entry_type = CASE
-                WHEN (SELECT ms.source_type FROM memory_source ms WHERE ms.id = entries.source_id)
-                     IN ('manual', 'transcript') THEN 'memory'
-                WHEN (SELECT ms.source_type FROM memory_source ms WHERE ms.id = entries.source_id) = 'file'
-                     THEN 'file'
-                WHEN entries.source_file IS NULL AND entries.total_chunks = 0 THEN 'memory'
-                ELSE NULL
+                WHEN entries.source_file IS NOT NULL AND entries.source_file = entries.path THEN 'file'
+                ELSE 'memory'
             END
             WHERE entry_type IS NULL
             """, cancellationToken: cancellationToken));

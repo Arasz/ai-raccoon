@@ -103,7 +103,7 @@ public sealed class ChunkBackfill(
                             createdAt = now,
                             updatedAt = now,
                             sourceId = row.SourceId,
-                            entryType = EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.FromSourceName(row.SourceType)),
+                            entryType = EntryTypeClassifier.ToStoredValue(EntryTypeClassifier.Classify(row.Path, row.SourceFile)),
                             // Position unknown here — the bank-wide recompute below fills it in.
                             chunkIndex = -1,
                             totalChunks = 0
