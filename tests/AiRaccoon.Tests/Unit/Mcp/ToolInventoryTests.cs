@@ -179,10 +179,13 @@ public class ToolInventoryTests
     public void PackagedReadme_ToolsTable_ListsExactlyTheRegisteredTools()
     {
         var readme = File.ReadAllText(RepoFile("docs/reference/agent-memory-server.md"));
-        // memory_* (10 memory tools et al.) plus code_* (WP6, the code corpus's own tool family
-        // -- code_\w+, not a hardcoded get_entry, so a second code tool doesn't need this regex
-        // edited too; integration review small item 1) plus project_* (ADR-0089 6b, same reason).
-        var documentedTools = Regex.Matches(readme, @"^\|\s*`(memory_\w+|code_\w+|project_\w+)`", RegexOptions.Multiline)
+        // The tools table only: the names are no longer prefixed by family (2.0.0 dropped the
+        // memory_/code_/project_ prefixes), so the match is scoped to the table's own section
+        // rather than to a name prefix -- a prefix would go stale with the next rename, and the
+        // table is the thing that must list the registry exactly.
+        var toolsSection = readme[readme.IndexOf("## Tools (", StringComparison.Ordinal)..];
+        toolsSection = toolsSection[..toolsSection.IndexOf("\n## ", StringComparison.Ordinal)];
+        var documentedTools = Regex.Matches(toolsSection, @"^\|\s*`([a-z][a-z0-9_]*)`", RegexOptions.Multiline)
             .Select(m => m.Groups[1].Value)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToList();

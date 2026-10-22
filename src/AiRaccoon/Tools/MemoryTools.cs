@@ -36,7 +36,6 @@ public sealed partial class MemoryTools(
 
 
     private const string TnAddMemory = "add_memory";
-    private const string TnGetEntry = "get_entry";
     private const string TnQuery = "query";
     private const string TnGetIndex = "get_index";
     private const string TnGetStoreStatistics = "get_store_statistics";
@@ -78,27 +77,6 @@ public sealed partial class MemoryTools(
 
         var entry = await writes.WriteAsync(request, cancellationToken);
         var result = new WriteResult(entry.Hash, entry.Path, entry.Context, entry.CreatedAt, entry.Stored, entry.Reason);
-        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
-        return envelope;
-    }
-
-    [McpServerTool(Name = TnGetEntry)]
-    [McpToolScope(ToolScope.All)]
-    [Description(
-        "Reads one entry's full content by its content hash, as returned by add_memory or query. An unknown hash is refused as unknown-hash.")]
-    public async Task<ApiEnvelope<GetResult>> Get(
-        [Description("The project id; every memory operation is scoped to a project.")]
-        [Optional][DefaultParameterValue("")] string projectId,
-        [Description("The content hash to read.")]
-        string hash,
-        CancellationToken cancellationToken = default)
-    {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetEntry, cancellationToken);
-        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
-
-        var entry = await store.GetAsync(canonical, hash, cancellationToken)
-                    ?? throw new UnknownHashException(hash, canonical);
-        var result = new GetResult(entry.Hash, entry.Value, entry.Path, entry.Context, entry.CreatedAt);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         return envelope;
     }

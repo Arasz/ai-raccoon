@@ -18,41 +18,41 @@ public sealed class ScopeCheckTests
     /// <summary>Ordinary projects only: the tools the reserved target refuses.</summary>
     private static readonly string[] ProjectScope =
     [
-        "get_entry",
-        "delete_entry",
+        "add_memory",
+        "close_workspace",
         "delete_context",
+        "delete_entry",
         "delete_memory_from_ranking",
+        "discard_workspace",
         "get_memories_sharing_ranking",
+        "get_workspace_status",
+        "initialize_workspace",
         "set_memory_ttl",
         "share_memory",
-        "trigger_memory_sharing",
         "trigger_memory_cleanup",
-        "initialize_workspace",
-        "close_workspace",
-        "discard_workspace",
-        "get_workspace_status",
-        "add_memory"
+        "trigger_memory_sharing",
     ];
 
     /// <summary>Any target: the tools the reserved target accepts — reads, ingestion, watches, telemetry.</summary>
     private static readonly string[] AllScope =
     [
+        "add_watch",
         "embed_deferred_entries",
+        "get_engine_statistics",
         "get_entry",
+        "get_index",
+        "get_project_id",
+        "get_quality_report",
+        "get_store_statistics",
+        "get_watch_status",
         "ingest_directory",
         "ingest_file",
-        "get_index",
-        "get_engine_statistics",
+        "query",
+        "remove_watch",
+        "save_project_id_token",
         "set_memory_usage_record",
         "set_query_result_grade",
-        "query",
-        "get_store_statistics",
         "sync_to_cloud",
-        "add_watch",
-        "remove_watch",
-        "get_watch_status",
-        "get_project_id",
-        "save_project_id_token"
     ];
 
     private readonly IToolNameScope _names = new ToolNameScope();

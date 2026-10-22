@@ -40,7 +40,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
     private Exception? _lastError;
     private ApiEnvelope<MemoryTools.SearchResultList>? _lastSearchEnvelope;
     private JsonObject? _lastSearchJson;
-    private ApiEnvelope<CodeTools.CodeGetResult>? _lastCodeGetEnvelope;
+    private ApiEnvelope<EntryTools.GetEntryResult>? _lastCodeGetEnvelope;
     private string? _lastFilePath;
     private string? _manifestDir;
     private string? _rescanProbePath;
@@ -111,7 +111,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         _lastError = null;
         try
         {
-            _lastCodeGetEnvelope = await Ctx.CodeTools.CodeGet(projectId, hash);
+            _lastCodeGetEnvelope = await Ctx.EntryTools.GetEntry(projectId, hash);
         }
         catch (Exception ex)
         {

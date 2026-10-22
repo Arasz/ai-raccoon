@@ -33,7 +33,7 @@ namespace AiRaccoon.Tests.BDD;
 ///     <see cref="IWatchStore" /> wired in (TestData.CreateMemoryStore does not expose those
 ///     parameters), which several code-corpus scenarios need for direct ingest_file/
 ///     ingest_directory calls to honor ai-raccoon.ignore. Composes the same real stack
-///     (SqliteMemoryStore, the watch pipeline, MemoryTools/CodeTools/WatchTools) by hand instead,
+///     (SqliteMemoryStore, the watch pipeline, MemoryTools/EntryTools/WatchTools) by hand instead,
 ///     with a StubCodeChunker (real line ranges, no token-budget/brace logic — WP2 concern, not
 ///     this feature's) and a real CodeEmbedder over a FakeCodeEmbeddingService (deterministic
 ///     768-dim vectors, no HF download, no real model I/O — mirrors CodeReindexJobTests).
@@ -73,7 +73,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
             new SearchDispatcher(Store, CodeSearch, SearchQuality, TestData.SharedScope),
             new QueryGuardService(Settings), new MemoryWriteService(Store, new FakePromotionQueue(), TestData.SharedScope),
             new NoOpMeasurementRecorder(), Settings, NullLogger<MemoryTools>.Instance, FakeEmbeddingService);
-        CodeTools = new CodeTools(CodeSearch, gate);
+        EntryTools = new EntryTools(Store, CodeSearch, gate);
 
         ComposeWatchStack();
     }
@@ -115,7 +115,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
 
     public MemoryTools MemoryTools { get; }
 
-    public CodeTools CodeTools { get; }
+    public EntryTools EntryTools { get; }
 
     /// <summary>Backs <see cref="CodeEmbedder" />: deterministic vectors, scriptable failure for the
     /// "configured but unloadable" scenario, no real model I/O ever.</summary>
