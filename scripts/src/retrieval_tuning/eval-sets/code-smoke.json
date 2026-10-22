@@ -119,10 +119,10 @@
     {
       "id": "CS-08",
       "category": "Code (MCP tool)",
-      "query": "reading one code chunk's full source by its content hash, mirrors get_entry",
-      "expectedSource": "src:AiRaccoon:Tools:CodeTools.cs",
+      "query": "reading one entry's full content by its content hash, whichever corpus owns it",
+      "expectedSource": "src:AiRaccoon:Tools:EntryTools.cs",
       "expectedHash": null,
-      "answerSpan": "Reads one code chunk's full source by its content hash",
+      "answerSpan": "Reads one entry's full content by its content hash",
       "targetProjectId": "ai-raccoon",
       "targetScope": "project",
       "kind": "code",
