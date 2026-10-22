@@ -1434,28 +1434,38 @@ internal static class MemorySchema
             """, cancellationToken: cancellationToken));
     }
 
+    /// <summary>
+    ///     One vec table the v19 step rebuilds: which table, the columns it copies, and the
+    ///     dimension read from it. The dimension is read from the table itself, so a spec carries
+    ///     it unset until the read fills it; only a read spec reaches the rebuild.
+    /// </summary>
+    private sealed record VecRebuild(string Table, string Source, string Ctx, string Column, string Where, int Dimension = 0);
+
     private static async Task MigrateToV19Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var rebuilds = new List<(string Table, int Dimension, string Source, string Ctx, string Column, string Where)>();
-        foreach (var (table, source, ctx, column, where) in new[]
+        var rebuilds = new List<VecRebuild>();
+        foreach (var spec in new[]
                  {
-                     ("vec_entries", "entries", MemorySql.ContextKeyExpression(""), "embedding",
+                     new VecRebuild("vec_entries", "entries", MemorySql.ContextKeyExpression(""), "embedding",
                          "embed_state = 'embedded' AND embedding IS NOT NULL"),
-                     ("vec_structure", "entries", MemorySql.ContextKeyExpression(""), "structure_embedding",
+                     new VecRebuild("vec_structure", "entries", MemorySql.ContextKeyExpression(""), "structure_embedding",
                          "structure_embedding IS NOT NULL"),
-                     ("vec_code", "code_entries", "project_id", "embedding",
+                     new VecRebuild("vec_code", "code_entries", "project_id", "embedding",
                          "embed_state = 'embedded' AND embedding IS NOT NULL")
                  })
         {
             var sql = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
                 "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = @table",
-                new { table }, cancellationToken: cancellationToken));
+                new { table = spec.Table }, cancellationToken: cancellationToken));
             if (sql is null || sql.Contains("partition key", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            rebuilds.Add((table, await ReadVecDimensionAsync(connection, table, cancellationToken), source, ctx, column, where));
+            rebuilds.Add(spec with
+            {
+                Dimension = await ReadVecDimensionAsync(connection, spec.Table, cancellationToken)
+            });
         }
 
         if (rebuilds.Count == 0)
