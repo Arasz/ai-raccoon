@@ -110,6 +110,50 @@ public sealed class DoctorCommandsTests : IDisposable
         ]);
     }
 
+    /// <summary>The doctor counts rows with no kind and rows with a kind this build does not know.</summary>
+    [RetryFact]
+    public async Task Doctor_ReportsUnclassifiedAndUnknownKindCounts()
+    {
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(new CommandDefinition("PRAGMA ignore_check_constraints=ON",
+                cancellationToken: TestContext.Current.CancellationToken));
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO entries (hash, value, project_id, scope, created_at, updated_at, entry_type)
+                VALUES ('k1', 'one', 'acme', 'project', 0, 0, 'none'),
+                       ('k2', 'two', 'acme', 'project', 0, 0, 'none'),
+                       ('k3', 'three', 'acme', 'project', 0, 0, 'future'),
+                       ('k4', 'four', 'acme', 'project', 0, 0, 'memory')
+                """, cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        var (_, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+
+        var lines = Lines(outp);
+        lines.ShouldContain("entries without a kind: 2");
+        lines.ShouldContain("entries with an unknown kind: 1");
+    }
+
+    [RetryFact]
+    public async Task Doctor_OmitsUnknownLine_WhenZero()
+    {
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                INSERT INTO entries (hash, value, project_id, scope, created_at, updated_at, entry_type)
+                VALUES ('k1', 'one', 'acme', 'project', 0, 0, 'none'),
+                       ('k2', 'two', 'acme', 'project', 0, 0, 'memory')
+                """, cancellationToken: TestContext.Current.CancellationToken));
+        }
+
+        var (_, outp, _) = await Run(CreateDoctor(), ["doctor"]);
+
+        outp.ShouldContain("entries without a kind: 1");
+        outp.ShouldNotContain("unknown kind");
+    }
+
     /// <summary>
     ///     The threads line is shared by both corpora and must survive the extraction as exactly
     ///     one line — every existing threads assertion is a ShouldContain, which passes on 1 or 2
