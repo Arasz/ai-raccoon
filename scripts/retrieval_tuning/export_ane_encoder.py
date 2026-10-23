@@ -11,7 +11,8 @@ model_fp16.onnx; inputs stay int64 either way.
 --share-weights-with <product model dir> (fp16 only) writes a graph that carries no weights of its
 own: model_fp16.onnx reads the product dir's model_fp16.onnx_data at the product graph's own
 offsets (see retrieval_tuning.shared_weights), and model_fp16.onnx_data in --out is a byte copy of
-that file. Shipped, the graph would sit next to the product's model_fp16.onnx.
+that file. Shipped, the graph would sit next to the product's model_fp16.onnx; it carries the
+COREML_CACHE_KEY metadata so ONNX Runtime reuses its compiled CoreML model across install paths.
 
 Usage:
     python3 export_ane_encoder.py --layout plain|ane --out <dir> [--max-len 1024] [--dtype fp16|fp32]
@@ -33,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import onnx  # noqa: E402
 import torch  # noqa: E402
 
-from retrieval_tuning import ane_encoder, shared_weights  # noqa: E402
+from retrieval_tuning import ane_encoder, coreml_cache_key, shared_weights  # noqa: E402
 
 COPIED_FILES = ("tokenizer.json", "tokenizer_config.json", "config.json")
 MODEL_NAME = "model_fp16.onnx"
@@ -102,6 +103,7 @@ def _export_shared(module: torch.nn.Module, out: Path, product_dir: Path) -> Non
     with tempfile.TemporaryDirectory() as tmp:
         _export_onnx(module, Path(tmp))
         plan = shared_weights.share_weights(Path(tmp) / MODEL_NAME, product_dir / MODEL_NAME, out / MODEL_NAME, heads)
+    coreml_cache_key.stamp(out / MODEL_NAME)
     data = out / f"{MODEL_NAME}_data"
     data.unlink(missing_ok=True)
     # A copy: ORT refuses a symlink that resolves outside the model dir, onnx a multiply-linked file.

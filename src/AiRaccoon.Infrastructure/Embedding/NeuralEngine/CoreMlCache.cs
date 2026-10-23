@@ -90,13 +90,18 @@ internal sealed partial class CoreMlCache
         }
     }
 
-    /// <summary>Deletes every other key and ORT version's set that no process holds, never following a path out of the cache root.</summary>
+    /// <summary>
+    ///     Deletes every other key and ORT version's set that no process holds, and every compiled model in this set
+    ///     whose source graph is gone, never following a path out of the cache root.
+    /// </summary>
     public void Prune()
     {
         if (!Directory.Exists(_root))
         {
             return;
         }
+
+        PruneOrphanedCompiles();
 
         foreach (var keyDirectory in Directory.EnumerateDirectories(_root))
         {
@@ -255,6 +260,61 @@ internal sealed partial class CoreMlCache
         Log.StaleSetPruned(_logger, set);
     }
 
+    /// <summary>
+    ///     Deletes each bucket's compiled models that ORT keyed by a graph path which no longer exists — one per
+    ///     uninstalled tool version. The stable-key model and any model without a recorded path are kept.
+    /// </summary>
+    private void PruneOrphanedCompiles()
+    {
+        var computeUnits = Path.Combine(SetDirectory, ComputeUnitsDirectory);
+        if (!Directory.Exists(computeUnits) || !IsInsideRoot(computeUnits))
+        {
+            return;
+        }
+
+        string[] buckets;
+        try
+        {
+            buckets = Directory.GetDirectories(computeUnits);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.WriteFailed(_logger, "delete an orphaned compiled model in", computeUnits, ex.Message);
+            return;
+        }
+
+        foreach (var bucket in buckets)
+        {
+            try
+            {
+                PruneOrphanedCompiles(bucket);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.WriteFailed(_logger, "delete an orphaned compiled model in", bucket, ex.Message);
+            }
+        }
+    }
+
+    private void PruneOrphanedCompiles(string bucket)
+    {
+        foreach (var compiled in Directory.EnumerateDirectories(bucket))
+        {
+            var modelPath = Path.Combine(compiled, "model.txt");
+            if (Path.GetFileName(compiled) == CoreMlGraph.CacheKey || !IsInsideRoot(compiled) || !File.Exists(modelPath))
+            {
+                continue;
+            }
+
+            var graph = File.ReadAllText(modelPath).Trim();
+            if (graph.Length > 0 && !File.Exists(graph))
+            {
+                Directory.Delete(compiled, true);
+                Log.StaleSetPruned(_logger, compiled);
+            }
+        }
+    }
+
     /// <summary>True when <paramref name="path" /> is a real directory (not a link) strictly under the cache root.</summary>
     private bool IsInsideRoot(string path) =>
         new DirectoryInfo(path).LinkTarget is null
@@ -287,7 +347,7 @@ internal sealed partial class CoreMlCache
         public static partial void WaitingForOtherProcess(ILogger logger, string directory);
 
         [LoggerMessage(EventId = 440, Level = LogLevel.Information,
-            Message = "Deleted a Neural Engine model cache for another model or ONNX Runtime version: {Directory}.")]
+            Message = "Deleted a Neural Engine model cache for another model, ONNX Runtime version or uninstalled tool version: {Directory}.")]
         public static partial void StaleSetPruned(ILogger logger, string directory);
 
         [LoggerMessage(EventId = 441, Level = LogLevel.Warning,

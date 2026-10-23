@@ -73,6 +73,44 @@ public sealed class BundledEngineCoreMlSessionTests(ITestOutputHelper output) : 
         output.WriteLine($"cache size: {sizeMiB:F0} MiB");
     }
 
+    [RetryFact]
+    public void TwoInstallPaths_ShareOneCompiledModel_NamedByTheGraphsCacheKey()
+    {
+        if (!OperatingSystem.IsMacOS() || RuntimeInformation.ProcessArchitecture != Architecture.Arm64)
+        {
+            Assert.Skip("the CoreML Neural Engine path runs on macOS on Apple Silicon only");
+        }
+
+        var bucket = CoreMlGraph.Buckets[0];
+        var cacheDirectory = Path.Combine(_dataRoot, "coreml-cache", "bucket");
+        foreach (var version in (string[])["2.2.0", "2.3.0"])
+        {
+            var install = InstallCopy(version);
+            var factory = new CoreMlSessionFactory(Path.Combine(install, CoreMlGraph.FileName), Path.Combine(install, "model_fp16.onnx"),
+                new EmbeddingTokenizerFactory().Create(Descriptor(), BundledModel.ResolveDirectory()), Descriptor(), 0,
+                NullLogger.Instance);
+            using var session = factory.CreateBucket(bucket, cacheDirectory);
+            session.Run(new long[bucket], new long[bucket]).ShouldNotBeEmpty();
+        }
+
+        Directory.GetDirectories(cacheDirectory).Select(Path.GetFileName).ShouldBe([CoreMlGraph.CacheKey],
+            "a compiled model per install path means every tool update compiles and keeps another copy");
+    }
+
+    /// <summary>The ANE graph and the weights it reads, copied the way a tool install lays them out under a versioned path.</summary>
+    private string InstallCopy(string version)
+    {
+        var source = BundledModel.ResolveDirectory();
+        var install = Path.Combine(_dataRoot, "store", version);
+        Directory.CreateDirectory(install);
+        foreach (var file in (string[])[CoreMlGraph.FileName, CoreMlGraph.WeightsFileName])
+        {
+            File.Copy(Path.Combine(source, file), Path.Combine(install, file));
+        }
+
+        return install;
+    }
+
     private async Task<(NeuralEngineEmbeddingGenerator Generator, string Message)> SettledGeneratorAsync(
         EmbeddingSettings settings, CancellationToken ct)
     {
