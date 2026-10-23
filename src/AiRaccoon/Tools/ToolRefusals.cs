@@ -53,6 +53,7 @@ internal static partial class ToolRefusals
         // get_project_id: no registered project has the exact name, or several do.
         [typeof(ProjectNotFoundException)] = "project-not-found",
         [typeof(ProjectNameAmbiguousException)] = "project-name-ambiguous",
+        [typeof(ReservedProjectNameException)] = "reserved-name",
         // Package E2: the pull merged a same-alias-different-winner map row — a human must pick the winner.
         [typeof(SyncAliasConflictException)] = "sync-alias-conflict",
         // The install this process started from was replaced/removed under it (e.g. 'dotnet tool

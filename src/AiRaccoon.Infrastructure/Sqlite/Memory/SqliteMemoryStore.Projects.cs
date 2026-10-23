@@ -23,6 +23,11 @@ public sealed partial class SqliteMemoryStore : IProjectRegistry
             return;
         }
 
+        if (_scope.IsReserved(name))
+        {
+            throw new ReservedProjectNameException();
+        }
+
         await connection.ExecuteAsync(new CommandDefinition(
                 MemorySql.InsertProject,
                 new { id = canonical, name, createdAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
