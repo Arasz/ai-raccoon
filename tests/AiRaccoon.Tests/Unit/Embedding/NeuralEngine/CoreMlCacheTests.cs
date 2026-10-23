@@ -173,6 +173,34 @@ public sealed class CoreMlCacheTests : IDisposable
     }
 
     [Fact]
+    public void Prune_LogsAndCarriesOn_WhenABucketCannotBeListed()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix file modes make the bucket unreadable");
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var logger = new FakeLogger();
+        var cache = new CoreMlCache(CacheRoot, Key, Ort, logger);
+        var bucket = cache.BucketDirectory(CoreMlGraph.Buckets[0]);
+        Directory.CreateDirectory(bucket);
+        var otherSha = Seed(Path.Combine(CacheRoot, "000000000000", Ort));
+        File.SetUnixFileMode(bucket, UnixFileMode.None);
+        try
+        {
+            Should.NotThrow(cache.Prune);
+        }
+        finally
+        {
+            File.SetUnixFileMode(bucket, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        logger.Collector.GetSnapshot().ShouldContain(record => record.Id.Id == 441);
+        Directory.Exists(otherSha).ShouldBeFalse();
+    }
+
+    [Fact]
     public void Prune_DeletesOtherShaAndOrtSets_ButKeepsTheCurrentOne()
     {
         var cache = Cache();

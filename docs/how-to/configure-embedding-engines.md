@@ -186,8 +186,8 @@ longer than 1024 tokens run on a plain CPU session, never on a bucket.
 
 **Cache.** The compiled sessions live under `<data-root>/coreml-cache/`, about 808 MiB across the
 four buckets, with their state in `coreml-cache/status.json`. A tool update reuses it; the first
-start after an update that changes the model compiles once more and deletes the old set. `ai-raccoon doctor` reports the
-device state and cache size: `coreml: <state> ... cache <N> MiB`.
+start after an update that changes the model compiles once more and deletes the old set.
+`ai-raccoon doctor` reports the device state and cache size: `coreml: <state> ... cache <N> MiB`.
 
 **Switching back.** `ai-raccoon settings model device auto` (or `gpu`, `cpu`, `mlx`) restores the
 previous chain on the next restart. The cache stays in place, so switching back to `coreml` later

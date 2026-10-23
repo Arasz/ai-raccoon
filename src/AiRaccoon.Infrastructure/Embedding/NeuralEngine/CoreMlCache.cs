@@ -274,27 +274,32 @@ internal sealed partial class CoreMlCache
 
         foreach (var bucket in Directory.EnumerateDirectories(computeUnits))
         {
-            foreach (var compiled in Directory.EnumerateDirectories(bucket))
+            try
             {
-                var modelPath = Path.Combine(compiled, "model.txt");
-                if (Path.GetFileName(compiled) == CoreMlGraph.CacheKey || !IsInsideRoot(compiled) || !File.Exists(modelPath))
-                {
-                    continue;
-                }
+                PruneOrphanedCompiles(bucket);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.WriteFailed(_logger, "delete an orphaned compiled model in", bucket, ex.Message);
+            }
+        }
+    }
 
-                try
-                {
-                    var graph = File.ReadAllText(modelPath).Trim();
-                    if (graph.Length > 0 && !File.Exists(graph))
-                    {
-                        Directory.Delete(compiled, true);
-                        Log.StaleSetPruned(_logger, compiled);
-                    }
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    Log.WriteFailed(_logger, "delete an orphaned compiled model in", compiled, ex.Message);
-                }
+    private void PruneOrphanedCompiles(string bucket)
+    {
+        foreach (var compiled in Directory.EnumerateDirectories(bucket))
+        {
+            var modelPath = Path.Combine(compiled, "model.txt");
+            if (Path.GetFileName(compiled) == CoreMlGraph.CacheKey || !IsInsideRoot(compiled) || !File.Exists(modelPath))
+            {
+                continue;
+            }
+
+            var graph = File.ReadAllText(modelPath).Trim();
+            if (graph.Length > 0 && !File.Exists(graph))
+            {
+                Directory.Delete(compiled, true);
+                Log.StaleSetPruned(_logger, compiled);
             }
         }
     }
