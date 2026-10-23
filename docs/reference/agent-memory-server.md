@@ -163,7 +163,9 @@ config channel (see [Command-line options](#command-line-options)).
   `relativeScore` is hybrid-score-relative like memory's (the top hit is always 1.0, others
   proportional to their fused score) — not the positional, rank-derived placeholder of an earlier
   wave. Code hits carry `lineStart`/`lineEnd` (1-based) instead of `chunkIndex`/`totalChunks`;
-  read the full chunk with `get_entry`. Every `query` writes a `search_quality` row
+  read the full chunk with `get_entry`. A memory-section hit carries `entryKind` — `memory`,
+  `file`, or `none` for an unclassified row — which is the `entryType` to pass `get_entry`
+  for a `memory` or `file` hit. Every `query` writes a `search_quality` row
   (ADR-0094): a selection including Memory or File records the memory hit count and files; a Code-only
   selection records the code hit count with an empty
   file list. Code paths never enter the table — neither the code corpus nor the telemetry

@@ -120,6 +120,6 @@ public sealed partial class SqliteMemoryStore
     [
         .. rows.Select(row => new MemorySearchResult(
             row.Hash, row.Ranking, row.Path, string.Empty,
-            row.SourceFile, row.ChunkIndex, row.TotalChunks))
+            row.SourceFile, row.ChunkIndex, row.TotalChunks, EntryKind: row.EntryKind))
     ];
 }

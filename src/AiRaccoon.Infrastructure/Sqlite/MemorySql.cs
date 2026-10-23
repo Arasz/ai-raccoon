@@ -167,15 +167,20 @@ internal static class MemorySql
                                                   LIMIT 200
                                                   """;
 
+    /// <summary>A search hit's kind: the declared kind, or <c>none</c> for a row this build cannot classify.</summary>
+    private static readonly string HitKind =
+        $"CASE WHEN e.entry_type IN ('{EntryKindWireNames.Memory}', '{EntryKindWireNames.File}') THEN e.entry_type "
+        + $"ELSE '{EntryKindWireNames.None}' END";
+
     // Hash tie-break (owner ruling): an exact bm25 score tie is real over short chunks, and without
     // a total order the result is whatever rowid sqlite happens to visit first -- ties by e.hash
     // instead, matching the harness's ORDER BY bm25(...), e.hash port
     // (scripts/retrieval_tuning/llamaindex_harness/ingest.py's _bank_fts_order).
-    public const string SearchByFilter = """
+    public static readonly string SearchByFilter = $$"""
                                          SELECT e.hash AS Hash, bm25(entries_fts, 1.0, 8.0, 4.0) AS Ranking,
                                                 e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
                                                 e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks,
-                                                e.id AS Id
+                                                e.id AS Id, {{HitKind}} AS EntryKind
                                          FROM entries_fts
                                          JOIN entries e ON e.id = entries_fts.rowid
                                          WHERE entries_fts MATCH @query AND {filter}
@@ -199,10 +204,10 @@ internal static class MemorySql
     // (docs/plans/2026-08-08-search-knn-perf.md §3.1/§3.4). Row position is the RRF rank; `ORDER BY
     // v.distance, e.path` preserves the existing distance-tie break. Vector hits carry a fallback
     // snippet built in C# (the FTS list's snippet() wins for docs both modalities retrieve).
-    private const string VectorSearchTemplate = """
+    private static readonly string VectorSearchTemplate = $$"""
                                                SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
                                                       v.distance AS Distance, e.source_file AS SourceFile,
-                                                      e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks
+                                                      e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks, {{HitKind}} AS EntryKind
                                                FROM (SELECT rowid, distance FROM vec_entries
                                                      WHERE ctx = @ctx AND {typeFilter} embedding MATCH @queryVector AND k = @limit) v
                                                JOIN entries e ON e.id = v.rowid
@@ -213,10 +218,10 @@ internal static class MemorySql
     // Structure modality: cosine KNN over the heading-path vectors (vec_structure),
     // same shape as the content query (source identity included) so both lists fuse in C# by
     // entry hash.
-    private const string StructureVectorSearchTemplate = """
+    private static readonly string StructureVectorSearchTemplate = $$"""
                                                         SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
                                                                v.distance AS Distance, e.source_file AS SourceFile,
-                                                               e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks
+                                                               e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks, {{HitKind}} AS EntryKind
                                                         FROM (SELECT rowid, distance FROM vec_structure
                                                               WHERE ctx = @ctx AND {typeFilter} embedding MATCH @queryVector AND k = @limit) v
                                                         JOIN entries e ON e.id = v.rowid

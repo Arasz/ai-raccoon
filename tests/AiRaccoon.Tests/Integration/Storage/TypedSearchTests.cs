@@ -193,6 +193,7 @@ public sealed class TypedSearchTests
             mixed.Results.Select(row => row.Hash).ShouldBe(["structure-file", "content-memory"]);
             memory.Results.Select(row => row.Hash).ShouldBe(["content-memory"]);
             all.Results.Select(row => row.Hash).ShouldBe(["structure-file", "unclassified", "content-memory"]);
+            all.Results.Select(row => row.EntryKind).ShouldBe(["file", "none", "memory"]);
             fts.Results.Select(row => row.Hash).ShouldBe(["structure-file"]);
             fallbackFts.Results.Select(row => row.Hash).ShouldBe(["structure-file"]);
             mixed.Results[0].ContentCosine.ShouldNotBeNull().ShouldBe(-1, 0.00001);

@@ -51,6 +51,8 @@ public sealed partial class SqliteMemoryStore
 
         /// <summary>entries.id — the FTS5 rowid, used to resolve the deferred snippet by row identity rather than hash.</summary>
         public long Id { get; init; }
+
+        public string? EntryKind { get; init; }
     }
 
     /// <summary>Row shape for <see cref="MemorySql.FtsSnippetsForSurvivors" />.</summary>
@@ -76,6 +78,8 @@ public sealed partial class SqliteMemoryStore
         public int ChunkIndex { get; init; }
 
         public int TotalChunks { get; init; }
+
+        public string? EntryKind { get; init; }
     }
 
     /// <summary>A vector row carrying its alpha-fused rank score and, when available, its own raw content cosine.</summary>

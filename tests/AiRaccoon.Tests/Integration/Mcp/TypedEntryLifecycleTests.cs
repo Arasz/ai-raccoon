@@ -111,6 +111,24 @@ public sealed class TypedEntryLifecycleTests : IAsyncLifetime
     }
 
     [RetryFact]
+    public async Task QueryHits_CarryTheirKind_AndTheKindRoundTripsIntoGetEntry()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var memory = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, $"{QueryTerm} agent note"), ct);
+        await SeedFileAsync("file-hash", $"{QueryTerm} mirrored file");
+
+        var hits = (await _memoryTools.Search(ProjectId, QueryTerm, "kind-session", entryType: "memory,file",
+            ftsWeight: 1, vectorWeight: 0, minRelativeScore: 0, cancellationToken: ct)).Data!.Results;
+
+        hits.Single(hit => hit.Hash == memory.Hash).EntryKind.ShouldBe("memory");
+        hits.Single(hit => hit.Hash == "file-hash").EntryKind.ShouldBe("file");
+        foreach (var hit in hits)
+        {
+            (await _entryTools.GetEntry(ProjectId, hit.Hash, hit.EntryKind!, ct)).Data!.Hash.ShouldBe(hit.Hash);
+        }
+    }
+
+    [RetryFact]
     public async Task FileTtl_RefusesSetButAllowsClear_WhileMemoryCanChange()
     {
         var ct = TestContext.Current.CancellationToken;
