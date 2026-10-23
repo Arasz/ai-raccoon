@@ -45,7 +45,7 @@ public sealed class TypedEntryLifecycleTests : IAsyncLifetime
         var guard = new MemoryAccessGuard(_store);
         var gate = new ToolGate(guard, new FakePromotionQueue(), new NeverMigratingStore(),
             new AllowingRegistrationGuard(), TestData.ScopeCheck);
-        var quality = new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance);
+        var quality = new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance, TimeProvider.System);
         _memoryTools = new MemoryTools(_store, gate,
             new SearchDispatcher(_store, codeSearch, quality, TestData.SharedScope),
             new QueryGuardService(settings), new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope),

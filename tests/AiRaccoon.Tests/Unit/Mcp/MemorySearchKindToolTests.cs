@@ -497,7 +497,7 @@ public sealed class MemorySearchKindToolTests
     {
         _store.StubResults = [new MemorySearchResult("mem-hash", 0.9, "p.md", "memory hit")];
         var quality = new SqliteSearchQualityService(new ThrowingConnectionFactory(),
-            NullLogger<SqliteSearchQualityService>.Instance);
+            NullLogger<SqliteSearchQualityService>.Instance, TimeProvider.System);
         var tools = new MemoryTools(_store,
             new ToolGate(new MemoryAccessGuard(_store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck),
             new SearchDispatcher(_store, _codeSearch, quality, TestData.SharedScope), new QueryGuardService(_settings),
@@ -670,8 +670,8 @@ public sealed class MemorySearchKindToolTests
             CancellationToken ct = default) =>
             Task.FromResult(true);
 
-        public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
-            CancellationToken ct = default) =>
+        public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset? from,
+            CancellationToken cancellationToken = default) =>
             Task.FromResult(new SearchQualityMetrics(0, 0, 0, 0, 0, 0, 0));
     }
 

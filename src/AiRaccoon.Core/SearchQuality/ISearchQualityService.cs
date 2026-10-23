@@ -83,12 +83,13 @@ public interface ISearchQualityService
         CancellationToken ct = default);
 
     /// <summary>
-    ///     Aggregates quality metrics for a project over a time window.
+    ///     Aggregates quality metrics for a project over a time window starting at
+    ///     <paramref name="from" />, or seven days before now when it is null.
     /// </summary>
     Task<SearchQualityMetrics> GetMetricsAsync(
         string? projectId,
-        DateTimeOffset from,
-        CancellationToken ct = default);
+        DateTimeOffset? from,
+        CancellationToken cancellationToken = default);
 
     /// <summary>Removes telemetry rows older than the retention window. Returns the count removed.</summary>
     Task<int> PurgeOlderThanAsync(long nowUnixSeconds, int retentionDays,

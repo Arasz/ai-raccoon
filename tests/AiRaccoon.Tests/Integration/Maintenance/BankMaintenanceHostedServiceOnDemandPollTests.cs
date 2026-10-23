@@ -43,7 +43,7 @@ public sealed class BankMaintenanceHostedServiceOnDemandPollTests : IDisposable
         _service = new BankMaintenanceHostedService(_factory, _time, TestTelemetry.None,
             new FakeLogger<BankMaintenanceHostedService>(), NoOpNoiseEntryStore.Instance,
             new SqlitePromotionQueueStore(_factory, _time),
-            new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance),
+            new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance, TimeProvider.System),
             new MaintenanceJobRunner(_time, new NoOpMeasurementRecorder(), NullLogger<MaintenanceJobRunner>.Instance),
             [_onDemandJob, _hourlyJob]);
     }

@@ -73,11 +73,11 @@ public sealed class QualityTools(
         [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
         [Description("Window start as absolute DateTimeOffset; defaults to 7 days before now.")]
         DateTimeOffset? from = null,
-        CancellationToken ct = default)
+        CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetQualityReport, ct);
-        var metrics = await qualityService.GetMetricsAsync(canonical, from ?? DateTimeOffset.UtcNow.AddDays(-7), ct);
-        return await gate.WrapAsync(canonical, metrics, ct);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetQualityReport, cancellationToken);
+        var metrics = await qualityService.GetMetricsAsync(canonical, from, cancellationToken);
+        return await gate.WrapAsync(canonical, metrics, cancellationToken);
     }
 
     public sealed record FollowThroughResult(bool Recorded);

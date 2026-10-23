@@ -245,8 +245,8 @@ public sealed class SearchDispatcherTests
             CancellationToken ct = default) =>
             Task.FromResult(true);
 
-        public Task<AiRaccoon.Core.SearchQuality.SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
-            CancellationToken ct = default) =>
+        public Task<AiRaccoon.Core.SearchQuality.SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset? from,
+            CancellationToken cancellationToken = default) =>
             Task.FromResult(new AiRaccoon.Core.SearchQuality.SearchQualityMetrics(0, 0, 0, 0, 0, 0, 0));
 
         public Task<int> PurgeOlderThanAsync(long nowUnixSeconds, int retentionDays,

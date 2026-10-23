@@ -106,7 +106,7 @@ public sealed class SearchQualityKindMigrationTests
             };
             var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
             var service = new SqliteSearchQualityService(factory,
-                Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance);
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance, TimeProvider.System);
 
             await service.RecordSearchAsync("corr-1", "q", "project", "acme", "memory", "sess", 3, ["/a.md"],
                 TestContext.Current.CancellationToken);
@@ -133,7 +133,7 @@ public sealed class SearchQualityKindMigrationTests
             var options = new AiRaccoon.Infrastructure.Options.InfrastructureOptions { DataRoot = root, Scope = AiRaccoon.Infrastructure.Options.InstallScope.User };
             var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
             var service = new SqliteSearchQualityService(factory,
-                Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance);
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance, TimeProvider.System);
             await service.RecordSearchAsync("typed", "q", "project", "acme", "memory", "sess", 1,
                 ["/used.md"], TestContext.Current.CancellationToken, entryTypes: EntryType.File);
             (await service.RecordGradeAsync("acme", "typed", 4, "useful", TestContext.Current.CancellationToken)).ShouldBeTrue();

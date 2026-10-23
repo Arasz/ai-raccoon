@@ -145,6 +145,6 @@ public sealed class PendingEmbedMaintenanceDrainTests : IDisposable
     private BankMaintenanceHostedService ServiceWith(IReadOnlyList<IMaintenanceJob> jobs) =>
         new(_factory, _time, TestTelemetry.None, new FakeLogger<BankMaintenanceHostedService>(),
             NoOpNoiseEntryStore.Instance, new SqlitePromotionQueueStore(_factory, _time),
-            new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance),
+            new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance, TimeProvider.System),
             new MaintenanceJobRunner(_time, new NoOpMeasurementRecorder(), NullLogger<MaintenanceJobRunner>.Instance), jobs);
 }

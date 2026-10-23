@@ -749,8 +749,8 @@ public sealed class NoOpSearchQualityService : ISearchQualityService
         CancellationToken ct = default) =>
         Task.FromResult(true);
 
-    public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
-        CancellationToken ct = default) =>
+    public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset? from,
+        CancellationToken cancellationToken = default) =>
         Task.FromResult(new SearchQualityMetrics(0, 0, 0, 0, 0, 0, 0));
 }
 

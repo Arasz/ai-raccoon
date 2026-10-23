@@ -40,7 +40,7 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         _time = new FakeTimeProvider(FixedNow);
         _logger = new FakeLogger<BankMaintenanceHostedService>();
         _service = new BankMaintenanceHostedService(_factory, _time, _probe.Telemetry, _logger, NoOpNoiseEntryStore.Instance,
-            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance));
+            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance, TimeProvider.System));
     }
 
     private string WalPath => Path.Combine(_dataRoot, "memory.db-wal");
@@ -174,7 +174,7 @@ public sealed class BankMaintenanceHostedServiceRunOnceTests : IDisposable
         var service = new BankMaintenanceHostedService(
             new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options)), _time, probe.Telemetry,
             _logger, NoOpNoiseEntryStore.Instance,
-            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance));
+            new SqlitePromotionQueueStore(_factory, _time), new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance, TimeProvider.System));
 
         var thrown = await Should.ThrowAsync<Exception>(() => service.RunOnceAsync(TestContext.Current.CancellationToken));
 
