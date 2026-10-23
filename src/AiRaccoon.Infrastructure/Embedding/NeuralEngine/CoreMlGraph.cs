@@ -11,6 +11,12 @@ internal static class CoreMlGraph
     /// <summary>The weights file the graph reads, pinned in the bundled manifest.</summary>
     public const string WeightsFileName = "model_fp16.onnx_data";
 
+    /// <summary>
+    ///     The graph's <c>COREML_CACHE_KEY</c> metadata: ONNX Runtime names its compiled-model folder after it
+    ///     instead of a hash of the graph's install path, so a tool update reuses the compiled model.
+    /// </summary>
+    public const string CacheKey = "graniteR2ane";
+
     public const string BatchDimension = "batch_size";
 
     public const string SequenceDimension = "sequence_length";

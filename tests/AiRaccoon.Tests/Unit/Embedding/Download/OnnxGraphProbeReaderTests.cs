@@ -26,6 +26,16 @@ public class OnnxGraphProbeReaderTests
     }
 
     [Fact]
+    public void ReadsModelMetadata()
+    {
+        var model = TestOnnx.WithMetadata(TestOnnx.MinimalModel(), "COREML_CACHE_KEY", "graniteR2ane");
+
+        var probe = Probe().Read(model);
+
+        probe.Metadata.ShouldBe(new Dictionary<string, string> { ["COREML_CACHE_KEY"] = "graniteR2ane" });
+    }
+
+    [Fact]
     public void ReadsGraphInputsAndOutputs()
     {
         var model = TestOnnx.MinimalModelWithExternalData("model.onnx_data");
@@ -249,6 +259,10 @@ internal static class TestOnnx
         model.AddRange(MessageField(8, opset.ToArray()));
         return model.ToArray();
     }
+
+    /// <summary>Appends one ModelProto.metadata_props entry (field 14); protobuf merges concatenated fields.</summary>
+    public static byte[] WithMetadata(byte[] model, string key, string value) =>
+        [.. model, .. MessageField(14, StringStringEntry(key, value))];
 
     public static byte[] TensorWithExternalData(string name, string location, int dataLocation = 1, long offset = 0, long length = 8)
     {

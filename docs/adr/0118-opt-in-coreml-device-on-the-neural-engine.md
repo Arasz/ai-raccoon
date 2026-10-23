@@ -82,7 +82,10 @@ CoreML, F7), inside the parity bar that WebGPU and MLX already meet. No bank re-
 device changes, in either direction.
 
 **Cache housekeeping.** The cache costs about 200-210 MiB per bucket, 808 MiB for four. When a new
-set finishes compiling, directories for any other model sha or ORT version are deleted. `doctor`
+set finishes compiling, directories for any other model sha or ORT version are deleted. The graph
+carries `COREML_CACHE_KEY` metadata (`CoreMlGraph.CacheKey`), so ORT names each bucket's compiled
+model after that key rather than a hash of the graph's install path, and a tool update reuses it;
+a compiled model whose recorded source graph no longer exists is deleted after load. `doctor`
 reports the cache size, and switching away from `coreml` keeps the cache, so switching back is
 warm. A cache directory that fails to load, for example one left half-written by a compile killed
 at restart, is deleted and recompiled once. It must never crash the session.

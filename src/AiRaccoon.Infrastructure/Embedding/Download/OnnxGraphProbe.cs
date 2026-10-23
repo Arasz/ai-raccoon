@@ -14,7 +14,11 @@ public sealed record OnnxGraphProbe(
     int IrVersion,
     int? OpsetVersion,
     IReadOnlyDictionary<string, int>? OutputRanks = null,
-    IReadOnlyList<OnnxExternalDataRef>? ExternalDataRefs = null);
+    IReadOnlyList<OnnxExternalDataRef>? ExternalDataRefs = null)
+{
+    /// <summary>The model's <c>metadata_props</c>, e.g. the <c>COREML_CACHE_KEY</c> ONNX Runtime's CoreML provider reads.</summary>
+    public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
+}
 
 /// <summary>One initializer's external_data entry: the file it reads (<see cref="Location" />) and
 /// the byte range within it (<see cref="Offset" />, <see cref="Length" />).</summary>
@@ -81,6 +85,10 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
                     break;
                 case (8, 2): // opset_import
                     WalkOpset(reader.ReadBytes(), builder);
+                    break;
+                case (14, 2): // metadata_props StringStringEntryProto
+                    var (key, value) = WalkStringStringEntry(reader.ReadBytes(), depth + 1);
+                    builder.Metadata[key] = value;
                     break;
                 default:
                     reader.Skip(wireType);
@@ -383,7 +391,10 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
             }
         }
 
-        public OnnxGraphProbe Build() => new(_externalData, _inputs, _outputs, IrVersion, OpsetVersion, _outputRanks, _externalDataRefs);
+        public Dictionary<string, string> Metadata { get; } = new(StringComparer.Ordinal);
+
+        public OnnxGraphProbe Build() =>
+            new(_externalData, _inputs, _outputs, IrVersion, OpsetVersion, _outputRanks, _externalDataRefs) { Metadata = Metadata };
 
         /// <summary>#504: TypeProto.tensor_type (field 1) → Tensor.shape (field 2) → the dim count
         /// of TensorShapeProto is the declared rank. Null for a sequence/map type (no tensor_type)

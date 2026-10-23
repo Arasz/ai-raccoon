@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AiRaccoon.Infrastructure.Embedding.Download;
+using AiRaccoon.Infrastructure.Embedding.NeuralEngine;
 using Shouldly;
 using Xunit;
 
@@ -47,6 +48,15 @@ public sealed class AneGraphSharesProductWeightsTests
         var ex = Should.Throw<ShouldAssertException>(() => VerifyAneRefsShareProductWeights(mutated, product));
 
         ex.Message.ShouldContain(mutated.ExternalDataRefs![0].InitializerName);
+    }
+
+    [Fact]
+    public void AneGraph_CarriesTheStableCoreMlCacheKey()
+    {
+        var ane = ProbeGraph(AneGraphRelativePath);
+
+        ane.Metadata.ShouldContainKeyAndValue("COREML_CACHE_KEY", CoreMlGraph.CacheKey,
+            "without it ONNX Runtime keys the compiled model by the graph's install path and recompiles on every tool update");
     }
 
     [Fact]
