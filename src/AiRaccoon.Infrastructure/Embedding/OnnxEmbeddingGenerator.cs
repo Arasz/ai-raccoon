@@ -113,7 +113,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
     ///     Turns off ONNX Runtime's own telemetry client before any session exists. Its upload thread can
     ///     abort the process at exit by locking a mutex that exit has already destroyed.
     /// </summary>
-    static OnnxEmbeddingGenerator() => OrtEnv.Instance().DisableTelemetryEvents();
+    static OnnxEmbeddingGenerator() => OrtSessionLog.Environment.DisableTelemetryEvents();
 
     internal OnnxEmbeddingGenerator(string modelPath, IEmbeddingTokenizer tokenizer, EngineDescriptor descriptor, ILogger logger,
         int intraOpThreads = 0, bool preferGpu = false, bool preferMlx = false, string? cudaLibraryPath = null)
@@ -133,7 +133,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         string? cudaRefusalReason = null;
         var mlxSession = preferMlx ? CreateMlxSessionOrNull(modelPath, intraOpThreads, out mlxRefusalReason) : null;
         var cudaSession = mlxSession is null && cudaLibraryPath is not null
-            ? CreateCudaSessionOrNull(modelPath, intraOpThreads, cudaLibraryPath, out cudaRefusalReason)
+            ? CreateCudaSessionOrNull(modelPath, intraOpThreads, cudaLibraryPath, logger, out cudaRefusalReason)
             : null;
         if (mlxSession is not null)
         {
@@ -150,7 +150,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         else
         {
             _session = (preferGpu ? CreateGpuSessionOrNull(modelPath, intraOpThreads) : null)
-                       ?? CreateCpuSession(modelPath, intraOpThreads);
+                       ?? CreateCpuSession(modelPath, intraOpThreads, logger);
             _needsGpuGateForRun = ExecutionProvider == WebGpuProvider;
             if (mlxRefusalReason is not null)
             {
@@ -334,7 +334,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
             _beforeCudaFallbackForTesting?.Invoke();
             ExecutionProvider = CpuProvider;
             replacement = (_preferGpu ? CreateGpuSessionOrNull(_modelPath, IntraOpThreads) : null)
-                          ?? CreateCpuSession(_modelPath, IntraOpThreads);
+                          ?? CreateCpuSession(_modelPath, IntraOpThreads, _logger);
         }
         catch
         {
@@ -354,9 +354,9 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
 
     /// <summary>Whether the loaded core has WebGPU compiled in: the NuGet core on macOS, the bundled WebGPU core elsewhere (ADR-0115).</summary>
     private static bool BuiltInWebGpuAvailable() =>
-        OrtEnv.Instance().GetAvailableProviders().Contains(WebGpuExecutionProviderName, StringComparer.Ordinal);
+        OrtSessionLog.Environment.GetAvailableProviders().Contains(WebGpuExecutionProviderName, StringComparer.Ordinal);
 
-    private static InferenceSession CreateCpuSession(string modelPath, int intraOpThreads)
+    private static InferenceSession CreateCpuSession(string modelPath, int intraOpThreads, ILogger logger)
     {
         using var options = new SessionOptions();
         if (intraOpThreads > 0)
@@ -364,7 +364,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
             options.IntraOpNumThreads = intraOpThreads;
         }
 
-        return new InferenceSession(modelPath, options);
+        return OrtSessionLog.Create(modelPath, options, logger);
     }
 
     /// <summary>GPU/MLX intra-op workers spin-wait between kernels by default, which burns CPU on a
@@ -474,7 +474,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
             InferenceSession session;
             lock (GpuGate)
             {
-                session = new InferenceSession(modelPath, options);
+                session = OrtSessionLog.Create(modelPath, options, _logger);
             }
 
             ExecutionProvider = WebGpuProvider;
@@ -524,7 +524,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
     {
         try
         {
-            var env = OrtEnv.Instance();
+            var env = OrtSessionLog.Environment;
             var refusal = EnsureRegistered(env, epName, libraryPath);
             if (refusal is not null)
             {
@@ -543,7 +543,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
 
     /// <summary>A session on already-registered plugin devices, or null with ORT's reason.</summary>
     private static (InferenceSession? Session, string? Refusal) CreatePluginSessionOrNull(
-        string modelPath, int intraOpThreads, IReadOnlyList<OrtEpDevice> devices)
+        string modelPath, int intraOpThreads, IReadOnlyList<OrtEpDevice> devices, ILogger logger)
     {
         try
         {
@@ -558,8 +558,8 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
                 options.AddSessionConfigEntry(key, value);
             }
 
-            options.AppendExecutionProvider(OrtEnv.Instance(), devices, new Dictionary<string, string>());
-            return (new InferenceSession(modelPath, options), null);
+            options.AppendExecutionProvider(OrtSessionLog.Environment, devices, new Dictionary<string, string>());
+            return (OrtSessionLog.Create(modelPath, options, logger), null);
         }
         catch (Exception ex) when (IsPluginLoadFailure(ex))
         {
@@ -574,7 +574,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
     ///     <see cref="GpuGate" /> like the WebGPU plugin's; runs do not, as CUDA sessions share no device context.
     /// </summary>
     private static InferenceSession? CreateCudaSessionOrNull(string modelPath, int intraOpThreads, string libraryPath,
-        out string? refusalReason)
+        ILogger logger, out string? refusalReason)
     {
         if (libraryPath.Length == 0)
         {
@@ -610,7 +610,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
                 return null;
             }
 
-            (var session, refusalReason) = CreatePluginSessionOrNull(modelPath, intraOpThreads, devices);
+            (var session, refusalReason) = CreatePluginSessionOrNull(modelPath, intraOpThreads, devices, logger);
             return session;
         }
     }
@@ -682,7 +682,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         }
 
         var executor = new SingleThreadExecutor("airaccoon-mlx-session");
-        var (session, error) = executor.Run(() => CreateMlxSessionOnCurrentThread(mlxModelPath, pluginDirectory, intraOpThreads));
+        var (session, error) = executor.Run(() => CreateMlxSessionOnCurrentThread(mlxModelPath, pluginDirectory, intraOpThreads, _logger));
         if (session is null)
         {
             executor.Dispose();
@@ -698,11 +698,11 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
     }
 
     private static (InferenceSession? Session, string? Error) CreateMlxSessionOnCurrentThread(
-        string mlxModelPath, string pluginDirectory, int intraOpThreads)
+        string mlxModelPath, string pluginDirectory, int intraOpThreads, ILogger logger)
     {
         try
         {
-            var env = OrtEnv.Instance();
+            var env = OrtSessionLog.Environment;
             var refusal = EnsureRegistered(env, MlxExecutionProviderName, Path.Combine(pluginDirectory, MlxPluginLibraryFileName));
             if (refusal is not null)
             {
@@ -727,7 +727,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
             }
 
             options.AppendExecutionProvider(env, devices, new Dictionary<string, string>());
-            return (new InferenceSession(mlxModelPath, options), null);
+            return (OrtSessionLog.Create(mlxModelPath, options, logger), null);
         }
         catch (OnnxRuntimeException ex)
         {

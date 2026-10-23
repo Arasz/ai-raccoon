@@ -56,7 +56,7 @@ internal sealed class CoreMlSessionFactory : ICoreMlSessionFactory
         options.AddSessionConfigEntry("session.intra_op.allow_spinning", "0");
         options.AddSessionConfigEntry("session.inter_op.allow_spinning", "0");
         options.AppendExecutionProvider("CoreML", ProviderOptions(cacheDirectory));
-        return new CoreMlBucketSession(new InferenceSession(_graphPath, options), _descriptor.EmbeddingOutput!);
+        return new CoreMlBucketSession(OrtSessionLog.Create(_graphPath, options, _logger), _descriptor.EmbeddingOutput!);
     }
 
     public ILocalEmbeddingGenerator CreateOverflow() =>

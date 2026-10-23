@@ -439,7 +439,7 @@ public sealed partial class EmbeddingService(
         var weightsSha = descriptor.Files.Single(f => f.Path == CoreMlGraph.WeightsFileName).Sha256;
         var key = CoreMlCache.KeyFor(new FileHasher().Sha256OfFile(graphPath), weightsSha);
         var cache = new CoreMlCache(Path.Combine(options.DataRoot, CoreMlCacheDirectoryName), key,
-            OrtEnv.Instance().GetVersionString(), _logger);
+            OrtSessionLog.Environment.GetVersionString(), _logger);
         var factory = new CoreMlSessionFactory(graphPath, Path.Combine(modelDirectory, descriptor.OnnxModelFile), tokenizer,
             descriptor, threads, _logger);
         return new NeuralEngineEmbeddingGenerator(webGpu, tokenizer, descriptor.Normalization == "l2", factory, cache,
