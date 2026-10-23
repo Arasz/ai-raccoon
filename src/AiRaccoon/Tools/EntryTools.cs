@@ -8,10 +8,8 @@ using ModelContextProtocol.Server;
 namespace AiRaccoon.Tools;
 
 /// <summary>Reads one hash from the explicitly selected entry type.</summary>
-public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch, IToolGate gate, IEntryKindClassifier? classifier = null)
+public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch, IToolGate gate, IEntryKindClassifier classifier)
 {
-    private readonly IEntryKindClassifier _classifier = classifier ?? new EntryKindClassifier();
-
     private const string TnGetEntry = "get_entry";
 
     [McpServerTool(Name = TnGetEntry)]
@@ -52,14 +50,8 @@ public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch
             var kind = requested == EntryType.Memory ? EntryKind.Memory : EntryKind.File;
             var entry = await store.GetAsync(canonical, hash, cancellationToken, entryKind: kind)
                 ?? throw new UnknownHashException(hash, canonical);
-            var stored = _classifier.ReadStoredKind(entry.EntryKind);
-            if (stored.State != StoredKindState.Declared || stored.Kind != kind)
-            {
-                throw new UnknownHashException(hash, canonical);
-            }
-
             result = new GetEntryResult(entry.Hash, entry.Value, entry.Path, entry.Context, entry.CreatedAt,
-                null, null, SearchKindWireNames.Memory, _classifier.ToStoredValue(kind));
+                null, null, SearchKindWireNames.Memory, classifier.ToStoredValue(kind));
         }
 
         return await gate.WrapAsync(canonical, result, cancellationToken);

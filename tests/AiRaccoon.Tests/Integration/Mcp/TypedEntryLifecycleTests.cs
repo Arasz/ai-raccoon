@@ -50,7 +50,7 @@ public sealed class TypedEntryLifecycleTests : IAsyncLifetime
             new SearchDispatcher(_store, codeSearch, quality, TestData.SharedScope),
             new QueryGuardService(settings), new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope),
             new NoOpMeasurementRecorder(), settings, NullLogger<MemoryTools>.Instance, embeddings);
-        _entryTools = new EntryTools(_store, codeSearch, gate);
+        _entryTools = new EntryTools(_store, codeSearch, gate, new EntryKindClassifier());
         _sweepTools = new SweepTools(new SweepService(_store, TimeProvider.System),
             new ForgettingPolicyService(_store, guard), gate);
         await using var warm = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -111,7 +111,25 @@ public sealed class TypedEntryLifecycleTests : IAsyncLifetime
     }
 
     [RetryFact]
-    public async Task FileTtlRefusal_LeavesHistoricalExpiryUntouched_WhileMemoryCanChange()
+    public async Task QueryHits_CarryTheirKind_AndTheKindRoundTripsIntoGetEntry()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var memory = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, $"{QueryTerm} agent note"), ct);
+        await SeedFileAsync("file-hash", $"{QueryTerm} mirrored file");
+
+        var hits = (await _memoryTools.Search(ProjectId, QueryTerm, "kind-session", entryType: "memory,file",
+            ftsWeight: 1, vectorWeight: 0, minRelativeScore: 0, cancellationToken: ct)).Data!.Results;
+
+        hits.Single(hit => hit.Hash == memory.Hash).EntryKind.ShouldBe("memory");
+        hits.Single(hit => hit.Hash == "file-hash").EntryKind.ShouldBe("file");
+        foreach (var hit in hits)
+        {
+            (await _entryTools.GetEntry(ProjectId, hit.Hash, hit.EntryKind!, ct)).Data!.Hash.ShouldBe(hit.Hash);
+        }
+    }
+
+    [RetryFact]
+    public async Task FileTtl_RefusesSetButAllowsClear_WhileMemoryCanChange()
     {
         var ct = TestContext.Current.CancellationToken;
         await _store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(ProjectId), "full", ct);
@@ -124,8 +142,10 @@ public sealed class TypedEntryLifecycleTests : IAsyncLifetime
         }
 
         (await _sweepTools.SetTtl(ProjectId, memory.Hash, 7, ct)).Data!.TtlDays.ShouldBe(7);
-        await Should.ThrowAsync<UnknownHashException>(() => _sweepTools.SetTtl(ProjectId, "file-ttl-hash", null, ct));
+        await Should.ThrowAsync<NotAMemoryEntryException>(() => _sweepTools.SetTtl(ProjectId, "file-ttl-hash", 3, ct));
         (await _store.GetMetadataAsync(ProjectId, "file-ttl-hash", ct))!.TtlDays.ShouldBe(19);
+        (await _sweepTools.SetTtl(ProjectId, "file-ttl-hash", null, ct)).Data!.TtlDays.ShouldBeNull();
+        (await _store.GetMetadataAsync(ProjectId, "file-ttl-hash", ct))!.TtlDays.ShouldBeNull();
     }
 
     private async Task SeedFileAsync(string hash, string value)

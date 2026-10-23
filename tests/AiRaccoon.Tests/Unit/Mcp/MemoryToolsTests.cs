@@ -50,7 +50,7 @@ public class MemoryToolsTests
         var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow), TestData.SharedScope);
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var gate = new ToolGate(access, _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck);
-        _entries = new EntryTools(_store, new NoOpCodeSearchService(), gate);
+        _entries = new EntryTools(_store, new NoOpCodeSearchService(), gate, new EntryKindClassifier());
         _tools = new MemoryTools(_store, gate, new SearchDispatcher(_store, new NoOpCodeSearchService(), new NoOpSearchQualityService(), TestData.SharedScope), new QueryGuardService(_store), new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope), new NoOpMeasurementRecorder(), _store, NullLogger<MemoryTools>.Instance, embeddings: _embeddings);
         _share = new ShareTools(_store, gate, new ShareExtractService(_store,
             new SharedExtractionRunner(_store, new SharedExtractionService(), _queue,

@@ -166,7 +166,7 @@ public sealed partial class MemoryTools(
         [Description("Narrows the project scope to one context. Omit it to search every context in " +
                      "the project (the default); get_store_statistics lists the labels in use.")]
         string? contextLabel = null,
-        [Description("Comma-separated entry types: memory, code, file. Default memory,code,file applies no type filter, including unclassified rows. Narrower sets select declared types only. Code is project-scoped; shared-only queries return no code hits.")]
+        [Description("Comma-separated entry types: memory, code, file. Any set naming both memory and file (the default memory,code,file included) applies no type filter to memory hits, so unclassified rows are included. Narrower sets select declared types only. Code is project-scoped; shared-only queries return no code hits.")]
         string entryType = "memory,code,file",
         [Description("Code section only: maximum results, overriding limit for the code section (bank setting unaffected).")]
         int? codeLimit = null,

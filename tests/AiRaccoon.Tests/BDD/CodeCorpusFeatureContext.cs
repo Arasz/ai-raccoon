@@ -73,7 +73,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
             new SearchDispatcher(Store, CodeSearch, SearchQuality, TestData.SharedScope),
             new QueryGuardService(Settings), new MemoryWriteService(Store, new FakePromotionQueue(), TestData.SharedScope),
             new NoOpMeasurementRecorder(), Settings, NullLogger<MemoryTools>.Instance, FakeEmbeddingService);
-        EntryTools = new EntryTools(Store, CodeSearch, gate);
+        EntryTools = new EntryTools(Store, CodeSearch, gate, new EntryKindClassifier());
 
         ComposeWatchStack();
     }
