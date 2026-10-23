@@ -804,7 +804,8 @@ internal static class MemorySql
     // Hash alone is not a unique row — identical content under a different label shares one — so
     // the committed row wins when both exist (ProjectRows.CommittedFirst). It used to be restricted
     // to scope='project', which turned that tie-break into an existence test: an entry that lived
-    // only in a context was reported unknown-hash (ADR-0046).
+    // only in a context was reported unknown-hash (ADR-0046). Setting is Memory-only; clearing
+    // reaches any kind, because the sweep still honours a TTL a File row carried before 2.1.0.
     public static readonly string UpdateEntryTtl =
         $"""
          UPDATE entries
@@ -813,7 +814,7 @@ internal static class MemorySql
                      WHERE hash = @hash AND {ProjectRows.Of()}
                      ORDER BY {ProjectRows.CommittedFirst()}, id
                      LIMIT 1)
-           AND entries.entry_type = 'memory'
+           AND (@ttlDays IS NULL OR entries.entry_type = 'memory')
          """;
 
     // Reads the same row UpdateEntryTtl writes — the explicit ORDER BY is what makes "the entry

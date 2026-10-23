@@ -96,27 +96,48 @@ public sealed class SetTtlToolTests : IDisposable
     }
 
     [RetryTheory]
-    [InlineData("file", 7)]
-    [InlineData("file", null)]
-    [InlineData("none", 7)]
-    [InlineData("none", null)]
-    public async Task NonMemoryTtlMutation_IsRefusedWithoutChangingHistoricalTtl(string entryType, int? ttlDays)
+    [InlineData("file")]
+    [InlineData("none")]
+    public async Task SettingTtl_OnNonMemoryRow_IsRefusedWithoutChangingHistoricalTtl(string entryType)
     {
         await FullAccessAsync();
-        var entry = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, "historical file"),
-            TestContext.Current.CancellationToken);
-        var options = TestData.CreateInfrastructureOptions(_dataRoot);
-        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
-        await connection.ExecuteAsync(new CommandDefinition(
-            "UPDATE entries SET entry_type = @entryType, ttl_days = 19 WHERE hash = @hash",
-            new { hash = entry.Hash, entryType }, cancellationToken: TestContext.Current.CancellationToken));
+        var entry = await SeedHistoricalTtlAsync("historical file", entryType, ttlDays: 19);
 
         await Should.ThrowAsync<UnknownHashException>(() =>
-            _tools.SetTtl(ProjectId, entry.Hash, ttlDays, TestContext.Current.CancellationToken));
+            _tools.SetTtl(ProjectId, entry.Hash, 7, TestContext.Current.CancellationToken));
 
         (await _store.GetMetadataAsync(ProjectId, entry.Hash, TestContext.Current.CancellationToken))!
             .TtlDays.ShouldBe(19);
+    }
+
+    [RetryTheory]
+    [InlineData("file")]
+    [InlineData("none")]
+    public async Task ClearingTtl_OnNonMemoryRow_ClearsTheHistoricalTtl(string entryType)
+    {
+        await FullAccessAsync();
+        var entry = await SeedHistoricalTtlAsync("historical file", entryType, ttlDays: 19);
+
+        var cleared = await _tools.SetTtl(ProjectId, entry.Hash, null, TestContext.Current.CancellationToken);
+
+        cleared.Data!.TtlDays.ShouldBeNull();
+        (await _store.GetMetadataAsync(ProjectId, entry.Hash, TestContext.Current.CancellationToken))!
+            .TtlDays.ShouldBeNull("a TTL stored before 2.1.0 is still honoured by the sweep, so it must stay clearable");
+    }
+
+    [RetryFact]
+    public async Task Sweep_AfterClearingAHistoricalFileTtl_KeepsOnlyTheClearedRow()
+    {
+        await FullAccessAsync();
+        var expiring = await SeedHistoricalTtlAsync("file left to expire", "file", ttlDays: 1, rating: 0.1);
+        var cleared = await SeedHistoricalTtlAsync("file whose ttl is cleared", "file", ttlDays: 1, rating: 0.1);
+
+        await _tools.SetTtl(ProjectId, cleared.Hash, null, TestContext.Current.CancellationToken);
+        _clock.Advance(TimeSpan.FromDays(2));
+        var result = await _tools.Sweep(ProjectId, dryRun: false, TestContext.Current.CancellationToken);
+
+        result.Data!.Deleted.ShouldBe([expiring.Hash]);
+        (await _store.GetMetadataAsync(ProjectId, cleared.Hash, TestContext.Current.CancellationToken)).ShouldNotBeNull();
     }
 
     [RetryFact]
@@ -186,6 +207,20 @@ public sealed class SetTtlToolTests : IDisposable
         result.Data!.Deleted.ShouldBe([historical.Hash]);
         (await _store.GetMetadataAsync(ProjectId, historical.Hash, TestContext.Current.CancellationToken)).ShouldBeNull();
         (await _store.GetMetadataAsync(ProjectId, permanent.Hash, TestContext.Current.CancellationToken)).ShouldNotBeNull();
+    }
+
+    private async Task<MemoryEntry> SeedHistoricalTtlAsync(string value, string entryType, int ttlDays,
+        double? rating = null)
+    {
+        var entry = await _store.WriteAsync(new MemoryWriteRequest(ProjectId, value),
+            TestContext.Current.CancellationToken);
+        var options = TestData.CreateInfrastructureOptions(_dataRoot);
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET entry_type = @entryType, ttl_days = @ttlDays, rating = COALESCE(@rating, rating) WHERE hash = @hash",
+            new { hash = entry.Hash, entryType, ttlDays, rating }, cancellationToken: TestContext.Current.CancellationToken));
+        return entry;
     }
 
     private Task FullAccessAsync() =>

@@ -343,9 +343,11 @@ config channel (see [Command-line options](#command-line-options)).
   tool boundary: a project not in `full` mode is skipped, not reaped, even while the
   reaper is armed and the pass is running against every other project (see
   [ADR-0025](../adr/0025-the-sweep-reaper.md)).
-- **`set_memory_ttl`:** sets or clears a TTL only for Memory entries, including transcripts.
-  File entries refuse both operations as `unknown-hash`; cleanup still honors an explicit
-  File TTL stored before 2.1.0. Without a TTL an entry can never be swept.
+- **`set_memory_ttl`:** sets a TTL only for Memory entries, including transcripts. Clearing
+  (`ttlDays: null`) works on an entry of any kind in the project: cleanup still honors an
+  explicit File TTL stored before 2.1.0, and clearing it is how that entry stops being
+  sweepable. Setting a TTL on a File entry is refused as `unknown-hash`. Without a TTL an
+  entry can never be swept.
   `ttlDays` is 1..36500, or `null` to clear it; `0` is rejected. A TTL is necessary
   but not sufficient: fresh entries start at rating 0.5 against a 0.3 threshold, so
   `ttlDays=7` does not expire an entry at age 30. The returned `canEverExpire` reports
