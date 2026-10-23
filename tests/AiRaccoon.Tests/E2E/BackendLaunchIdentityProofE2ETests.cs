@@ -219,7 +219,7 @@ public sealed partial class BackendLaunchIdentityProofE2ETests : IAsyncLifetime
             await using (var second = StartProxy(port))
             {
                 var read = await second.CallToolAsync("get_entry",
-                    new JsonObject { ["projectId"] = "flow", ["hash"] = hash }, Ct);
+                    new JsonObject { ["projectId"] = "flow", ["hash"] = hash, ["entryType"] = "memory" }, Ct);
                 read.ShouldContain("identity proof full flow marker");
                 (await second.CloseAsync(HardCap)).ShouldBe(ErrorCode.Ok.Success, second.Stderr);
                 (second.Stderr + ReadQuietLog()).ShouldNotContain("did not prove");
