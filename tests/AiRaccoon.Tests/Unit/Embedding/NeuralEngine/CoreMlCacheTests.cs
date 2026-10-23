@@ -172,8 +172,10 @@ public sealed class CoreMlCacheTests : IDisposable
         logger.Collector.GetSnapshot().ShouldNotContain(record => record.Level >= LogLevel.Warning);
     }
 
-    [Fact]
-    public void Prune_LogsAndCarriesOn_WhenABucketCannotBeListed()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Prune_LogsAndCarriesOn_WhenABucketCannotBeListed(bool lockComputeUnits)
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix file modes make the bucket unreadable");
         if (OperatingSystem.IsWindows())
@@ -186,14 +188,15 @@ public sealed class CoreMlCacheTests : IDisposable
         var bucket = cache.BucketDirectory(CoreMlGraph.Buckets[0]);
         Directory.CreateDirectory(bucket);
         var otherSha = Seed(Path.Combine(CacheRoot, "000000000000", Ort));
-        File.SetUnixFileMode(bucket, UnixFileMode.None);
+        var unreadable = lockComputeUnits ? Path.GetDirectoryName(bucket)! : bucket;
+        File.SetUnixFileMode(unreadable, UnixFileMode.None);
         try
         {
             Should.NotThrow(cache.Prune);
         }
         finally
         {
-            File.SetUnixFileMode(bucket, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            File.SetUnixFileMode(unreadable, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
         logger.Collector.GetSnapshot().ShouldContain(record => record.Id.Id == 441);

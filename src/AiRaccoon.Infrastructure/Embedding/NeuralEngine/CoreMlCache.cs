@@ -272,7 +272,18 @@ internal sealed partial class CoreMlCache
             return;
         }
 
-        foreach (var bucket in Directory.EnumerateDirectories(computeUnits))
+        string[] buckets;
+        try
+        {
+            buckets = Directory.GetDirectories(computeUnits);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.WriteFailed(_logger, "delete an orphaned compiled model in", computeUnits, ex.Message);
+            return;
+        }
+
+        foreach (var bucket in buckets)
         {
             try
             {
