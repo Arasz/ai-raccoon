@@ -57,6 +57,26 @@ public sealed class NodePlacementTests
     }
 
     [Fact]
+    public void Summary_WholeGraphFusedIntoOneNode_SaysSo()
+    {
+        var placement = Feed(" All nodes placed on [MLXExecutionProvider]. Number of nodes: 1");
+
+        placement.Summary().ShouldBe("MLX: the whole graph as 1 fused node");
+    }
+
+    [Fact]
+    public void Summary_OneFusedPartition_IsSingular()
+    {
+        var placement = Feed(
+            " Node(s) placed on [MLXExecutionProvider]. Number of nodes: 1",
+            "  MLX_fused_0 (MLX_fused_0)",
+            " Node(s) placed on [CPUExecutionProvider]. Number of nodes: 1",
+            "  Range (/r)");
+
+        placement.Summary().ShouldBe("MLX: 1 fused partition; CPU: 1 — Range");
+    }
+
+    [Fact]
     public void Summary_PlainProvider_ListsItsOpsBeforeCpu()
     {
         var placement = Feed(

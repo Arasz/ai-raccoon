@@ -66,23 +66,25 @@ internal sealed partial class NodePlacement
             : provider.Name;
         if (provider.All)
         {
-            return $"{name}: all {provider.Nodes} nodes";
+            return provider.Nodes == 1 && provider.Name != CpuProvider
+                ? $"{name}: the whole graph as 1 fused node"
+                : $"{name}: all {provider.Nodes} nodes";
         }
 
         if (provider.Name == CoreMlProvider && _coreMl is var (partitions, total, supported) && provider.Fused == provider.Nodes)
         {
-            return $"{name}: {supported}/{total} original nodes in {partitions} fused partitions";
+            return $"{name}: {supported}/{total} original nodes in {Partitions(partitions)}";
         }
 
         if (provider.Fused == provider.Nodes)
         {
-            return $"{name}: {provider.Fused} fused partitions";
+            return $"{name}: {Partitions(provider.Fused)}";
         }
 
         var parts = new List<string>();
         if (provider.Fused > 0)
         {
-            parts.Add($"{provider.Fused} fused partitions");
+            parts.Add(Partitions(provider.Fused));
         }
 
         parts.AddRange(provider.Ops
@@ -90,6 +92,8 @@ internal sealed partial class NodePlacement
             .Select(op => op.Count == 1 ? op.Name : $"{op.Name}×{op.Count}"));
         return new StringBuilder($"{name}: {provider.Nodes} — ").AppendJoin(", ", parts).ToString();
     }
+
+    private static string Partitions(int count) => count == 1 ? "1 fused partition" : $"{count} fused partitions";
 
     private static int Number(Group group) => int.Parse(group.Value, CultureInfo.InvariantCulture);
 

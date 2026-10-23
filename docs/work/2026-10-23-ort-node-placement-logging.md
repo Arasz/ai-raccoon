@@ -70,11 +70,18 @@ reflection on the handle plus hand-written delegates over the API table.
 From F3: 3126 vs 3194 ms, a difference inside run-to-run noise for CoreML session creation, and
 ~1.3k callback invocations. One run per mode, so this rules out a large cost, not a small one.
 
-### F7 — The same approach works for the WebGPU, MLX-plugin and CPU-only sessions [UNVERIFIED]
+### F7 — The same capture works for WebGPU and the MLX plugin; CUDA is unchecked [MEASURED]
 
-`VerifyEachNodeIsAssignedToAnEp` is EP-agnostic and the 2026-09-24 research saw the same verbose
-section for WebGPU and MLX, but only CoreML was probed through the managed callback today. Plugin
-EPs may log through their own sinks.
+Through `OrtSessionLog.Create` (PR #921), the bundled granite engine logged
+`WebGpu: 385 — MatMul×84, Mul×61, … ; CPU: 19 — Unsqueeze×6, Gather×3, …` on WebGPU, and on MLX
+the plugin fused the whole rewritten graph into one node: `MLX: the whole graph as 1 fused node`.
+So the plugin EP's placement reaches the env callback like a built-in provider's. CUDA was not
+run (no NVIDIA GPU here); it takes the same path, and logs event 451 if ORT reports nothing.
+
+**Evidence:** throwaway test constructing `OnnxEmbeddingGenerator` with `preferGpu` / `preferMlx`
+over `BundledModel.ResolveDirectory()`, MLX runtime from `scripts/download-mlx-runtime.py`
+(onnxruntime_ep_mlx 0.29.6) under the test build's `mlx/`, Apple M4, 2026-10-23.
+`BundledEngineMlxSessionTests` passed in the same run with `AIRACCOON_REQUIRE_MLX=1`.
 
 ## Recommendation
 
@@ -90,6 +97,6 @@ counts but not the CPU op histogram.
 
 ## Still open
 
-- Whether verbose session logging slows WebGPU/MLX session creation (F6 measured CoreML only).
-- Whether plugin EPs (MLX, WebGPU node core) log through the env callback at all (F7).
+- Whether verbose session logging slows MLX session creation (F6 measured CoreML; WebGPU run cost measured in the changelog, creation cost not).
+- CUDA placement output (F7): no CUDA host was available.
 - Callback thread-safety: ORT invokes it from session-creation threads; aggregation state must be per session, keyed by logid.
