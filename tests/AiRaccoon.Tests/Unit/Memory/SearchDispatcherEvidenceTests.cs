@@ -277,7 +277,7 @@ public sealed class SearchDispatcherEvidenceTests
             return Task.FromResult(true);
         }
 
-        public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from, CancellationToken ct = default)
+        public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset? from, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new SearchQualityMetrics(0, 0, 0, 0, 0, 0, 0));
         }

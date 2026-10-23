@@ -33,7 +33,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
     {
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
         _factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
-        _sut = new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance);
+        _sut = new SqliteSearchQualityService(_factory, NullLogger<SqliteSearchQualityService>.Instance, TimeProvider.System);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
@@ -191,7 +191,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
         strdelegate_trace tracer = (_, sql) => statements.Add(sql);
         raw.sqlite3_trace(shared.Handle, tracer, null);
         var service = new SqliteSearchQualityService(
-            new SharedConnectionFactory(_factory, shared), NullLogger<SqliteSearchQualityService>.Instance);
+            new SharedConnectionFactory(_factory, shared), NullLogger<SqliteSearchQualityService>.Instance, TimeProvider.System);
 
         await service.RecordSearchAsync("corr-feat-count", "query", "all", "proj-a", "memory", "sess-test",
             5, [], TestContext.Current.CancellationToken, evidence);

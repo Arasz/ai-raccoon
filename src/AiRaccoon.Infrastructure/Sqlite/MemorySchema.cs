@@ -18,6 +18,14 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// </summary>
 internal static class MemorySchema
 {
+    /// <summary>The kind vocabulary as a SQL value list, built from <see cref="EntryKindWireNames" />.</summary>
+    internal const string EntryKindList =
+        $"'{EntryKindWireNames.None}','{EntryKindWireNames.Memory}','{EntryKindWireNames.File}'";
+
+    /// <summary>The statement that adds the kind column to a bank that predates it.</summary>
+    internal const string AddEntryTypeColumnSql =
+        $"ALTER TABLE entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT '{EntryKindWireNames.None}' CHECK(entry_type IN ({EntryKindList}))";
+
     /// <summary>
     ///     Bucket uniqueness. Not part of <see cref="Ddl" />: on a legacy bank the duplicates
     ///     must be deleted before the index can be created, which is the ladder's job. A fresh
@@ -197,7 +205,7 @@ internal static class MemorySchema
                                               ttl_days INTEGER NULL,
                                               embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
                                               embedding BLOB NULL,
-                                              entry_type TEXT NOT NULL DEFAULT 'none' CHECK(entry_type IN ('none','memory','file')),
+                                              entry_type TEXT NOT NULL DEFAULT '{EntryKindWireNames.None}' CHECK(entry_type IN ({EntryKindList})),
                                               heading_path TEXT NULL,
                                               structure_embedding BLOB NULL,
                                               chunk_index INTEGER NOT NULL DEFAULT -1,
@@ -1424,25 +1432,7 @@ internal static class MemorySchema
     /// </summary>
     private static async Task MigrateToV20Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
-        var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
-                "SELECT name FROM pragma_table_info('entries')", cancellationToken: cancellationToken)))
-            .Contains("entry_type", StringComparer.Ordinal);
-        if (!hasColumn)
-        {
-            try
-            {
-                // NOT NULL with a non-null default: SQLite accepts it on ADD COLUMN and does not
-                // rewrite the table, so only the backfill below costs anything. Every legacy row
-                // arrives as 'none' — the kind it has not been given yet.
-                await connection.ExecuteAsync(new CommandDefinition(
-                        "ALTER TABLE entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'none' CHECK(entry_type IN ('none','memory','file'))", cancellationToken: cancellationToken));
-            }
-            catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
-            {
-                // Another connection added it between the probe and the ALTER: the column is there,
-                // which is all this step needed.
-            }
-        }
+        await EnsureEntryTypeColumnAsync(connection, cancellationToken);
 
         // Only rows that carry no kind: an explicit kind (a rerun, or a row the write path already
         // typed) is never clobbered. 'none' is the marker the NOT NULL column carries, and NULL is
@@ -1925,8 +1915,7 @@ internal static class MemorySchema
 
         try
         {
-            await connection.ExecuteAsync(new CommandDefinition(
-                    "ALTER TABLE entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT 'none' CHECK(entry_type IN ('none','memory','file'))",
+            await connection.ExecuteAsync(new CommandDefinition(AddEntryTypeColumnSql,
                     cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))

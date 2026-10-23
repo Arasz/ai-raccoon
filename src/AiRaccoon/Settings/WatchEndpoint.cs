@@ -8,7 +8,7 @@ namespace AiRaccoon.Settings;
 
 /// <summary>
 ///     Serves `watch add|remove|status` (ADR-0075 amendment): the same <see cref="IToolGate" /> and
-///     <see cref="IWatchService" /> as add_watch/remove/status, so the CLI gets the tools'
+///     <see cref="IWatchService" /> as add_watch/remove_watch/get_watch_status, so the CLI gets the tools'
 ///     guards and results. A mapped refusal answers 422 problem details (RFC 9457) carrying <c>kind</c> and, for an overlap, <c>coveringPath</c>; guarded by <see cref="McpTokenGate" />.
 /// </summary>
 internal static class WatchEndpoint

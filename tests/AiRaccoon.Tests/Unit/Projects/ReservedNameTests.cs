@@ -2,6 +2,9 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Tools;
+using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
+using NSubstitute;
 using Shouldly;
 using Xunit;
 
@@ -19,22 +22,27 @@ namespace AiRaccoon.Tests.Unit.Projects;
 public sealed class ReservedNameTests
 {
     /// <summary>
-    ///     The mint tool refuses the reserved name instead of registering a private project under
-    ///     it. The refusal names the reserved target, so the caller knows the name is taken.
+    ///     The registry refuses the reserved name; the wire text starts exactly with the
+    ///     <c>reserved-name:</c> prefix, with no <c>invalid-argument:</c> in front of it.
     /// </summary>
     [Fact]
-    public async Task MintingTheReservedName_IsRefused()
+    public async Task MintingTheReservedName_IsRefusedOnTheWireAsReservedName()
     {
         var registry = new RecordingRegistry();
-        var directory = new StubDirectory();
-        var tools = new ProjectTools(registry, directory, new StubGate());
+        var tools = new ProjectTools(registry, new StubDirectory(), new StubGate());
+        McpRequestHandler<CallToolRequestParams, CallToolResult> next = async (_, token) =>
+        {
+            await tools.Get("shared", token);
+            return new CallToolResult();
+        };
 
-        var error = await Should.ThrowAsync<ArgumentException>(() =>
-            tools.Get("shared", TestContext.Current.CancellationToken));
+        var result = await ToolRefusals.Filter(next)(Request("save_project_id_token"), TestContext.Current.CancellationToken);
 
-        error.Message.ShouldContain("reserved");
-        error.Message.ShouldContain("shared");
-        registry.Registered.ShouldBeEmpty("a refused mint registers nothing");
+        result.IsError.ShouldBe(true);
+        var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(block => block.Text));
+        text.ShouldStartWith("reserved-name: ");
+        text.ShouldNotContain("invalid-argument");
+        text.ShouldNotContain("reserved-name: reserved-name");
     }
 
     /// <summary>
@@ -54,6 +62,11 @@ public sealed class ReservedNameTests
         registry.Registered.ShouldHaveSingleItem();
     }
 
+    private static RequestContext<CallToolRequestParams> Request(string toolName) =>
+        new(Substitute.For<McpServer>(),
+            new JsonRpcRequest { Method = "tools/call", Id = new RequestId("reserved-1") },
+            new CallToolRequestParams { Name = toolName });
+
     /// <summary>The registry never sees a registration whose name is the reserved literal.</summary>
     private sealed class RecordingRegistry : IProjectRegistry
     {
@@ -61,6 +74,11 @@ public sealed class ReservedNameTests
 
         public Task RegisterAsync(string projectId, string? name, CancellationToken cancellationToken = default)
         {
+            if (SharedProjectScope.IsReservedId(name))
+            {
+                throw new ReservedProjectNameException();
+            }
+
             Registered.Add((projectId, name));
             return Task.CompletedTask;
         }
