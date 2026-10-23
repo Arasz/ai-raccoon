@@ -72,7 +72,9 @@ jobs:
           # release PR that changes only VERSION would otherwise take all three
           # required checks green having built nothing, and the commit that cuts a
           # public release is the last one that should reach main unbuilt.
-          CODE_REGEX='^src/.*\.cs$|^tests/.*\.cs$|\.csproj$|\.sln$|(^|/)Directory\.Build\.props$|(^|/)Directory\.Packages\.props$|\.feature$|\.onnx$|^nuget\.config$|^scripts/verify-tool-package\.py$|^\.github/workflows/build\.yml$|^VERSION$|^docs/adr/|^docs/reference/|^docs/how-to/|^docs/plans/'
+          # All of tests/ counts: fixtures and goldens under tests/**/Resources are
+          # read at runtime, and a golden-only fix that skipped the suite merged unverified.
+          CODE_REGEX='^src/.*\.cs$|^tests/|\.csproj$|\.sln$|(^|/)Directory\.Build\.props$|(^|/)Directory\.Packages\.props$|\.feature$|\.onnx$|^nuget\.config$|^scripts/verify-tool-package\.py$|^\.github/workflows/build\.yml$|^VERSION$|^docs/adr/|^docs/reference/|^docs/how-to/|^docs/plans/'
 
           if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
             echo "No usable base commit (new branch or force-push); treating as a code change."
