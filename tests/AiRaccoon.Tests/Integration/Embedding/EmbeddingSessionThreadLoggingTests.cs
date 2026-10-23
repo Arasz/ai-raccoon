@@ -44,7 +44,7 @@ public sealed class EmbeddingSessionThreadLoggingTests : IDisposable
 
         using var generator = service.CreateGenerator(new EmbeddingSettings("local", CopyBundledModel(), null, null));
 
-        var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        var record = logger.Collector.WithoutOrtSessionLines().ShouldHaveSingleItem();
         record.Id.Id.ShouldBe(428);
         record.Level.ShouldBe(LogLevel.Information);
         record.StructuredState.ShouldNotBeNull();
@@ -63,7 +63,7 @@ public sealed class EmbeddingSessionThreadLoggingTests : IDisposable
 
         using var generator = service.CreateGenerator(new EmbeddingSettings("local", CopyBundledModel(), null, null));
 
-        var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        var record = logger.Collector.WithoutOrtSessionLines().ShouldHaveSingleItem();
         record.Id.Id.ShouldBe(428);
         record.StructuredState!.Single(kv => kv.Key == "Threads").Value.ShouldBe(expectedThreads.ToString());
         record.StructuredState!.Single(kv => kv.Key == "ThreadsDisplay").Value.ShouldBe(expectedThreads.ToString());
@@ -85,7 +85,7 @@ public sealed class EmbeddingSessionThreadLoggingTests : IDisposable
 
         using var generator = service.CreateGenerator(new EmbeddingSettings("local", CopyBundledModel(), null, null));
 
-        var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        var record = logger.Collector.WithoutOrtSessionLines().ShouldHaveSingleItem();
         record.Id.Id.ShouldBe(428);
         record.StructuredState!.Single(kv => kv.Key == "Threads").Value.ShouldBe("0");
         record.StructuredState!.Single(kv => kv.Key == "ThreadsDisplay").Value.ShouldBe("ORT default");

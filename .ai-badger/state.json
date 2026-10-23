@@ -4,6 +4,12 @@
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
     {
+      "id": "air-ort-node-placement-log-summary",
+      "title": "2.3.0: log ONNX Runtime node placement per execution provider (EventIds 450-452)",
+      "pr": 921,
+      "finished": "2026-10-23"
+    },
+    {
       "id": "air-review-2x-releases-quality-coverage",
       "title": "Review 2.0.0/2.0.1/2.1.0 + live-bank inspection; 2.2.0 fixes",
       "pr": 916,
