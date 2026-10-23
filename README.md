@@ -45,6 +45,7 @@ The full walkthrough, including indexing your code, is [Get started with AiRacco
 
 ## What's new
 
+- Query hits name their entry kind, so a hit's `entryKind` passes straight into `get_entry` (2.2.0). [Release notes](docs/changelog/2.2.0-entry-kind-on-query-hits.md)
 - **Choose Memory, File, or Code in a query (2.1.0).** `query entryType=memory` searches agent notes and transcripts; `file` selects mirrored documents and `code` selects source. Omit the parameter to search everything. `get_entry` now requires one type, and TTL changes apply only to Memory. [Upgrade notes](docs/changelog/2.1.0-typed-search-memory-ttl.md)
 - **Every MCP tool has a new name, and the old names are gone (2.0.0).** `memory_search` is now `query`, `memory_get` and `code_get` are one `get_entry`, `memory_write` is `add_memory`, and the whole 30-tool surface moved with them. There are no aliases, so a client that calls an old name gets nothing back. The [old → new map](docs/changelog/2.0.0-mcp-tool-surface-renamed.md) is one table. [Breaking changes](docs/reference/breaking-changes.md)
 - The reserved `shared` document target refuses a delete, and every MCP tool now declares the scope it may run in, so the build fails when a tool declares none. (1.63.0) [ADR-0139](docs/adr/0139-attribute-derived-tool-scope.md)

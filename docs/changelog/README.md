@@ -11,6 +11,7 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [2.2.0 — query hits carry their entry kind, and the 2.x review fixes](2.2.0-entry-kind-on-query-hits.md)
 - [2.1.0 — typed search and Memory-only TTL](2.1.0-typed-search-memory-ttl.md)
 
 - [2.0.1 — a call to a tool this server does not have is answered with the tool to call](2.0.1-unknown-tool-guidance.md)
