@@ -50,7 +50,7 @@ public sealed class TypedEntryLifecycleTests : IAsyncLifetime
             new SearchDispatcher(_store, codeSearch, quality, TestData.SharedScope),
             new QueryGuardService(settings), new MemoryWriteService(_store, new FakePromotionQueue(), TestData.SharedScope),
             new NoOpMeasurementRecorder(), settings, NullLogger<MemoryTools>.Instance, embeddings);
-        _entryTools = new EntryTools(_store, codeSearch, gate);
+        _entryTools = new EntryTools(_store, codeSearch, gate, new EntryKindClassifier());
         _sweepTools = new SweepTools(new SweepService(_store, TimeProvider.System),
             new ForgettingPolicyService(_store, guard), gate);
         await using var warm = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

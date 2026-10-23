@@ -43,7 +43,7 @@ public sealed class GetEntryCodeToolTests : IAsyncLifetime
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(),
             new FakeTimeProvider(new DateTimeOffset(2026, 1, 15, 0, 0, 0, TimeSpan.Zero)),
             TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
-        _tools = new EntryTools(store, codeSearch, gate);
+        _tools = new EntryTools(store, codeSearch, gate, new EntryKindClassifier());
         await using var warm = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
     }
 
