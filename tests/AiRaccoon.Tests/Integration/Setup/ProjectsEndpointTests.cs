@@ -158,6 +158,18 @@ public sealed class ProjectsEndpointTests : IAsyncLifetime
         (await _app.Services.GetRequiredService<IProjectRegistry>().IsRegisteredAsync(Fresh, ct)).ShouldBeFalse();
     }
 
+    [RetryFact]
+    public async Task Post_TheReservedNameShared_Is400WritesNothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var response = await _client.PostAsJsonAsync(ProjectsProtocol.Path, new ProjectRegisterRequest(Fresh, "shared"), ct);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(ct)).ShouldContain("reserved");
+        (await _app.Services.GetRequiredService<IProjectRegistry>().IsRegisteredAsync(Fresh, ct)).ShouldBeFalse();
+    }
+
     [RetryTheory]
     [InlineData("acme\u001b")]
     [InlineData("ac\rme")]

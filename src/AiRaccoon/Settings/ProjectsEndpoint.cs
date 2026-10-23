@@ -46,8 +46,15 @@ internal static class ProjectsEndpoint
                         return Results.BadRequest("ai-raccoon: a project id is required");
                     }
 
-                    var registration = await directory.RegisterAsync(request.ProjectId, request.Name, ctx);
-                    return Results.Ok(new ProjectRegisterResponse(registration.Outcome, registration.ProjectId));
+                    try
+                    {
+                        var registration = await directory.RegisterAsync(request.ProjectId, request.Name, ctx);
+                        return Results.Ok(new ProjectRegisterResponse(registration.Outcome, registration.ProjectId));
+                    }
+                    catch (ReservedProjectNameException exception)
+                    {
+                        return Results.BadRequest($"ai-raccoon: {exception.Message}");
+                    }
                 });
         }
     }
