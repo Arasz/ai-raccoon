@@ -103,8 +103,10 @@ public sealed class SetTtlToolTests : IDisposable
         await FullAccessAsync();
         var entry = await SeedHistoricalTtlAsync("historical file", entryType, ttlDays: 19);
 
-        await Should.ThrowAsync<UnknownHashException>(() =>
+        var refusal = await Should.ThrowAsync<NotAMemoryEntryException>(() =>
             _tools.SetTtl(ProjectId, entry.Hash, 7, TestContext.Current.CancellationToken));
+
+        ToolRefusals.PrefixFor(refusal).ShouldBe("not-a-memory-entry");
 
         (await _store.GetMetadataAsync(ProjectId, entry.Hash, TestContext.Current.CancellationToken))!
             .TtlDays.ShouldBe(19);
@@ -167,6 +169,27 @@ public sealed class SetTtlToolTests : IDisposable
         await Should.ThrowAsync<UnknownHashException>(() =>
             _tools.SetTtl(ProjectId, entry.Hash, 7, TestContext.Current.CancellationToken));
         (await _store.GetMetadataAsync("other", entry.Hash, TestContext.Current.CancellationToken))!.TtlDays.ShouldBeNull();
+    }
+
+    [RetryTheory]
+    [InlineData(7)]
+    [InlineData(null)]
+    public async Task WrongProjectFileHash_IsUnknownHash_NotAKindRefusal(int? ttlDays)
+    {
+        await FullAccessAsync();
+        var entry = await _store.WriteAsync(new MemoryWriteRequest("other", "another project's file"),
+            TestContext.Current.CancellationToken);
+        var options = TestData.CreateInfrastructureOptions(_dataRoot);
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE entries SET entry_type = 'file', ttl_days = 19 WHERE hash = @hash",
+            new { hash = entry.Hash }, cancellationToken: TestContext.Current.CancellationToken));
+
+        await Should.ThrowAsync<UnknownHashException>(() =>
+            _tools.SetTtl(ProjectId, entry.Hash, ttlDays, TestContext.Current.CancellationToken));
+
+        (await _store.GetMetadataAsync("other", entry.Hash, TestContext.Current.CancellationToken))!.TtlDays.ShouldBe(19);
     }
 
     [RetryTheory]

@@ -124,7 +124,7 @@ public sealed class TypedEntryLifecycleTests : IAsyncLifetime
         }
 
         (await _sweepTools.SetTtl(ProjectId, memory.Hash, 7, ct)).Data!.TtlDays.ShouldBe(7);
-        await Should.ThrowAsync<UnknownHashException>(() => _sweepTools.SetTtl(ProjectId, "file-ttl-hash", 3, ct));
+        await Should.ThrowAsync<NotAMemoryEntryException>(() => _sweepTools.SetTtl(ProjectId, "file-ttl-hash", 3, ct));
         (await _store.GetMetadataAsync(ProjectId, "file-ttl-hash", ct))!.TtlDays.ShouldBe(19);
         (await _sweepTools.SetTtl(ProjectId, "file-ttl-hash", null, ct)).Data!.TtlDays.ShouldBeNull();
         (await _store.GetMetadataAsync(ProjectId, "file-ttl-hash", ct))!.TtlDays.ShouldBeNull();

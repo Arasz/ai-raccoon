@@ -33,6 +33,7 @@ internal static partial class ToolRefusals
         [typeof(PathNotFoundException)] = "path-not-found",
         [typeof(UnknownWorkspaceException)] = "unknown-workspace",
         [typeof(UnknownHashException)] = "unknown-hash",
+        [typeof(NotAMemoryEntryException)] = "not-a-memory-entry",
         [typeof(UnsupportedSchemaVersionException)] = "schema-version-unsupported",
         [typeof(WatchDisabledException)] = "watching-disabled",
         [typeof(WatchOverlapException)] = "watch-overlap",

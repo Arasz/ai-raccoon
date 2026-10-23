@@ -48,9 +48,15 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
                 cancellationToken);
         EntryTtl.EnsureValid(ttlDays);
 
-        // Wrong project and unknown hash are the same refusal here — one project must not learn another's hashes.
+        // Wrong project and unknown hash are the same refusal here — one project must not learn another's
+        // hashes. Only a row the caller's own project holds can be told apart as the wrong kind.
         if (!await store.SetEntryTtlAsync(projectId, hash, ttlDays, cancellationToken))
         {
+            if (await store.GetMetadataAsync(projectId, hash, cancellationToken) is not null)
+            {
+                throw new NotAMemoryEntryException(hash, projectId);
+            }
+
             throw new UnknownHashException(hash, projectId);
         }
 
