@@ -1,6 +1,8 @@
 using AiRaccoon.Core.Embedding;
 using AiRaccoon.Infrastructure.Embedding.NeuralEngine;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
 
@@ -119,6 +121,58 @@ public sealed class CoreMlCacheTests : IDisposable
     }
 
     [Fact]
+    public void Prune_DeletesACompiledModelWhoseGraphIsGone_InEveryBucket()
+    {
+        var cache = Cache();
+        var gone = Path.Combine(_root, "store", "2.1.0", CoreMlGraph.FileName);
+        var stale = CoreMlGraph.Buckets.Select(bucket => SeedCompiled(cache.BucketDirectory(bucket), "1111", gone)).ToList();
+
+        cache.Prune();
+
+        stale.ShouldAllBe(directory => !Directory.Exists(directory));
+    }
+
+    [Fact]
+    public void Prune_KeepsACompiledModelWhoseGraphStillExists()
+    {
+        var cache = Cache();
+        var installed = Path.Combine(_root, "store", "2.2.0", CoreMlGraph.FileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(installed)!);
+        File.WriteAllText(installed, "graph");
+        var live = SeedCompiled(cache.BucketDirectory(CoreMlGraph.Buckets[0]), "2222", installed);
+
+        cache.Prune();
+
+        Directory.Exists(live).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Prune_KeepsTheStableKeyCompiledModel_EvenWhenTheGraphItWasFirstBuiltFromIsGone()
+    {
+        var cache = Cache();
+        var gone = Path.Combine(_root, "store", "2.1.0", CoreMlGraph.FileName);
+        var stable = SeedCompiled(cache.BucketDirectory(CoreMlGraph.Buckets[0]), CoreMlGraph.CacheKey, gone);
+
+        cache.Prune();
+
+        Directory.Exists(stable).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Prune_KeepsACompiledModelWithNoModelPathRecorded_Silently()
+    {
+        var logger = new FakeLogger();
+        var cache = new CoreMlCache(CacheRoot, Key, Ort, logger);
+        var unknown = Path.Combine(cache.BucketDirectory(CoreMlGraph.Buckets[0]), "3333");
+        Directory.CreateDirectory(Path.Combine(unknown, "0_static_mlprogram"));
+
+        cache.Prune();
+
+        Directory.Exists(unknown).ShouldBeTrue();
+        logger.Collector.GetSnapshot().ShouldNotContain(record => record.Level >= LogLevel.Warning);
+    }
+
+    [Fact]
     public void Prune_DeletesOtherShaAndOrtSets_ButKeepsTheCurrentOne()
     {
         var cache = Cache();
@@ -216,6 +270,16 @@ public sealed class CoreMlCacheTests : IDisposable
         File.WriteAllText(Path.Combine(setDirectory, "compiled.bin"), "x");
         File.WriteAllText(Path.Combine(bucket, "compiled.bin"), "x");
         return setDirectory;
+    }
+
+    /// <summary>One ORT compiled-model folder the way the CoreML provider writes it: its key, model.txt naming the source graph, the compiled program.</summary>
+    private static string SeedCompiled(string bucketDirectory, string key, string graphPath)
+    {
+        var compiled = Path.Combine(bucketDirectory, key);
+        Directory.CreateDirectory(Path.Combine(compiled, "0_static_mlprogram"));
+        File.WriteAllText(Path.Combine(compiled, "0_static_mlprogram", "model"), "x");
+        File.WriteAllText(Path.Combine(compiled, "model.txt"), graphPath);
+        return compiled;
     }
 
     private static FileStream HoldLock(string setDirectory, FileShare share)
