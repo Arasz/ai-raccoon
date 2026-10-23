@@ -20,7 +20,7 @@ public sealed record ChunkBackfillReport(
 /// <summary>
 ///     WP3 step 4: splits rows holding more text than the embedding window into in-budget pieces.
 ///     Chunker follows the row's own source_file: a file row's own handler, plain text when no
-///     handler owns its extension, markdown for a add_memory note. Never reads the source file
+///     handler owns its extension, markdown for an add_memory note. Never reads the source file
 ///     itself (docs/adr/0069); budget AND counter resolve through <see cref="IEmbeddingService" />
 ///     (D9/ADR-0036).
 /// </summary>

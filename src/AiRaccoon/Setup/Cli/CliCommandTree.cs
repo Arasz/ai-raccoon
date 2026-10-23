@@ -343,7 +343,7 @@ internal static class CliCommandTree
     private static Command QueryGuardCommand()
     {
         var queryGuard = new Command("queryguard",
-            "Read-path query guard: refuses a query query that is itself machine output (e.g. a pasted background-process notification) and annotates one that merely contains log-like content. Armed by default — 'queryguard disable' is how you disarm it.")
+            "Read-path query guard: refuses a query that is itself machine output (e.g. a pasted background-process notification) and annotates one that merely contains log-like content. Armed by default — 'queryguard disable' is how you disarm it.")
         {
             new Command("enable", "Arms the read-path query guard (the default)"),
             new Command("disable", "Disarms the read-path query guard — every query runs untouched, even ones a policy would otherwise refuse or annotate")

@@ -51,7 +51,7 @@ public sealed class ReingestRepair(ChunkPositionScanner scanner)
 
         // workspace_id IS NULL and path = source_file: exactly the rows ReplaceAsync's own
         // DeleteBySourcePath predicate would touch — the digest owns mirror rows, never workspace
-        // scratch and never a add_memory row that merely cites the path (MemorySql.cs:188-190).
+        // scratch and never an add_memory row that merely cites the path (MemorySql.cs:188-190).
         var groups = (await connection.QueryAsync<GroupKey>(new CommandDefinition(
                 """
                 SELECT DISTINCT project_id AS ProjectId, source_file AS SourceFile
