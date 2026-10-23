@@ -1,8 +1,18 @@
 {
-  "lastUpdated": "2026-10-22",
+  "lastUpdated": "2026-10-23",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "air-review-2x-releases-quality-coverage",
+      "title": "Review 2.0.0/2.0.1/2.1.0 + live-bank inspection; 2.2.0 fixes",
+      "pr": 916,
+      "followUps": [
+        917,
+        918
+      ],
+      "finished": "2026-10-23"
+    },
     {
       "id": "air-type-partition-search-ttl-measurement",
       "title": "Typed entry search and Memory-only TTL",
