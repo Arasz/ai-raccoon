@@ -121,19 +121,10 @@ public sealed class EntryKindClassifierTests
             classifier.ToStoredValue((EntryKind)(EntryKind.Memory | EntryKind.File)));
     }
 
-    /// <summary>
-    ///     The QUERY PARAMETER's types are flags, so a caller can ask for a set of them. The set
-    ///     lives here and nowhere else: the stored kind is a separate, single-valued type, so the
-    ///     parameter lane cannot hand its filter set to the write path.
-    /// </summary>
+    /// <summary>The query parameter's types are a flag set, so a caller can ask for several at once.</summary>
     [Fact]
-    public void TheQueryParameterTypes_AreFlags()
-    {
-        (EntryType.Memory | EntryType.File).ShouldBe(
-            (EntryType)(EntryType.Memory | EntryType.File));
-        (EntryType.Memory | EntryType.File).HasFlag(EntryType.Memory).ShouldBeTrue();
-        (EntryType.Memory | EntryType.File).HasFlag(EntryType.Code).ShouldBeFalse();
-    }
+    public void TheQueryParameterTypes_AreFlags() =>
+        typeof(EntryType).IsDefined(typeof(FlagsAttribute), false).ShouldBeTrue();
 
     /// <summary>
     ///     Three states, and they are not the same: a DECLARED kind is kept, an UNDECLARED row is

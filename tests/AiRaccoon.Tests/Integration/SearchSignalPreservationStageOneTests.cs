@@ -174,7 +174,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
     {
         var bank = await CreateHarborBankAsync(TestContext.Current.CancellationToken);
         var buffer = new MeasurementBuffer(1000);
-        var quality = new SqliteSearchQualityService(bank.Factory, NullLogger<SqliteSearchQualityService>.Instance);
+        var quality = new SqliteSearchQualityService(bank.Factory, NullLogger<SqliteSearchQualityService>.Instance, TimeProvider.System);
         var tools = BuildTools(bank.Store, quality,
             new MetricsRecorder(buffer, NullLogger<MetricsRecorder>.Instance));
         var ct = TestContext.Current.CancellationToken;
@@ -319,7 +319,7 @@ public sealed class SearchSignalPreservationStageOneTests : IAsyncLifetime
 
         var unequipped = BuildTools(store);
         var buffer = new MeasurementBuffer(1000);
-        var quality = new SqliteSearchQualityService(factory, NullLogger<SqliteSearchQualityService>.Instance);
+        var quality = new SqliteSearchQualityService(factory, NullLogger<SqliteSearchQualityService>.Instance, TimeProvider.System);
         var equipped = BuildTools(store, quality,
             new MetricsRecorder(buffer, NullLogger<MetricsRecorder>.Instance));
 

@@ -49,7 +49,7 @@ public sealed class GetQualityReportTests
     [Fact]
     public async Task Tool_RequiresReadAccess_AndNamesItselfToTheGate()
     {
-        await _tools.GetQualityReport("acme", from: null, ct: TestContext.Current.CancellationToken);
+        await _tools.GetQualityReport("acme", from: null, cancellationToken: TestContext.Current.CancellationToken);
 
         _gate.LastProjectId.ShouldBe("acme");
         _gate.LastRequirement.ShouldBe(AccessRequirement.Read);
@@ -62,7 +62,7 @@ public sealed class GetQualityReportTests
     {
         _gate.Canonical = "winner";
 
-        await _tools.GetQualityReport("loser", from: null, ct: TestContext.Current.CancellationToken);
+        await _tools.GetQualityReport("loser", from: null, cancellationToken: TestContext.Current.CancellationToken);
 
         _quality.LastProjectId.ShouldBe("winner");
     }
@@ -74,7 +74,7 @@ public sealed class GetQualityReportTests
         _quality.Metrics = new SearchQualityMetrics(11, 5, 4, 4.25, 0.45, 0.8, 2);
 
         var envelope = await _tools.GetQualityReport("acme", from: null,
-            ct: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         envelope.Data.ShouldNotBeNull();
         envelope.Data.TotalSearches.ShouldBe(11);
@@ -82,19 +82,13 @@ public sealed class GetQualityReportTests
         envelope.Data.Coverage.ShouldBe(0.8);
     }
 
-    /// <summary>No window given: the tool asks for the last seven days.</summary>
+    /// <summary>No window given: the tool leaves the default to the service.</summary>
     [Fact]
-    public async Task Tool_WithoutAWindow_AsksForTheLastSevenDays()
+    public async Task Tool_WithoutAWindow_PassesNoStartToTheService()
     {
-        var before = DateTimeOffset.UtcNow.AddDays(-7);
+        await _tools.GetQualityReport("acme", from: null, cancellationToken: TestContext.Current.CancellationToken);
 
-        await _tools.GetQualityReport("acme", from: null, ct: TestContext.Current.CancellationToken);
-
-        _quality.LastFrom.ShouldNotBeNull("the tool must pass a window to the service");
-        _quality.LastFrom!.Value.ShouldBeGreaterThan(before.AddSeconds(-5),
-            "the default window starts seven days back");
-        _quality.LastFrom.Value.ShouldBeLessThanOrEqualTo(before.AddSeconds(5),
-            "the default window starts seven days back, not further");
+        _quality.LastFrom.ShouldBeNull("the default window belongs to the service");
     }
 
     /// <summary>A window given: the tool passes exactly that instant.</summary>
@@ -103,7 +97,7 @@ public sealed class GetQualityReportTests
     {
         var from = new DateTimeOffset(2026, 3, 4, 5, 6, 7, TimeSpan.Zero);
 
-        await _tools.GetQualityReport("acme", from: from, ct: TestContext.Current.CancellationToken);
+        await _tools.GetQualityReport("acme", from: from, cancellationToken: TestContext.Current.CancellationToken);
 
         _quality.LastFrom.ShouldBe(from);
     }
@@ -112,7 +106,7 @@ public sealed class GetQualityReportTests
     [Fact]
     public async Task Tool_RecordsNothing()
     {
-        await _tools.GetQualityReport("acme", from: null, ct: TestContext.Current.CancellationToken);
+        await _tools.GetQualityReport("acme", from: null, cancellationToken: TestContext.Current.CancellationToken);
 
         _quality.RecordSearchCalls.ShouldBe(0, "a report must not create a search row");
         _quality.RecordFollowThroughCalls.ShouldBe(0, "a report must not record a follow-through");
@@ -161,8 +155,8 @@ public sealed class GetQualityReportTests
 
         public int RecordGradeCalls { get; private set; }
 
-        public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset from,
-            CancellationToken ct = default)
+        public Task<SearchQualityMetrics> GetMetricsAsync(string? projectId, DateTimeOffset? from,
+            CancellationToken cancellationToken = default)
         {
             LastProjectId = projectId;
             LastFrom = from;

@@ -10,9 +10,14 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 ///     Records search-quality signals (search, follow-through, grade) into the search_quality table.
 ///     See docs/plans/2026-08-11-search-quality-metric-plan.md.
 /// </summary>
-public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory factory, ILogger<SqliteSearchQualityService> logger)
+public sealed partial class SqliteSearchQualityService(
+    ISqliteConnectionFactory factory,
+    ILogger<SqliteSearchQualityService> logger,
+    TimeProvider timeProvider)
     : ISearchQualityService
 {
+    private const int DefaultWindowDays = 7;
+
     /// <summary>Compact Stage-1 feature JSON: camel-case keys, no indentation.</summary>
     private static readonly JsonSerializerOptions ResultFeaturesJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     /// <summary>Best-effort: never throws (docs/plans/2026-08-15-performance-metrics-implementation.md, WP1 tool-size step).</summary>
@@ -69,7 +74,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         await using var connection = await factory.OpenBankAsync(ct);
         var topFilesJson = topSourceFiles.Count > 0 ? JsonSerializer.Serialize(topSourceFiles) : null;
         var resultFeaturesJson = SerializeResultFeatures(evidence);
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
 
         await connection.ExecuteAsync(
             """
@@ -248,11 +253,13 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
 
     public async Task<SearchQualityMetrics> GetMetricsAsync(
         string? projectId,
-        DateTimeOffset from,
-        CancellationToken ct = default)
+        DateTimeOffset? from,
+        CancellationToken cancellationToken = default)
     {
-        await using var connection = await factory.OpenBankAsync(ct);
-        var fromUnix = from.ToUnixTimeSeconds();
+        var now = timeProvider.GetUtcNow();
+        var windowStart = from ?? now.AddDays(-DefaultWindowDays);
+        await using var connection = await factory.OpenBankAsync(cancellationToken);
+        var fromUnix = windowStart.ToUnixTimeSeconds();
 
         var row = await connection.QuerySingleOrDefaultAsync(
             """
@@ -272,7 +279,7 @@ public sealed partial class SqliteSearchQualityService(ISqliteConnectionFactory 
         var graded = (int)(row?.GradedSearches ?? 0);
         var avgGrade = (double?)row?.AverageGrade ?? 0.0;
 
-        var days = Math.Max(1, (int)(DateTimeOffset.UtcNow - from).TotalDays);
+        var days = Math.Max(1, (int)(now - windowStart).TotalDays);
 
         return new SearchQualityMetrics(
             total,

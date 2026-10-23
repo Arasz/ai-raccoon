@@ -65,7 +65,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         CodeEngineStore = new SqliteCodeEngineStore(Factory, FakeEmbeddingService,
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
             TestData.CreateManifestPoolingRepair(), new VecDimensionReconciler());
-        SearchQuality = new SqliteSearchQualityService(Factory, NullLogger<SqliteSearchQualityService>.Instance);
+        SearchQuality = new SqliteSearchQualityService(Factory, NullLogger<SqliteSearchQualityService>.Instance, System.TimeProvider.System);
         ReindexJob = new CodeReindexJob(CodeEmbedder, EmbedDrainPump);
 
         var gate = new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck);
@@ -73,7 +73,7 @@ public sealed class CodeCorpusFeatureContext : IDisposable
             new SearchDispatcher(Store, CodeSearch, SearchQuality, TestData.SharedScope),
             new QueryGuardService(Settings), new MemoryWriteService(Store, new FakePromotionQueue(), TestData.SharedScope),
             new NoOpMeasurementRecorder(), Settings, NullLogger<MemoryTools>.Instance, FakeEmbeddingService);
-        EntryTools = new EntryTools(Store, CodeSearch, gate);
+        EntryTools = new EntryTools(Store, CodeSearch, gate, new EntryKindClassifier());
 
         ComposeWatchStack();
     }

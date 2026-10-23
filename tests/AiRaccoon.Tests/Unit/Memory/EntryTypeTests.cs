@@ -99,6 +99,11 @@ public sealed class EntryTypeTests
             EntryTypeParameter.Single(EntryType.Memory | (EntryType)16));
     }
 
+    /// <summary>The empty set names no kind, so a lookup refuses it.</summary>
+    [Fact]
+    public void Single_RefusesTheEmptySet() =>
+        Should.Throw<ArgumentException>(() => EntryTypeParameter.Single(EntryType.None));
+
     /// <summary>The one kind a lookup names comes back as itself.</summary>
     [Theory]
     [InlineData(EntryType.Memory)]

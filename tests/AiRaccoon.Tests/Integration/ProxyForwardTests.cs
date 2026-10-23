@@ -211,7 +211,9 @@ public sealed class ProxyForwardTests : IAsyncLifetime
         // it comes back as an HTTP-level failure, not an MCP one.
         await Should.ThrowAsync<McpException>(async () => await _proxyClient.SendRequestAsync(
             new JsonRpcRequest { Method = "x/unknown", Id = new RequestId("alive-1") }, cts.Token));
-        await Should.ThrowAsync<McpException>(async () => await CallAsync("no_such_tool", cts.Token));
+        var unknown = await CallAsync("no_such_tool", cts.Token);
+        unknown.IsError.ShouldBe(true);
+        unknown.Content.OfType<TextContentBlock>().First().Text.ShouldStartWith("unknown-tool:");
 
         _reacquireCount.ShouldBe(0);
     }

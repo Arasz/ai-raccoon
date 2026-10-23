@@ -720,7 +720,7 @@ public sealed partial class SqliteMemoryStore(
     [
         .. ranked.Select(item => new MemorySearchResult(
             item.Row.Hash, item.Score, item.Row.Path, string.Empty,
-            item.Row.SourceFile, item.Row.ChunkIndex, item.Row.TotalChunks, item.ContentCosine))
+            item.Row.SourceFile, item.Row.ChunkIndex, item.Row.TotalChunks, item.ContentCosine, item.Row.EntryKind))
     ];
 
     /// <summary>

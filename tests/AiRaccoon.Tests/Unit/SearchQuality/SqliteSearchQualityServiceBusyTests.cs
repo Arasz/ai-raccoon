@@ -103,6 +103,6 @@ public sealed class SqliteSearchQualityServiceBusyTests
         var factory = Substitute.For<ISqliteConnectionFactory>();
         factory.OpenBankAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromException<Microsoft.Data.Sqlite.SqliteConnection>(exception));
-        return new SqliteSearchQualityService(factory, logger);
+        return new SqliteSearchQualityService(factory, logger, TimeProvider.System);
     }
 }

@@ -62,7 +62,7 @@ public sealed class RetentionReaperTests : IDisposable
     public async Task PurgeOldSearchQuality_RemovesOnlyRowsPastRetention()
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
-        var service = new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance);
+        var service = new SqliteSearchQualityService(_factory, Microsoft.Extensions.Logging.Abstractions.NullLogger<SqliteSearchQualityService>.Instance, TimeProvider.System);
 
         await connection.ExecuteAsync(
             "INSERT INTO search_quality (correlation_id, query, scope, project_id, created_at) VALUES " +

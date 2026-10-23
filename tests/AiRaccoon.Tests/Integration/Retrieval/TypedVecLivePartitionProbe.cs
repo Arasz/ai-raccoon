@@ -29,8 +29,7 @@ public sealed class TypedVecLivePartitionProbe(ITestOutputHelper output)
         var sourcePath = Environment.GetEnvironmentVariable("AIRACCOON_TYPED_VEC_SOURCE");
         if (sourcePath is null)
         {
-            output.WriteLine("Set AIRACCOON_TYPED_VEC_SOURCE to an immutable plaintext backup to run.");
-            return;
+            Assert.Skip("Set AIRACCOON_TYPED_VEC_SOURCE to an immutable plaintext backup to run.");
         }
 
         var root = TestData.CreateTempRoot("typed-live");
