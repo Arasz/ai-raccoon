@@ -28,3 +28,7 @@ A later regeneration touched exactly the two `evidenceByHash.*.cosine` values (e
 double the previous): that field is the raw content-embedding cosine to the query, while the
 capture before it carried the alpha-fused content/structure score, which for a row with no
 structure vector is half the content cosine. Keys, order, and every other value are unchanged.
+
+A third regeneration added `"entryKind": "memory"` to each result, after `totalChunks`: the
+additive per-hit kind from 2.2.0, so a hit names the `entryType` that `get_entry` needs. Both
+fixture rows are agent-written notes, hence `memory`. Every other key and value is unchanged.
