@@ -11,13 +11,14 @@ internal static class MemorySql
     ///     memory.
     ///     <para>
     ///         This is the SQL twin of <see cref="EntryKindClassifier.Classify" />, and the two must
-    ///         agree — a comparison test runs both over one fixture. Two call sites need it: the v20
-    ///         backfill and the sync merge, so the rule is written once rather than twice.
+    ///         agree — a comparison test runs both over one fixture. Three call sites need it: the v20
+    ///         backfill, the vector rebuild's kind normalization and the sync merge, so the rule is
+    ///         written once rather than three times.
     ///     </para>
     /// </summary>
     public static string EntryTypeFromShape(string tableAlias) =>
         $"CASE WHEN {tableAlias}source_file IS NOT NULL AND {tableAlias}source_file <> '' "
-        + $"AND {tableAlias}source_file = {tableAlias}path THEN 'file' ELSE 'memory' END";
+        + $"AND {tableAlias}source_file = {tableAlias}path THEN '{EntryKindWireNames.File}' ELSE '{EntryKindWireNames.Memory}' END";
 
     /// <summary>
     ///     The kind a row keeps when it comes from somewhere else: the kind it declares, when it
@@ -827,7 +828,7 @@ internal static class MemorySql
                      WHERE hash = @hash AND {ProjectRows.Of()}
                      ORDER BY {ProjectRows.CommittedFirst()}, id
                      LIMIT 1)
-           AND (@ttlDays IS NULL OR entries.entry_type = 'memory')
+           AND (@ttlDays IS NULL OR entries.entry_type = '{EntryKindWireNames.Memory}')
          """;
 
     // Reads the same row UpdateEntryTtl writes — the explicit ORDER BY is what makes "the entry

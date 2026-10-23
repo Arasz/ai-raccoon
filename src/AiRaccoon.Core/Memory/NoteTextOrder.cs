@@ -3,11 +3,11 @@ using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Core.Memory;
 
-/// <summary>One stored row of a add_memory note: its id, its text, and its chunk_index (-1 when unknown).</summary>
+/// <summary>One stored row of an add_memory note: its id, its text, and its chunk_index (-1 when unknown).</summary>
 public sealed record NoteRow(long Id, string Value, long ChunkIndex);
 
 /// <summary>
-///     Recovers the text order of a note's rows. A add_memory note's path names the SHA-256 of its whole body,
+///     Recovers the text order of a note's rows. An add_memory note's path names the SHA-256 of its whole body,
 ///     so an order counts only when its rows, with each overlay repeat dropped, join back into text with that hash.
 /// </summary>
 public static class NoteTextOrder
