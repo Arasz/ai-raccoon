@@ -85,9 +85,9 @@ public sealed class TypedSearchTests
     [InlineData(EntryType.Code, new string[0])]
     [InlineData(EntryType.Memory | EntryType.Code, new[] { "memory" })]
     [InlineData(EntryType.File | EntryType.Code, new[] { "file" })]
-    [InlineData(EntryType.Memory | EntryType.File, new[] { "file", "memory" })]
+    [InlineData(EntryType.Memory | EntryType.File, new[] { "file", "unknown", "none", "memory" })]
     [InlineData(EntryTypeParameter.Default, new[] { "file", "unknown", "none", "memory" })]
-    public async Task Vector_TypeSets_KeepGlobalDistanceOrderIncludingUnclassifiedForAll(EntryType types, string[] expected)
+    public async Task Vector_TypeSets_KeepGlobalDistanceOrderIncludingUnclassifiedForBothMemoryKinds(EntryType types, string[] expected)
     {
         await using var connection = await OpenAsync();
         await SeedAsync(connection, "memory", "memory", "needle", content: Vector(0.6f, 0.8f));
@@ -104,9 +104,9 @@ public sealed class TypedSearchTests
     [InlineData(EntryType.Memory, new[] { "memory" })]
     [InlineData(EntryType.File, new[] { "file" })]
     [InlineData(EntryType.Code, new string[0])]
-    [InlineData(EntryType.Memory | EntryType.File, new[] { "file", "memory" })]
+    [InlineData(EntryType.Memory | EntryType.File, new[] { "file", "memory", "none", "unknown" })]
     [InlineData(EntryTypeParameter.Default, new[] { "file", "memory", "none", "unknown" })]
-    public async Task Fts_TypeSets_IncludeUnclassifiedOnlyForAll(EntryType types, string[] expected)
+    public async Task Fts_TypeSets_IncludeUnclassifiedOnlyWhenBothMemoryKindsAreAsked(EntryType types, string[] expected)
     {
         await using var connection = await OpenAsync();
         foreach (var type in new[] { "memory", "file", "none", "unknown" })
@@ -190,7 +190,7 @@ public sealed class TypedSearchTests
             var fts = await store.SearchAsync(query with { EntryTypes = EntryType.File, FtsWeight = 1, VectorWeight = 0 }, TestContext.Current.CancellationToken);
             var fallbackFts = await store.SearchAsync(query with { Query = "needle absentword", EntryTypes = EntryType.File, FtsWeight = 1, VectorWeight = 0 }, TestContext.Current.CancellationToken);
 
-            mixed.Results.Select(row => row.Hash).ShouldBe(["structure-file", "content-memory"]);
+            mixed.Results.Select(row => row.Hash).ShouldBe(["structure-file", "unclassified", "content-memory"]);
             memory.Results.Select(row => row.Hash).ShouldBe(["content-memory"]);
             all.Results.Select(row => row.Hash).ShouldBe(["structure-file", "unclassified", "content-memory"]);
             all.Results.Select(row => row.EntryKind).ShouldBe(["file", "none", "memory"]);

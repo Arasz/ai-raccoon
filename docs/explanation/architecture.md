@@ -11,8 +11,9 @@ contract (tool names, parameters, env vars), see
 
 Since 2.1.0, `entries.entry_type` stores one kind, while `SearchQuery.EntryTypes` is the query's
 flag set. `search_quality.kind_mask` stores that set beside the historical corpus `kind`.
-Historical `memory` selections map to Memory plus File, rather than Memory alone. An all-type
-query omits the type predicate; a narrower query excludes undeclared and unknown rows.
+Historical `memory` selections map to Memory plus File, rather than Memory alone. A query that
+asks for both Memory and File omits the type predicate on the memory corpus, whether or not it
+also asks for Code; a narrower query excludes undeclared and unknown rows.
 
 
 All tables live in a single `memory.db` file — no external extensions, no meta

@@ -176,17 +176,19 @@ internal static class MemorySql
     // a total order the result is whatever rowid sqlite happens to visit first -- ties by e.hash
     // instead, matching the harness's ORDER BY bm25(...), e.hash port
     // (scripts/retrieval_tuning/llamaindex_harness/ingest.py's _bank_fts_order).
-    public static readonly string SearchByFilter = $$"""
+    private static readonly string SearchTemplate = $$"""
                                          SELECT e.hash AS Hash, bm25(entries_fts, 1.0, 8.0, 4.0) AS Ranking,
                                                 e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
                                                 e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks,
                                                 e.id AS Id, {{HitKind}} AS EntryKind
                                          FROM entries_fts
                                          JOIN entries e ON e.id = entries_fts.rowid
-                                         WHERE entries_fts MATCH @query AND {filter}
+                                         WHERE entries_fts MATCH @query AND ({filter}){typeFilter}
                                          ORDER BY bm25(entries_fts, 1.0, 8.0, 4.0), e.hash
                                          LIMIT @limit
                                          """;
+
+    public static readonly string SearchByFilter = SearchTemplate.Replace("{typeFilter}", "");
 
     // Re-runs the SAME @query text SearchByFilter used, restricted to the ranking survivors' rowids,
     // so the highlighting matches what the eager statement would have produced. Filters by
@@ -229,13 +231,19 @@ internal static class MemorySql
                                                         LIMIT @limit
                                                         """;
 
-    public static string SearchByTypes(EntryType types) => types == EntryTypeParameter.Default
-        ? SearchByFilter
-        : SearchByFilter.Replace("AND {filter}", "AND ({filter}) AND e.entry_type IN @entryTypes");
+    /// <summary>
+    ///     Asking for both Memory and File is no type filter on the memory corpus (ADR-0141), so it
+    ///     reaches unclassified rows too; a narrower set selects declared kinds only.
+    /// </summary>
+    private static bool FiltersMemoryRows(EntryType types) =>
+        (types & (EntryType.Memory | EntryType.File)) != (EntryType.Memory | EntryType.File);
+
+    public static string SearchByTypes(EntryType types) =>
+        SearchTemplate.Replace("{typeFilter}", FiltersMemoryRows(types) ? " AND e.entry_type IN @entryTypes" : "");
 
     public static string VectorSearchByTypes(EntryType types, bool structure = false) =>
         (structure ? StructureVectorSearchTemplate : VectorSearchTemplate).Replace("{typeFilter}",
-            types == EntryTypeParameter.Default ? "" : "type IN @entryTypes AND ");
+            FiltersMemoryRows(types) ? "type IN @entryTypes AND " : "");
 
     // @scope null is delete_entry (N7/F26): every row sharing the write's path goes, not just
     // the reported hash — a manual add_memory's N chunks share one content-addressed path. The

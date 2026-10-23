@@ -134,9 +134,10 @@ config channel (see [Command-line options](#command-line-options)).
   carries no `truncation`, and neither does one that is short because the bank simply ends:
   the marker distinguishes "the floor cut this" from "this is all there is".
 - **`query` entry types:** `entryType` is a comma-separated selection of `memory`, `code`,
-  and `file`, case-insensitive. Omission selects all three and applies no row-kind filter,
-  including unclassified rows. Memory selects agent notes and transcripts; File selects mirrored
-  documents. Narrow selections filter FTS and both vector modalities before truncation.
+  and `file`, case-insensitive. Omission selects all three. Any selection naming both `memory`
+  and `file` applies no row-kind filter to memory hits, so it includes unclassified rows.
+  Memory selects agent notes and transcripts; File selects mirrored documents. A selection with
+  only one of the two filters FTS and both vector modalities before truncation.
   Code runs its independent hybrid and remains project-scoped; shared-only requests return
   an empty code section. With no Code bit the response has no `code` key.
   `get_entry` requires exactly one type, reads only that type and does not fall back to another
