@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Memory;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -49,10 +50,10 @@ internal static class SchemaDoctor
         try
         {
             await using var count = bank.CreateCommand();
-            count.CommandText = """
+            count.CommandText = $"""
                                 SELECT
-                                    COALESCE(SUM(CASE WHEN entry_type IS NULL OR entry_type = 'none' THEN 1 ELSE 0 END), 0),
-                                    COALESCE(SUM(CASE WHEN entry_type NOT IN ('none', 'memory', 'file') THEN 1 ELSE 0 END), 0)
+                                    COALESCE(SUM(CASE WHEN entry_type IS NULL OR entry_type = '{EntryKindWireNames.None}' THEN 1 ELSE 0 END), 0),
+                                    COALESCE(SUM(CASE WHEN entry_type NOT IN ({MemorySchema.EntryKindList}) THEN 1 ELSE 0 END), 0)
                                 FROM entries
                                 """;
             await using var reader = await count.ExecuteReaderAsync(cancellationToken);
