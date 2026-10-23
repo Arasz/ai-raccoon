@@ -24,8 +24,7 @@ public sealed class TypedVecPartitionProbe(ITestOutputHelper output)
     {
         if (Environment.GetEnvironmentVariable("AIRACCOON_TYPED_VEC_PROBE") is null)
         {
-            output.WriteLine("Set AIRACCOON_TYPED_VEC_PROBE=1 to execute the native layout experiment.");
-            return;
+            Assert.Skip("Set AIRACCOON_TYPED_VEC_PROBE=1 to execute the native layout experiment.");
         }
 
         const int Dimensions = 384;

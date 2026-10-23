@@ -51,8 +51,7 @@ public sealed class TypedSearchImpactProbe(ITestOutputHelper output)
         var sourcePath = Environment.GetEnvironmentVariable("AIRACCOON_TYPED_SEARCH_SOURCE");
         if (sourcePath is null)
         {
-            output.WriteLine("Set AIRACCOON_TYPED_SEARCH_SOURCE to an immutable pinned plaintext bank to run.");
-            return;
+            Assert.Skip("Set AIRACCOON_TYPED_SEARCH_SOURCE to an immutable pinned plaintext bank to run.");
         }
         var artifactPath = Environment.GetEnvironmentVariable("AIRACCOON_TYPED_SEARCH_REPORT")
             ?? Path.Combine(Path.GetTempPath(), "typed-search-impact.json");
