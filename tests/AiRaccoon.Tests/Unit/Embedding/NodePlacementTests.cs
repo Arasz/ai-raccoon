@@ -110,7 +110,7 @@ public sealed class NodePlacementTests
             " Node(s) placed on [CPUExecutionProvider]. Number of nodes: 1",
             "  Shape (/Shape)",
             "Use DeviceBasedPartition as default",
-            "  Reserving memory in BFCArena (indented by a later caller)");
+            "  Gather (an indented line from a later caller)");
 
         placement.Summary().ShouldBe("CPU: 1 — Shape");
     }

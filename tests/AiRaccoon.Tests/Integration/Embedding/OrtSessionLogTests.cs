@@ -27,7 +27,7 @@ public sealed class OrtSessionLogTests
 
         using var session = OrtSessionLog.Create(TestData.MiniLmModelPath(), options, logger);
 
-        var placement = logger.Collector.GetSnapshot().Single(r => r.Id.Id == OrtSessionLog.NodePlacementEventId);
+        var placement = logger.Collector.GetSnapshot().Single(r => r.Id.Id == 450);
         placement.Level.ShouldBe(LogLevel.Information);
         placement.Message.ShouldMatch(@": CPU: all \d+ nodes$");
     }
@@ -47,7 +47,7 @@ public sealed class OrtSessionLogTests
         using var session = OrtSessionLog.Create(TestData.MiniLmModelPath(), options, logger);
 
         var records = logger.Collector.GetSnapshot();
-        records.Single(r => r.Id.Id == OrtSessionLog.NodePlacementEventId).Message
+        records.Single(r => r.Id.Id == 450).Message
             .ShouldMatch(@": CoreML: \d+/\d+ original nodes in \d+ fused partitions; CPU: \d+ — ");
         records.ShouldNotContain(r => r.Message.Contains(GenericWarning, StringComparison.Ordinal));
     }

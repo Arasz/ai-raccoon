@@ -10,10 +10,6 @@ namespace AiRaccoon.Infrastructure.Embedding;
 /// </summary>
 internal sealed partial class OrtSessionLog
 {
-    internal const int NodePlacementEventId = 450;
-    internal const int PlacementNotReportedEventId = 451;
-    internal const int ForwardedEventId = 452;
-
     private const string EnvironmentLogId = "ai-raccoon";
 
     private static readonly Lock EnvironmentGate = new();
@@ -99,15 +95,15 @@ internal sealed partial class OrtSessionLog
 
     internal static partial class Log
     {
-        [LoggerMessage(EventId = NodePlacementEventId, Level = LogLevel.Information,
+        [LoggerMessage(EventId = 450, Level = LogLevel.Information,
             Message = "ONNX Runtime node placement for {Model}: {Placement}")]
         public static partial void NodePlacement(ILogger logger, string model, string placement);
 
-        [LoggerMessage(EventId = PlacementNotReportedEventId, Level = LogLevel.Information,
+        [LoggerMessage(EventId = 451, Level = LogLevel.Information,
             Message = "ONNX Runtime did not report node placement for {Model}")]
         public static partial void PlacementNotReported(ILogger logger, string model);
 
-        [LoggerMessage(EventId = ForwardedEventId, Message = "ONNX Runtime: {Message} ({Location})")]
+        [LoggerMessage(EventId = 452, Message = "ONNX Runtime: {Message} ({Location})")]
         public static partial void Forwarded(ILogger logger, LogLevel level, string message, string location);
     }
 }

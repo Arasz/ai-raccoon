@@ -30,7 +30,7 @@ public sealed class OrtSessionSinkTests
         sink.Finish("models/minilm/model.onnx");
 
         var record = logger.Collector.GetSnapshot().Single();
-        record.Id.Id.ShouldBe(OrtSessionLog.NodePlacementEventId);
+        record.Id.Id.ShouldBe(450);
         record.Level.ShouldBe(LogLevel.Information);
         record.Message.ShouldBe("ONNX Runtime node placement for minilm/model.onnx: CPU: all 12 nodes");
     }
@@ -44,7 +44,7 @@ public sealed class OrtSessionSinkTests
         sink.Finish("models/minilm/model.onnx");
 
         var record = logger.Collector.GetSnapshot().Single();
-        record.Id.Id.ShouldBe(OrtSessionLog.PlacementNotReportedEventId);
+        record.Id.Id.ShouldBe(451);
         record.Level.ShouldBe(LogLevel.Information);
         record.Message.ShouldBe("ONNX Runtime did not report node placement for minilm/model.onnx");
     }
@@ -74,7 +74,7 @@ public sealed class OrtSessionSinkTests
         sink.Add(OrtLoggingLevel.ORT_LOGGING_LEVEL_INFO, "inference_session.cc:1 Initialize", "Session successfully initialized.");
 
         var record = logger.Collector.GetSnapshot().Single();
-        record.Id.Id.ShouldBe(OrtSessionLog.ForwardedEventId);
+        record.Id.Id.ShouldBe(452);
         record.Level.ShouldBe(LogLevel.Warning);
         record.Message.ShouldBe("ONNX Runtime: Initializer x appears in graph inputs (graph.cc:42 Resolve)");
     }

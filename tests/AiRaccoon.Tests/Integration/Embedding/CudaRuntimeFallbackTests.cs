@@ -35,7 +35,7 @@ public sealed class CudaRuntimeFallbackTests
 
         calls.ShouldBe(successfulRuns + 1);
         generator.ExecutionProvider.ShouldBe("CPU (CUDA refused: LoadLibrary failed for cudnn64_9.dll)");
-        var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        var record = logger.Collector.WithoutOrtSessionLines().ShouldHaveSingleItem();
         record.Level.ShouldBe(LogLevel.Warning);
         record.Exception.ShouldBeSameAs(failure);
         record.Message.ShouldContain("CPU");
@@ -90,7 +90,7 @@ public sealed class CudaRuntimeFallbackTests
         cudaCalls.ShouldBe(1);
         fallbackCalls.ShouldBe(1);
         generator.ExecutionProvider.ShouldBe("CPU (CUDA refused: cuDNN)");
-        logger.Collector.GetSnapshot().Count.ShouldBe(1);
+        logger.Collector.WithoutOrtSessionLines().Count.ShouldBe(1);
     }
 
     [RetryFact]

@@ -11,6 +11,7 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [2.3.0 — the log says where ONNX Runtime put each model's nodes](2.3.0-onnx-node-placement-log.md)
 - [2.2.0 — query hits carry their entry kind, and the 2.x review fixes](2.2.0-entry-kind-on-query-hits.md)
 - [2.1.0 — typed search and Memory-only TTL](2.1.0-typed-search-memory-ttl.md)
 

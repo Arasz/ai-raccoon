@@ -29,7 +29,7 @@ public sealed class OnnxEmbeddingGeneratorLoggingTests
 
         await generator.GenerateAsync([overLong], cancellationToken: TestContext.Current.CancellationToken);
 
-        var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        var record = logger.Collector.WithoutOrtSessionLines().ShouldHaveSingleItem();
         record.Id.Id.ShouldBe(414);
         record.Level.ShouldBe(LogLevel.Warning);
     }
@@ -44,7 +44,7 @@ public sealed class OnnxEmbeddingGeneratorLoggingTests
 
         await generator.GenerateAsync(["a short, ordinary chunk of text"], cancellationToken: TestContext.Current.CancellationToken);
 
-        logger.Collector.GetSnapshot().ShouldBeEmpty();
+        logger.Collector.WithoutOrtSessionLines().ShouldBeEmpty();
     }
 
     [RetryFact]
@@ -59,7 +59,7 @@ public sealed class OnnxEmbeddingGeneratorLoggingTests
 
         await generator.GenerateAsync([hashList], cancellationToken: TestContext.Current.CancellationToken);
 
-        var record = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        var record = logger.Collector.WithoutOrtSessionLines().ShouldHaveSingleItem();
         record.Id.Id.ShouldBe(415);
         record.Level.ShouldBe(LogLevel.Warning);
     }
