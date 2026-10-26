@@ -100,7 +100,10 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
             var changed = await connection.ExecuteAsync(Command(
                 "UPDATE decision_projects SET revision=@revision WHERE project_id=@projectId AND revision=@previous",
                 new { revision, previous = revision - 1 }, cancellationToken));
-            Guard.IsEqualTo(changed, 1, nameof(revision));
+            if (changed != 1)
+            {
+                throw new DecisionRevisionConflictException(revision - 1, await RevisionAsync(cancellationToken));
+            }
         }
 
         public Task AddTaskAsync(DecisionTask task, CancellationToken cancellationToken) => Execute(

@@ -77,6 +77,8 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
             throw new ArgumentException("shared-project-reserved: repair cannot move or delete the shared target.");
         }
 
+        await RefuseGraphOwnersAsync(connection, plan, cancellationToken);
+
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         var vecInvalidated = await InvalidateVecAsync(connection, plan, cancellationToken);
         var codeVecInvalidated = await InvalidateCodeVecAsync(connection, plan, cancellationToken);
@@ -107,6 +109,40 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
             queueMerged, queueMoved, queueRemoved, discardsMoved, qualityMoved, watchesMoved, settingsRenamed,
             projectsEnsured, projectsRemoved, tombstonesRewritten, entriesTombstoned,
             vecInvalidated, codeVecInvalidated, metricsMoved, noiseMoved);
+    }
+
+    private static async Task RefuseGraphOwnersAsync(SqliteConnection connection, ProjectIdsFoldPlan plan,
+        CancellationToken cancellationToken)
+    {
+        var projects = plan.Folds.Select(fold => fold.Loser).Concat(plan.Dropped).Concat(plan.RetiredProjects)
+            .Distinct(StringComparer.Ordinal).ToArray();
+        if (projects.Length == 0)
+        {
+            return;
+        }
+
+        var tables = await connection.QueryAsync<string>(new CommandDefinition(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN @names",
+            new { names = Decisions.DecisionSchema.ProjectTableNames.ToArray() }, cancellationToken: cancellationToken));
+        foreach (var project in projects)
+        {
+            var occupied = new List<string>();
+            foreach (var table in tables)
+            {
+                var hasRows = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
+                    $"SELECT EXISTS(SELECT 1 FROM {table} WHERE project_id=@project)", new { project },
+                    cancellationToken: cancellationToken));
+                if (hasRows)
+                {
+                    occupied.Add(table);
+                }
+            }
+
+            if (occupied.Count > 0)
+            {
+                throw new Decisions.DecisionGraphRepairException(project, occupied);
+            }
+        }
     }
 
     /// <summary>

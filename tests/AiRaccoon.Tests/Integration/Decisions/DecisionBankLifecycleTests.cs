@@ -9,6 +9,7 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Decisions;
 
@@ -20,7 +21,7 @@ public sealed class DecisionBankLifecycleTests : IDisposable
     private SqliteConnectionFactory Factory(string? key = null) => new(
         new InfrastructureOptions { DataRoot = _root, Rid = "osx-arm64", Scope = InstallScope.User }, new FixtureKey(key));
 
-    [Fact]
+    [RetryFact]
     public async Task Version_twenty_two_bank_migrates_without_losing_existing_settings()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -41,7 +42,7 @@ public sealed class DecisionBankLifecycleTests : IDisposable
         (await migrated.ExecuteScalarAsync<int>("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='decision_versions'")).ShouldBe(1);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Encrypted_decision_graph_survives_rekey_and_refuses_plaintext_open()
     {
         var ct = TestContext.Current.CancellationToken;

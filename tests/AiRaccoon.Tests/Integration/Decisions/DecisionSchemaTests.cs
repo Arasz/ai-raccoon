@@ -7,6 +7,7 @@ using AiRaccoon.Infrastructure.Sqlite.Decisions;
 using Microsoft.Data.Sqlite;
 using Shouldly;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Decisions;
 
@@ -16,7 +17,7 @@ public sealed class DecisionSchemaTests : IDisposable
 {
     private readonly string _root = TestData.CreateTempRoot("decisions-schema");
 
-    [Fact]
+    [RetryFact]
     public async Task Bank_creates_project_owned_decision_tables()
     {
         var options = new InfrastructureOptions { DataRoot = _root, Rid = "osx-arm64", Scope = InstallScope.User };
@@ -32,7 +33,7 @@ public sealed class DecisionSchemaTests : IDisposable
         tables.ShouldContain("decision_imports");
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Noninitial_versions_require_a_nonnull_change_reason()
     {
         var ct = TestContext.Current.CancellationToken;

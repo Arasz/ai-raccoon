@@ -1,6 +1,6 @@
 # Decision graph data model
 
-Status: proposed. Read after [research](research.md), before the [API](api.md). Nothing here is shipped.
+Status: reviewed contract. The domain model and SQLite schema/store are implemented in draft PR #923; service and public surfaces remain in progress or pending. Read after [research](research.md), before the [API](api.md).
 
 ## Ownership and identity
 

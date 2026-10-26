@@ -5,7 +5,10 @@ namespace AiRaccoon.Infrastructure.Sqlite.Decisions;
 /// <summary>Project decision tables in the encrypted bank, excluded from automatic cloud sync.</summary>
 internal static class DecisionSchema
 {
-    internal static IEnumerable<string> TableNames => Regex.Matches(Ddl, @"CREATE TABLE IF NOT EXISTS (\w+)")
+    internal static IEnumerable<string> TableNames => Regex.Matches(Ddl, @"CREATE (?:VIRTUAL )?TABLE IF NOT EXISTS (\w+)")
+        .Select(match => match.Groups[1].Value);
+
+    internal static IEnumerable<string> ProjectTableNames => Regex.Matches(Ddl, @"CREATE TABLE IF NOT EXISTS (\w+)")
         .Select(match => match.Groups[1].Value);
 
     internal const string Ddl = """

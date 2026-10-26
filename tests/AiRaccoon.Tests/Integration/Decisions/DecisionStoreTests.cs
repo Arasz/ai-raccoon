@@ -6,6 +6,7 @@ using AiRaccoon.Infrastructure.Sqlite.Decisions;
 using Shouldly;
 using Microsoft.Data.Sqlite;
 using Xunit;
+using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Decisions;
 
@@ -22,7 +23,7 @@ public sealed class DecisionStoreTests : IDisposable
         return new SqliteDecisionStore(new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options)), new SharedProjectScope());
     }
 
-    [Fact]
+    [RetryFact]
     public async Task History_and_request_receipts_survive_a_new_store_instance()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -59,7 +60,7 @@ public sealed class DecisionStoreTests : IDisposable
         }, ct);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Failed_write_rolls_back_all_prior_changes()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -77,7 +78,7 @@ public sealed class DecisionStoreTests : IDisposable
         }, ct);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Read_transaction_keeps_one_snapshot_while_another_writer_commits()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -103,7 +104,7 @@ public sealed class DecisionStoreTests : IDisposable
         (await Store().ReadAsync("a", (reader, token) => reader.RevisionAsync(token), ct)).ShouldBe(2);
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Composite_foreign_keys_refuse_edges_to_another_projects_decisions()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -125,7 +126,7 @@ public sealed class DecisionStoreTests : IDisposable
         (await Store().ReadAsync("b", (reader, token) => reader.RecordsAsync(token), ct)).ShouldBeEmpty();
     }
 
-    [Fact]
+    [RetryFact]
     public async Task Edge_removal_preserves_its_own_task_reason_and_session_after_reopen()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -154,6 +155,19 @@ public sealed class DecisionStoreTests : IDisposable
             (await reader.ImportsAsync(token)).Single().RawPayload.ShouldBe("{\"extra\":1}");
             return true;
         }, ct);
+    }
+
+    [RetryFact]
+    public async Task Stale_project_revision_has_a_conflict_type_instead_of_argument_validation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var error = await Should.ThrowAsync<DecisionRevisionConflictException>(() => Store().WriteAsync("a", async (writer, token) =>
+        {
+            await writer.SetRevisionAsync(2, token);
+            return true;
+        }, ct));
+        error.ExpectedRevision.ShouldBe(1);
+        error.CurrentRevision.ShouldBe(0);
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_root);

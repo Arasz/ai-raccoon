@@ -1,4 +1,9 @@
 using AiRaccoon.Core.Sync;
+using AiRaccoon.Core.Decisions;
+using AiRaccoon.Core.Projects;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Sqlite.Decisions;
+using Dapper;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
@@ -143,6 +148,50 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         {
             tables.ShouldNotContain(table, $"{table} must never leave the machine via sync.");
         }
+    }
+
+    [RetryFact]
+    public async Task Sync_PopulatedDecisionGraph_WithForeignKeysEnabled_DropsChildrenBeforeParents()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
+        var store = new SqliteDecisionStore(new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options)), new SharedProjectScope());
+        await store.WriteAsync("acme", async (writer, token) =>
+        {
+            var now = new DateTimeOffset(2026, 10, 26, 12, 0, 0, TimeSpan.Zero);
+            await writer.SetRevisionAsync(1, token);
+            await writer.AddTaskAsync(new DecisionTask("task", "Task", 1, now, null), token);
+            foreach (var id in new[] { "one", "two" })
+            {
+                await writer.AddRecordAsync(new DecisionRecord(id, "task", 1, now), token);
+                await writer.AddVersionAsync(new DecisionVersion(id, 1, "task", 1,
+                    new DecisionContent(id, "architecture", "scenario", "outcome", "reason"),
+                    DecisionStatus.Accepted, now, "actor", "session", null), token);
+            }
+
+            await writer.AddEdgeAsync(new DecisionEdge("edge", "one", "two", DecisionEdgeKind.DependsOn,
+                "dependency", "task", 1, now, "actor", "session"), token);
+            await writer.AddReceiptAsync("request", new DecisionReceipt("hash", "{}", 1), token);
+            await writer.AddImportAsync(new DecisionImport("legacy", "external", "one", "task", "digest", "{}", "{}"), token);
+            return true;
+        }, ct);
+        var cloud = new FakeCloudStore();
+        async Task<SqliteConnection> ForeignKeySnapshot(string path, CancellationToken token)
+        {
+            var connection = await OpenSnapshot()(path, token);
+            await connection.ExecuteAsync("PRAGMA foreign_keys=ON");
+            (await connection.ExecuteScalarAsync<int>("PRAGMA foreign_keys")).ShouldBe(1);
+            return connection;
+        }
+
+        var service = new SyncService(cloud, token => CreateAndOpenAsync(BankPath, token), ForeignKeySnapshot, OpenReadOnly(),
+            TimeProvider.System, NullLogger<SyncService>.Instance);
+        await service.MemorySyncAsync("acme", "decision-graph", ct);
+        var pulled = await cloud.PullAsync("decision-graph", ct);
+        pulled.ShouldNotBeNull();
+        var pulledPath = Path.Combine(_dataRoot, "pulled-decisions.db");
+        await File.WriteAllBytesAsync(pulledPath, pulled.Data, ct);
+        AssertNoCodeOrDecisionTables(await TableNamesAsync(pulledPath, ct));
     }
 
     // --- Push path 1: local snapshot (SyncService.cs ~:74) -------------------------------------
