@@ -3,6 +3,7 @@
 [![build](https://github.com/Arasz/ai-raccoon/actions/workflows/build.yml/badge.svg)](https://github.com/Arasz/ai-raccoon/actions/workflows/build.yml)
 [![publish](https://github.com/Arasz/ai-raccoon/actions/workflows/publish.yml/badge.svg)](https://github.com/Arasz/ai-raccoon/actions/workflows/publish.yml)
 [![NuGet](https://img.shields.io/nuget/v/ai-raccoon.svg)](https://www.nuget.org/packages/ai-raccoon)
+[![M8ven Score](https://m8ven.ai/badge/mcp/arasz-ai-proxy-1h8736)](https://m8ven.ai/mcp/arasz-ai-proxy-1h8736?s=readme)
 
 An MCP server that gives AI agents persistent, project-scoped memory and a searchable index of the project's own code. It runs locally on .NET 10 and SQLite, with hybrid keyword and semantic search, workspace sandboxes, a shared cross-project tier, and optional cloud sync.
 
