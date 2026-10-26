@@ -15,4 +15,8 @@ Implementation PR: #923. Runtime plan `air-native-project-decision-graph-impleme
 
 ## Storage in progress
 
-Fresh-bank table test: 1 failed / 1 before DDL; 1 passed / 1 after schema v23 tables. Remaining storage gates are pending, not implied by this schema test.
+Fresh-bank table test: 1 failed / 1 before DDL; 1 passed / 1 after schema v23 tables. Storage suite now passes 9/9, covering reopen, cross-project FK refusal, read snapshot consistency, write rollback, removal/import metadata, v22-to-v23 migration, encryption and rekey. A NULL change-reason constraint test failed against SQLite's three-valued CHECK and then passed after explicit IS NOT NULL validation.
+
+Legacy schema and sync consumers passed 27/27 after linking the worktree's missing model data asset from the existing main checkout. The encrypted rekey fixture performs its missing-key probe after rekey so a separate wrong-key connection pool does not hold the file during exclusive rekey.
+
+Cloud exclusion is checked independently by the semantic condition that no table starting with decision survives any push snapshot. Removing graph exclusions caused 6 failures/15 sync cases; restoring them yielded 15/15 passing. Storage independent review remains pending.

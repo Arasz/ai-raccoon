@@ -121,8 +121,10 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         return names;
     }
 
-    private static void AssertNoCodeTables(List<string> tables)
+    private static void AssertNoCodeOrDecisionTables(List<string> tables)
     {
+        tables.Any(table => table.StartsWith("decision", StringComparison.Ordinal)).ShouldBeFalse(
+            "native decision graph tables must remain local on every push path");
         tables.ShouldNotContain("code_entries", "the code corpus must never leave the machine via sync (§3.7).");
         tables.ShouldNotContain("code_fts");
         tables.ShouldNotContain("vec_code");
@@ -163,7 +165,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         var pulledPath = Path.Combine(_dataRoot, "pulled-local.db");
         await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
 
-        AssertNoCodeTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+        AssertNoCodeOrDecisionTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
     }
 
     [RetryFact]
@@ -208,7 +210,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
 
         var tables = await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken);
-        AssertNoCodeTables(tables);
+        AssertNoCodeOrDecisionTables(tables);
         AssertNoMachineLocalTables(tables);
 
         // Independent of SyncService.MachineLocalTables (which drives the strip itself, so
@@ -244,7 +246,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         var pulledPath = Path.Combine(_dataRoot, "pulled-populated-vec-code.db");
         await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
 
-        AssertNoCodeTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+        AssertNoCodeOrDecisionTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
     }
 
     // --- Push path 2: merged snapshot (SyncService.cs ~:105) -----------------------------------
@@ -272,7 +274,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         var pulledPath = Path.Combine(_dataRoot, "pulled-merged.db");
         await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
 
-        AssertNoCodeTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+        AssertNoCodeOrDecisionTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
     }
 
     // --- Push path 3: retry-merged snapshot (SyncService.cs ~:161) -----------------------------
@@ -303,7 +305,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         var pulledPath = Path.Combine(_dataRoot, "pulled-retry.db");
         await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
 
-        AssertNoCodeTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+        AssertNoCodeOrDecisionTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
     }
 
     // --- Pull side: merge never names code tables, so a pull must not touch the local corpus ---
@@ -552,7 +554,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
             }
         }
 
-        AssertNoCodeTables(tables);
+        AssertNoCodeOrDecisionTables(tables);
     }
 
     // --- P2: telemetry (search_quality/metrics) never syncs (ADR-0098) -------------------------
