@@ -176,6 +176,8 @@ has every name; the records keep theirs, because a record is frozen.
 
 | [0141 — Memory vectors are partitioned by context and declared entry type](0141-typed-vector-partitions.md) | A type restriction applied after native KNN truncation can starve — a context with 122 Memory vectors among 9,546 returned one of ten requested Memory neighbors — so the entry-type restriction has to happen natively, before truncation, in both the content and the structure modalities. The vector tables carry a second native partition column for the declared kind, supplied by the injected classifier; a singleton query restricts on it, an unrestricted Memory+File query omits it, and Code keeps its own corpus and layout. Plain partition `IN` is not a globally ordered KNN list — the shipped sqlite-vec probe returns per-partition lists concatenated beyond k — so a subset that needs it forces the global order and limit in an outer query. The measured costs are accepted: 8.23% more allocation across the two modalities, and a structure unrestricted median that rises from 1.974 ms to 2.796 ms. | — |
 
+| [0142 — AiRaccoon owns a persistent project decision graph](0142-native-project-decision-graph.md) | **Proposed.** Native decision records, typed links, task-scoped export and compact preview in the encrypted bank; implementation and Semantica handover pending | — |
+
 ## Numbers never used
 
 | Number | Why |
