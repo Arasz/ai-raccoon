@@ -1,0 +1,203 @@
+{
+  "task_id": "air-native-project-decision-graph-implementation",
+  "revision": 1,
+  "content_hash": "0aa6b45cd7f191e1dc43b4f0cdca7aa7c5ecaea662efaf9a080da04b31361962",
+  "schema_url": "https://github.com/Arasz/ai-badger/schemas/task-plan.schema.json",
+  "document": {
+    "schema_version": 1,
+    "task_id": "air-native-project-decision-graph-implementation",
+    "task_description_ref": "docs/plans/decision-graph/research.md",
+    "research_ref": "docs/plans/decision-graph/research.md",
+    "task_context": "Reviewed planning only; runtime implementation pending. User requires author to implement, only review delegated. Serial DAG has one integration sink. Graph namespace merging is explicitly deferred; repair refuses occupied retired graphs.",
+    "loop": "high",
+    "source_refs": [
+      "docs/plans/decision-graph/data-model.md",
+      "docs/plans/decision-graph/api.md",
+      "docs/adr/0142-native-project-decision-graph.md",
+      "docs/plans/decision-graph/review.md"
+    ],
+    "workflow": {
+      "steps": {
+        "model": {
+          "id": "model",
+          "goal": "Define decision identity, content, lifecycle, selectors and typed edge invariants",
+          "instructions": "Own Core/Decisions domain types and narrow store/service ports plus unit tests. Follow docs/plans/decision-graph/data-model.md. Use state transitions, explicit task attribution and guard helpers; reject a generic entity graph. Write behavior tests first; report failing mutation and passing test evidence.",
+          "effort": "high",
+          "depends_on": [],
+          "acceptance_criteria": [
+            {
+              "id": "model-contract",
+              "statement": "Illegal transitions, dependency cycles and invalid selectors are refused; Core stays independent of persistence/HTTP.",
+              "check": "DecisionLifecycle_RejectsTerminalAmendment; DecisionEdges_RejectsDependencyCycle; selector mutual exclusion tests",
+              "status": "unchecked",
+              "evidence": []
+            }
+          ],
+          "files": [
+            "src/AiRaccoon.Core/Decisions/**",
+            "tests/AiRaccoon.Tests/Unit/Decisions/**"
+          ],
+          "resources": [],
+          "status": "pending"
+        },
+        "storage": {
+          "id": "storage",
+          "goal": "Persist decisions, version history, edge history and replay receipts atomically",
+          "instructions": "Own decision SQL store and next schema ladder migration, sync exclusions and storage integration tests. Use existing encrypted connection lifecycle and composite project keys. Test first: legacy migration, reopen, replay-before-version, rollback. Reject separate database and implicit cloud replication. Add every new table/FTS shadow family to all push exclusions. Report counts, mutation red/green and restart evidence.",
+          "effort": "high",
+          "depends_on": [
+            "model"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "storage-contract",
+              "statement": "Existing memory survives fresh/legacy migration; cross-project references refuse; history/replay survive restart; failed writes roll back; graph never uploads.",
+              "check": "DecisionStore_CrossProjectEndpointNotFound; DecisionStore_ReopenPreservesHistory; DecisionStore_ReplayBeforeExpectedVersion; DecisionStore_AtomicSupersession; DecisionStore_MigrationReplayPreservesMemory; DecisionSync_StripsGraphOnEveryPushPath",
+              "status": "unchecked",
+              "evidence": []
+            }
+          ],
+          "files": [
+            "src/AiRaccoon.Infrastructure/Sqlite/Decisions/**",
+            "src/AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs",
+            "src/AiRaccoon.Infrastructure/Sync/**",
+            "tests/AiRaccoon.Tests/Integration/Decisions/**"
+          ],
+          "resources": [],
+          "status": "pending"
+        },
+        "service": {
+          "id": "service",
+          "goal": "Implement registration, retrieval, task selection, traversal and snapshot projections",
+          "instructions": "Own decision service, literal-text FTS search and deterministic export/preview projections. Follow model/API contracts; committed project-only writes, no workspace guessing. Validate current-version guards and supersession in one transaction. Use server task order and version/edge touch membership. Reject generated compaction and silent truncation. Report mutation-backed selection, closure, history, Unicode and concurrency evidence.",
+          "effort": "high",
+          "depends_on": [
+            "storage"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "service-contract",
+              "statement": "Latest/N/all include empty tasks and revision/edge touches; export closes endpoints and retains selected history; preview limits are honest; traversal bounds terminate.",
+              "check": "DecisionSelection_LastUsesRegistrationOrder; DecisionSelection_EmptyNewestTaskRemains; DecisionSelection_RevisionAndEdgeTouchCount; DecisionExport_BoundaryClosureAndHistory; DecisionExport_ConcurrentWriterSingleSnapshot; DecisionPreview_CountsAndUnicodeBudget; DecisionEdgeRemoval_TaskProvenanceSurvivesRestart; DecisionPreview_ManyEmptyTasks",
+              "status": "unchecked",
+              "evidence": []
+            }
+          ],
+          "files": [
+            "src/AiRaccoon.Infrastructure/Decisions/**",
+            "tests/AiRaccoon.Tests/Unit/Decisions/**"
+          ],
+          "resources": [],
+          "status": "pending"
+        },
+        "adapters": {
+          "id": "adapters",
+          "goal": "Expose equivalent guarded HTTP and MCP decision operations",
+          "instructions": "Own protocol DTOs/endpoints/tools, host DI, scope and generated inventory integration. Use docs/plans/decision-graph/api.md operation table. Both adapters call same service with equivalent identity/token/access gates. Assert actual tools/list schemas and all four explicit annotations, including false. Reject duplicated adapter business logic. Report HTTP/MCP response and refusal parity plus oversized MCP export evidence.",
+          "effort": "high",
+          "depends_on": [
+            "service"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "adapters-contract",
+              "statement": "Every operation has one HTTP and MCP mapping, required inputs, generated project scope, explicit annotations and equivalent read/write/propose refusals.",
+              "check": "DecisionApi_AnnotationsAndGuardParity; real tools/list JSON contract tests; oversized export refusal test",
+              "status": "unchecked",
+              "evidence": []
+            }
+          ],
+          "files": [
+            "src/AiRaccoon/Decisions/**",
+            "src/AiRaccoon/Tools/DecisionTools.cs",
+            "src/AiRaccoon/Setup/AppRegistrations.cs",
+            "tests/AiRaccoon.Tests/Integration/Mcp/**",
+            "tests/AiRaccoon.Tests/Integration/Decisions/**"
+          ],
+          "resources": [],
+          "status": "pending"
+        },
+        "cli": {
+          "id": "cli",
+          "goal": "Add server-backed decision registration, export and compact preview commands",
+          "instructions": "Own CLI tree/handlers, decision HTTP client and renderers. Default latest one task; support --tasks N, --all and repeated --task-id with exclusive parsing. Stream lossless JSON/Markdown export; file publication atomic, no overwrite without --force. Preview plain text/JSON with sanitization and Unicode budgets. Preserve stdout machine content, diagnostics stderr; no SQLite access. Report real-server CLI fixtures, interrupted output and selector parity evidence.",
+          "effort": "high",
+          "depends_on": [
+            "adapters"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "cli-contract",
+              "statement": "CLI default/N/all/explicit selection matches backend; empty/latest/concurrent cases are deterministic; interrupted files are not published and nonzero exit is returned.",
+              "check": "DecisionCli_DefaultNAllMatchBackend; DecisionCli_InterruptedFileIsNotPublished; terminal-control/Unicode preview fixtures",
+              "status": "unchecked",
+              "evidence": []
+            }
+          ],
+          "files": [
+            "src/AiRaccoon/Setup/Cli/**",
+            "src/AiRaccoon/Decisions/Client/**",
+            "tests/AiRaccoon.Tests/Integration/Cli/**"
+          ],
+          "resources": [],
+          "status": "pending"
+        },
+        "migration": {
+          "id": "migration",
+          "goal": "Provide explicit Semantica import and graph-aware repair refusal/deletion",
+          "instructions": "Own import preview/apply service, HTTP/CLI wiring, source fixtures and project repair/deletion integration. Dry run first; require mapping, source digest and revision for apply. Preserve unknown raw payload and task mapping, refuse unresolved causal endpoints, replay namespace/external IDs without overwrite. Project repair must refuse before any mutation whenever a retired project has graph rows, including two nonempty graphs; graph-free losers can fold without changing winner graph. Do not merge graph order/revision/replay namespaces. Delete owned graph FK-safely; backup/rekey retain graph. Reject implicit accepted statuses and direct file-to-SQL writes. Report fixture counts, preflight refusal/rollback and rekey/restart evidence.",
+          "effort": "high",
+          "depends_on": [
+            "cli"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "migration-contract",
+              "statement": "Dry run writes nothing; apply atomic/replay-safe; raw source preserved; occupied retired graphs block repair without changes; deletion and rekey handle complete graph.",
+              "check": "DecisionImport_DryRunReplayAndUnknownData; DecisionRepair_TwoGraphsRefused; DecisionRepair_FoldAndConflictReport; encrypted backup/rekey and deletion fixtures",
+              "status": "unchecked",
+              "evidence": []
+            }
+          ],
+          "files": [
+            "src/AiRaccoon.Infrastructure/Decisions/Import/**",
+            "src/AiRaccoon.Infrastructure/Sqlite/ProjectIdsRepair.cs",
+            "src/AiRaccoon/Decisions/**",
+            "src/AiRaccoon/Setup/Cli/**",
+            "tests/AiRaccoon.Tests/Integration/Decisions/**"
+          ],
+          "resources": [],
+          "status": "pending"
+        },
+        "release": {
+          "id": "release",
+          "goal": "Document and prove native decision ownership across agent and CLI flows",
+          "instructions": "Own runtime docs/reference/how-to, ADR acceptance update and next minor VERSION/changelog. Execute combined real-node registration → decision → causal link → restart → MCP query and CLI default/N/all export/preview, including restricted modes. Delegate review-tests to reviewer only; retain mutation evidence. Keep external ai-badger framework switch a separate coordinated PR after gates. Document rollback matching binary/bank backup and legacy config. Report CI/reviews and exact release version; no auto-disable Semantica before acceptance.",
+          "effort": "high",
+          "depends_on": [
+            "migration"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "release-contract",
+              "statement": "Cross-surface behavior persists after restart, access modes agree, test quality is independently reviewed, release is traceable, and handover/rollback are documented.",
+              "check": "DecisionIntegration_RestartAndAccessModes; combined MCP/HTTP/CLI scenario; independent review-tests; CI and documentation gates",
+              "status": "unchecked",
+              "evidence": []
+            }
+          ],
+          "files": [
+            "docs/**",
+            "README.md",
+            "VERSION"
+          ],
+          "resources": [],
+          "status": "pending"
+        }
+      }
+    },
+    "revision": 1,
+    "created_at": "2026-10-26T13:35:05Z",
+    "updated_at": "2026-10-26T13:36:43.262307+00:00"
+  }
+}
