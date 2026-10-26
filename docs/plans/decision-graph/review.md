@@ -16,4 +16,12 @@ Date: 2026-10-26. Reviewer: delegated code-reviewer in isolated checkout `/tmp/a
 
 The simpler-shape check retained a decision-only relational model and removed graph-history merge from v1. Full generic graph/RDF, new database, event bus, automatic summarization and task lifecycle duplication remain outside scope.
 
-A follow-up review checks the corrections and machine DAG. Its actual outcome is recorded below when available; no runtime tests are claimed by a design review.
+## Follow-up result
+
+The same independent reviewer checked corrected commit `60fcc257` and reported no residual MUST findings. Model and API are ready for implementation handoff. The exported task-graph revision 1 has seven pending steps, unchecked runtime acceptance criteria, no cycles and one release/integration sink. This is design readiness only.
+
+## Validation performed
+
+Local document-link validation passed across all seven new Markdown documents. A simulated missing API target first made that check fail. JSON/DAG validation confirmed unique step identities, known dependencies, acyclicity, one sink and pending runtime status. `git diff --check` passed. No production code or tests changed; runtime build/test and mutation gates belong to the implementation plan. Key proposal was successfully registered in Semantica as decision `31da32fd-f81f-4ec1-ab3e-51a376c503f1`.
+
+The planning PR remains draft for the proposed contract; runtime implementation and release are outside this planning unit.
