@@ -27,7 +27,7 @@ The full implementation DAG is recorded in task-graph under `air-native-project-
 | service | storage | Infrastructure/Decisions service and FTS, service tests | Task touch membership, bounded traversal, atomic supersession, ownership and access tests |
 | adapters | service | host Decisions protocol/endpoints/tools, DI and inventory tests | HTTP/MCP parity and actual tools/list schema/annotations; read/write/propose mode and authentication tests |
 | cli | adapters | CLI decisions tree/commands/client/renderers and CLI integration tests | Real server-backed export/preview for defaults/N/all/empty/concurrent tasks and atomic output failures |
-| migration | cli | import adapter, repair/delete integration and fixtures/tests | Dry run/apply/replay counts, source preservation, conflicting IDs, project fold/delete, restart and rekey |
+| migration | cli | import adapter, repair/delete integration and fixtures/tests | Dry run/apply/replay counts, source preservation, conflicting IDs, graph-aware repair refusals/delete, restart and rekey |
 | release | migration | current specifications/reference/how-to, ADR status, VERSION and changelog | Cross-surface scenario via CLI and MCP after restart; review-tests; CI; documented handover and rollback |
 
 This serial DAG has one sink (release), which owns cross-surface integration checks. Keep execution in the main session as requested; delegate reviews only. Separate future implementation PR from this planning PR. Recheck paths and schema version against its fresh base before coding. No runtime version bump for a design-only PR; the implementation release takes the next minor from the version then current.
@@ -48,6 +48,9 @@ Each row names an observable failure and a mutation that must turn its test red.
 | DecisionSync_StripsGraphOnEveryPushPath | Local-only graph uploads | Remove one decision-table exclusion |
 | DecisionSelection_LastUsesRegistrationOrder | Editing old task changes latest task | Sort by updated timestamp |
 | DecisionSelection_EmptyNewestTaskRemains | Default silently falls back to older decisions | Select tasks only through inner join to decisions |
+| DecisionEdgeRemoval_TaskProvenanceSurvivesRestart | Removing an old link loses current task attribution | Omit removal_task_id persistence |
+| DecisionPreview_ManyEmptyTasks | Task headers exceed output budget | Emit every selected task header without budget check |
+| DecisionRepair_TwoGraphsRefused | Independent order/revision namespaces collide | Remove occupied-loser preflight |
 | DecisionSelection_RevisionAndEdgeTouchCount | Updates disappear from task export | Select only origin_task_id |
 | DecisionExport_BoundaryClosureAndHistory | Dangling links or lost rationale | Drop boundary stub or old version |
 | DecisionExport_ConcurrentWriterSingleSnapshot | Mixed versions/tasks in one file | Remove read transaction |
@@ -56,8 +59,8 @@ Each row names an observable failure and a mutation that must turn its test red.
 | DecisionCli_DefaultNAllMatchBackend | Flags select decisions instead of tasks | Apply N after flattening decisions |
 | DecisionCli_InterruptedFileIsNotPublished | Failed stream overwrites valid export | Write destination before completion |
 | DecisionImport_DryRunReplayAndUnknownData | Migration destroys legacy metadata | Write during dry run or drop unsupported raw record |
-| DecisionRepair_FoldAndConflictReport | Aliases strand or overwrite graph data | Skip graph family or use INSERT OR REPLACE |
-| DecisionIntegration_RestartAndAccessModes | Works only within one process/full mode | Skip restart or substitute permissive access fixture |
+| DecisionRepair_FoldAndConflictReport | Repair folds a nonempty retired graph or changes winner graph | Bypass occupied-loser graph preflight or use INSERT OR REPLACE |
+| DecisionIntegration_RestartAndAccessModes | Works only within one process/full mode | Use a process-local repository instead of persistent store, or bypass committed-write access guard |
 
 Run focused modified suites and their consumers once. CI runs the broader matrix. Full export should also get a bounded large fixture proving streaming and cancellation without inventing a performance target; benchmark only if it settles a design decision. Release is blocked by any unmapped input, unresolved must-fix review finding, missing mutation evidence, or cross-surface parity failure.
 
