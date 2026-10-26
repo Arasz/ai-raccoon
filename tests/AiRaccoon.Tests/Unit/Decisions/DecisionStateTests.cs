@@ -4,7 +4,8 @@ using Xunit;
 
 namespace AiRaccoon.Tests.Unit.Decisions;
 
-[Trait("Speed", "Fast")]
+[Trait(TestCategories.Category, TestCategories.Unit)]
+[Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class DecisionStateTests
 {
     [Theory]
