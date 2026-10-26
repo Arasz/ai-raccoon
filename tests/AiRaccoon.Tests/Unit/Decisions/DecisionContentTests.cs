@@ -55,4 +55,24 @@ public sealed class DecisionContentTests
         Should.Throw<ArgumentException>(() => new DecisionContent("t", "c", "s", "o", "r", consequences: [new string('x', 2001)]));
         Should.Throw<ArgumentException>(() => new DecisionContent("t", "c", "s", "o", "r", sources: [new DecisionSource(" ", "source")]));
     }
+    [Fact]
+    public void Source_count_accepts_twenty_and_refuses_twenty_one()
+    {
+        var source = new DecisionSource("docs/adr/a.md", "source");
+        var content = new DecisionContent("t", "c", "s", "o", "r", sources: Enumerable.Repeat(source, 20).ToArray());
+        content.Sources.Count.ShouldBe(20);
+        Should.Throw<ArgumentException>(() => new DecisionContent("t", "c", "s", "o", "r", sources: Enumerable.Repeat(source, 21).ToArray()));
+    }
+
+    [Fact]
+    public void Returned_evidence_collections_cannot_be_modified()
+    {
+        var content = new DecisionContent("t", "c", "s", "o", "r", alternatives: ["a"], consequences: ["c"], sources: [new DecisionSource("source", "why")]);
+        Should.Throw<NotSupportedException>(() => ((IList<string>)content.Alternatives)[0] = "changed");
+        Should.Throw<NotSupportedException>(() => ((IList<string>)content.Consequences)[0] = "changed");
+        Should.Throw<NotSupportedException>(() => ((IList<DecisionSource>)content.Sources)[0] = new DecisionSource("other", "other"));
+        content.Alternatives.Single().ShouldBe("a");
+        content.Consequences.Single().ShouldBe("c");
+        content.Sources.Single().Uri.ShouldBe("source");
+    }
 }
