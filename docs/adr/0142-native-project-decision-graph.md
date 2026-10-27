@@ -10,7 +10,7 @@ Agents need durable decisions, rationale, precedents and causal links across ses
 
 ## Decision
 
-Make AiRaccoon the primary owner of project decision registration and graph retrieval. Store stable decisions, immutable content versions, typed edges, task provenance and replay receipts as relational tables in its existing encrypted bank. Require canonical project ownership on every key and endpoint. Keep task metadata limited to attribution and ordering; task-graph retains execution state.
+Make AiRaccoon the primary owner of project decision registration and graph retrieval. Store stable decisions, immutable content versions, typed edges, task provenance and replay receipts as relational tables in its existing encrypted bank. Require canonical project ownership on every key and endpoint. Serialize project repair preflight and rewrites under one SQLite write lock; decision writes recheck registration inside their acquired transaction so an already-authorized queued writer cannot recreate a retired owner. Nested bank writes use savepoints. Keep task metadata limited to attribution and ordering; task-graph retains execution state.
 
 Expose one decision service through matching HTTP operations and thin MCP tools. CLI calls HTTP and never writes the bank. Support registration, amendments, legal lifecycle transitions, atomic supersession, explicit links, exact/FTS queries, precedents and bounded causal traversal. Agent tools declare all four annotations and project scope. A decision graph is separate from Memory/Code/File and does not change general query semantics.
 

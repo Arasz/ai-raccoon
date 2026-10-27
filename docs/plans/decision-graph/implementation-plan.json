@@ -1,6 +1,6 @@
 {
   "task_id": "air-native-project-decision-graph-implementation",
-  "revision": 1,
+  "revision": 6,
   "content_hash": "0aa6b45cd7f191e1dc43b4f0cdca7aa7c5ecaea662efaf9a080da04b31361962",
   "schema_url": "https://github.com/Arasz/ai-badger/schemas/task-plan.schema.json",
   "document": {
@@ -29,7 +29,7 @@
               "id": "model-contract",
               "statement": "Illegal transitions, dependency cycles and invalid selectors are refused; Core stays independent of persistence/HTTP.",
               "check": "DecisionLifecycle_RejectsTerminalAmendment; DecisionEdges_RejectsDependencyCycle; selector mutual exclusion tests",
-              "status": "unchecked",
+              "status": "passed",
               "evidence": []
             }
           ],
@@ -38,7 +38,26 @@
             "tests/AiRaccoon.Tests/Unit/Decisions/**"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "complete",
+          "started_at": "2026-10-26T13:47:46Z",
+          "completed_at": "2026-10-26T13:57:11Z",
+          "completion": {
+            "forced": false,
+            "evidence": [
+              {
+                "kind": "test",
+                "summary": "58 domain tests pass. Legal transition, terminal amendment, invalid selector, cycle and confidence reds observed; independent reviewer reproduced final 58/58 and killed evidence-bound/immutability mutations.",
+                "ref": "docs/plans/decision-graph/implementation-evidence.md",
+                "recorded_at": "2026-10-26T13:57:11Z"
+              },
+              {
+                "kind": "review",
+                "summary": "Independent model/test review: zero blockers and zero open major findings after actual mutations and restored green suite.",
+                "ref": "09fbcb81",
+                "recorded_at": "2026-10-26T13:57:11Z"
+              }
+            ]
+          }
         },
         "storage": {
           "id": "storage",
@@ -53,7 +72,7 @@
               "id": "storage-contract",
               "statement": "Existing memory survives fresh/legacy migration; cross-project references refuse; history/replay survive restart; failed writes roll back; graph never uploads.",
               "check": "DecisionStore_CrossProjectEndpointNotFound; DecisionStore_ReopenPreservesHistory; DecisionStore_ReplayBeforeExpectedVersion; DecisionStore_AtomicSupersession; DecisionStore_MigrationReplayPreservesMemory; DecisionSync_StripsGraphOnEveryPushPath",
-              "status": "unchecked",
+              "status": "passed",
               "evidence": []
             }
           ],
@@ -64,7 +83,26 @@
             "tests/AiRaccoon.Tests/Integration/Decisions/**"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "complete",
+          "started_at": "2026-10-26T13:57:11Z",
+          "completed_at": "2026-10-26T20:03:09Z",
+          "completion": {
+            "forced": false,
+            "evidence": [
+              {
+                "kind": "test",
+                "summary": "Storage9/9; existing schema consumers12/12 and sync15/15. Fresh/legacy schema, encrypted rekey, snapshot consistency, rollback, project FK isolation and audit provenance verified.",
+                "ref": "docs/plans/decision-graph/implementation-evidence.md",
+                "recorded_at": "2026-10-26T20:03:09Z"
+              },
+              {
+                "kind": "review",
+                "summary": "Independent review zero blockers/majors; project-predicate, snapshot, removal-task and rollback mutations killed; restored storage+sync24/24. Service-level replay-before-version and supersession tested in next step.",
+                "ref": "6fb628bd",
+                "recorded_at": "2026-10-26T20:03:09Z"
+              }
+            ]
+          }
         },
         "service": {
           "id": "service",
@@ -88,7 +126,8 @@
             "tests/AiRaccoon.Tests/Unit/Decisions/**"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "in_progress",
+          "started_at": "2026-10-26T20:03:10Z"
         },
         "adapters": {
           "id": "adapters",
@@ -196,8 +235,8 @@
         }
       }
     },
-    "revision": 1,
+    "revision": 6,
     "created_at": "2026-10-26T13:35:05Z",
-    "updated_at": "2026-10-26T13:36:43.262307+00:00"
+    "updated_at": "2026-10-26T20:03:10.033859+00:00"
   }
 }

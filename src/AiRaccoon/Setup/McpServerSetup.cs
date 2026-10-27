@@ -112,6 +112,7 @@ internal static partial class McpServerSetup
                 webApplication.MapNoiseSummary();
                 webApplication.MapWatchRegistered();
                 webApplication.MapWatch();
+                webApplication.MapDecisions();
                 webApplication.MapProjects();
             }
 

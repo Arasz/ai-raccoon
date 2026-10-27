@@ -20,8 +20,8 @@ The simpler-shape check retained a decision-only relational model and removed gr
 
 The same independent reviewer checked corrected commit `60fcc257` and reported no residual MUST findings. Model and API are ready for implementation handoff. The exported task-graph revision 1 has seven pending steps, unchecked runtime acceptance criteria, no cycles and one release/integration sink. This is design readiness only.
 
-## Validation performed
+## Original planning validation
 
-Local document-link validation passed across all seven new Markdown documents. A simulated missing API target first made that check fail. JSON/DAG validation confirmed unique step identities, known dependencies, acyclicity, one sink and pending runtime status. `git diff --check` passed. No production code or tests changed; runtime build/test and mutation gates belong to the implementation plan. Key proposal was successfully registered in Semantica as decision `31da32fd-f81f-4ec1-ab3e-51a376c503f1`.
+Local document-link validation passed across all seven new Markdown documents. A simulated missing API target first made that check fail. JSON/DAG validation confirmed unique step identities, known dependencies, acyclicity, one sink and pending runtime status. `git diff --check` passed. Planning PR #922 changed no production code or tests. Runtime PR #923 now implements the domain model and SQLite storage/schema v23, with executed tests and independent review recorded in implementation-evidence.md. Remaining runtime gates belong to the implementation plan. Key proposal was successfully registered in Semantica as decision `31da32fd-f81f-4ec1-ab3e-51a376c503f1`.
 
-The planning PR remains draft for the proposed contract; runtime implementation and release are outside this planning unit.
+Planning PR #922 is merged. Runtime implementation continues in draft PR #923; model/storage are complete, service is in progress, and adapters/CLI/import/release are pending. The application version is still 2.3.0; schema v23 is not an application release.

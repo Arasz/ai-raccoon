@@ -1,6 +1,6 @@
 # Decision graph implementation plan
 
-Status: proposed; runtime steps are pending. Scope ends at reviewed planning in this change.
+Status: implementing in PR #923. Model and SQLite storage/schema v23 are complete and independently reviewed; service is in progress. Adapters, CLI, import and release remain pending. See implementation-evidence.md for executed checks.
 
 ## Deliverables and traceability
 
@@ -16,7 +16,7 @@ Status: proposed; runtime steps are pending. Scope ends at reviewed planning in 
 | Semantica handover | api.md migration | migration, release |
 | Scope, aliases, lifecycle, sync | data-model.md integration boundaries | storage, service, migration |
 
-The full implementation DAG is recorded in task-graph under `air-native-project-decision-graph-implementation`. Its machine document is exported beside this file as `implementation-plan.json`; do not treat prose or checked planning milestones as completed runtime work. All steps start pending. The task-tracker planning unit is `air-own-project-decision-graph-planning`.
+The full implementation DAG is recorded in task-graph under `air-native-project-decision-graph-implementation`. Its machine document is exported beside this file as `implementation-plan.json`; do not treat prose or checked planning milestones as completed runtime work. The graph is the current execution state; the exported snapshot is refreshed after recorded milestones. The task-tracker planning unit is `air-own-project-decision-graph-planning`.
 
 ## Execution order and ownership
 
