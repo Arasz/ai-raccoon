@@ -87,6 +87,21 @@ public sealed partial class DecisionServiceTests
     }
 
     [RetryFact]
+    public async Task Preview_omits_whole_decisions_when_text_budget_is_exhausted()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var service = Service();
+        await service.RegisterTaskAsync("a", new DecisionWrite("task", "session", "register"), "Task", cancellationToken: ct);
+        var content = new DecisionContent("Decision", "category", "scenario", new string('o', 180), new string('r', 180));
+        await service.RecordAsync("a", new DecisionWrite("task", "session", "one"), content, cancellationToken: ct);
+        await service.RecordAsync("a", new DecisionWrite("task", "session", "two"), content, cancellationToken: ct);
+        var result = (await service.PreviewAsync("a", new DecisionPreviewOptions(MaxChars: 1000), ct)).Value;
+        result.Text.EnumerateRunes().Count().ShouldBeLessThanOrEqualTo(1000);
+        result.Shown.Decisions.ShouldBe(1);
+        result.Omitted.Decisions.ShouldBe(1);
+    }
+
+    [RetryFact]
     public async Task Query_is_project_wide_and_precedents_require_current_accepted_valid_decisions()
     {
         var ct = TestContext.Current.CancellationToken;
