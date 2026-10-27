@@ -155,6 +155,11 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
     {
         var ct = TestContext.Current.CancellationToken;
         var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
+        await using (var connection = await CreateAndOpenAsync(BankPath, ct))
+        {
+            await connection.ExecuteAsync("INSERT INTO projects(id,name,created_at) VALUES('acme','Acme',1)");
+        }
+
         var store = new SqliteDecisionStore(new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options)), new SharedProjectScope());
         await store.WriteAsync("acme", async (writer, token) =>
         {

@@ -1,27 +1,33 @@
 using Dapper;
+using System.Data;
+using SQLitePCL;
 using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
-/// <summary>Runs bank writes inside one BEGIN IMMEDIATE transaction: writers queue on the write lock instead of failing with SQLITE_BUSY mid-work.</summary>
+/// <summary>Serializes bank writes with BEGIN IMMEDIATE and contains nested writes in savepoints.</summary>
 public static class WriteTransaction
 {
     extension(SqliteConnection connection)
     {
-        /// <summary>Runs <paramref name="work" /> in a BEGIN IMMEDIATE transaction; commits on success, rolls back and rethrows on failure or cancellation.</summary>
+        /// <summary>Commits on success or rolls back on failure; nested calls preserve the outer transaction.</summary>
         public async Task<T> InWriteTransactionAsync<T>(Func<Task<T>> work, CancellationToken cancellationToken)
         {
-            await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
+            var nested = connection.State == ConnectionState.Open && raw.sqlite3_get_autocommit(connection.Handle) == 0;
+            var begin = nested ? "SAVEPOINT ai_raccoon_write;" : "BEGIN IMMEDIATE;";
+            var commit = nested ? "RELEASE SAVEPOINT ai_raccoon_write;" : "COMMIT;";
+            var rollback = nested ? "ROLLBACK TO SAVEPOINT ai_raccoon_write; RELEASE SAVEPOINT ai_raccoon_write;" : "ROLLBACK;";
+            await connection.ExecuteAsync(new CommandDefinition(begin, cancellationToken: cancellationToken));
             try
             {
                 var result = await work();
-                await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
+                await connection.ExecuteAsync(new CommandDefinition(commit, cancellationToken: cancellationToken));
                 return result;
             }
             catch
             {
                 // Uncancellable: a cancelled token would skip the ROLLBACK and leave the transaction open.
-                await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: CancellationToken.None));
+                await connection.ExecuteAsync(new CommandDefinition(rollback, cancellationToken: CancellationToken.None));
                 throw;
             }
         }

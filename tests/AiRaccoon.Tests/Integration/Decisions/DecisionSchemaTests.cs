@@ -38,7 +38,13 @@ public sealed class DecisionSchemaTests : IDisposable
     {
         var ct = TestContext.Current.CancellationToken;
         var options = new InfrastructureOptions { DataRoot = _root, Rid = "osx-arm64", Scope = InstallScope.User };
-        var store = new SqliteDecisionStore(new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options)), new SharedProjectScope());
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using (var connection = await factory.OpenBankAsync(ct))
+        {
+            await connection.ExecuteAsync("INSERT INTO projects(id,name,created_at) VALUES('a','A',1)");
+        }
+
+        var store = new SqliteDecisionStore(factory, new SharedProjectScope());
         await Should.ThrowAsync<SqliteException>(() => store.WriteAsync("a", async (writer, token) =>
         {
             var now = new DateTimeOffset(2026, 10, 26, 12, 0, 0, TimeSpan.Zero);

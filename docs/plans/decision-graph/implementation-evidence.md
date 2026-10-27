@@ -24,3 +24,11 @@ Cloud exclusion is checked independently by the semantic condition that no table
 ## PR review corrections in progress
 
 Review 5654842632 identifies stale status docs, occupied project repair and stale revision error classification. Status docs and graph snapshot now reflect actual milestones. Retirement and revision-conflict checks were observed red before correction and passed afterward in an 18-test focused run. HTTP 409/400 parity remains an adapter gate. The populated FK-enforced snapshot test failed when table reversal was removed (1/1) and passed after restoration (1/1). CI also exposed missing retry attributes on new integration tests and a cold-open DDL statement budget changed by twelve new schema statements; both consumer contracts are being updated with focused verification.
+
+## Repair concurrency correction
+
+Independent review reproduced a real graph-owner retirement race without production mutations: a graph task committed at the clock seam after preflight, then repair deleted its registry row (1/1 probe failed). Five new checks first failed: two nested-transaction cases, graph registration refusal, queued writer registration recheck, and SQLite-traced transactional graph preflight.
+
+Repair now runs preflight plus all rewrites in one BEGIN IMMEDIATE transaction, existing nested bank writes use savepoints, and graph writers recheck registration after acquiring their write lock. The combined transaction/decision/project-fold/populated-snapshot run passed 40/40. Owner fixture setup now registers real project rows. A follow-up independent review is pending.
+
+Service registration/record/replay/read passed its first behavior test; amendment/stale replay/concurrency passed 3/3. Four missing mutation-operation cases then went red, and implementing lifecycle transitions, links/removals and supersession produced 7/7 passing service tests, including an injected SQLite failure after edge insertion that proves all-or-none supersession and retry receipts.

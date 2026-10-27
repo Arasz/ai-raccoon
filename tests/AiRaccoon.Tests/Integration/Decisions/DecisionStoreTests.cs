@@ -5,14 +5,16 @@ using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Decisions;
 using Shouldly;
 using Microsoft.Data.Sqlite;
+using NSubstitute;
 using Xunit;
+using Dapper;
 using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Decisions;
 
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
-public sealed class DecisionStoreTests : IDisposable
+public sealed class DecisionStoreTests : IAsyncLifetime
 {
     private readonly string _root = TestData.CreateTempRoot("decisions-store");
     private static DateTimeOffset Now => new(2026, 10, 26, 12, 0, 0, TimeSpan.Zero);
@@ -170,5 +172,64 @@ public sealed class DecisionStoreTests : IDisposable
         error.CurrentRevision.ShouldBe(0);
     }
 
-    public void Dispose() => TestData.DeleteTempRoot(_root);
+    [RetryFact]
+    public async Task Unregistered_owner_cannot_start_a_graph_transaction()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await Should.ThrowAsync<UnregisteredProjectException>(() => Store().WriteAsync("unknown", async (writer, token) =>
+        {
+            await writer.SetRevisionAsync(1, token);
+            return true;
+        }, ct));
+        (await Store().ReadAsync("unknown", (reader, token) => reader.RevisionAsync(token), ct)).ShouldBe(0);
+    }
+
+    [RetryFact]
+    public async Task Queued_writer_rechecks_registration_after_retirement_commits()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var options = new InfrastructureOptions { DataRoot = _root, Rid = "osx-arm64", Scope = InstallScope.User };
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using var blocker = await factory.OpenBankAsync(ct);
+        await blocker.ExecuteAsync("BEGIN IMMEDIATE; DELETE FROM projects WHERE id='a';");
+        var opened = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var queuedFactory = Substitute.For<ISqliteConnectionFactory>();
+        queuedFactory.OpenBankAsync(Arg.Any<CancellationToken>()).Returns(async call =>
+        {
+            var connection = await factory.OpenBankAsync(call.Arg<CancellationToken>());
+            opened.TrySetResult();
+            return connection;
+        });
+        var store = new SqliteDecisionStore(queuedFactory, new SharedProjectScope());
+        var writer = Task.Run(() => store.WriteAsync("a", async (session, token) =>
+        {
+            await session.AddTaskAsync(new DecisionTask("queued", "Queued", 1, Now, null), token);
+            return true;
+        }, ct), ct);
+        try
+        {
+            await opened.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        }
+        finally
+        {
+            await blocker.ExecuteAsync("COMMIT;");
+        }
+
+        await Should.ThrowAsync<UnregisteredProjectException>(() => writer.WaitAsync(TimeSpan.FromSeconds(10), ct));
+        (await blocker.ExecuteScalarAsync<int>("SELECT count(*) FROM decision_projects WHERE project_id='a'")).ShouldBe(0);
+    }
+
+    public async ValueTask InitializeAsync()
+    {
+        var options = new InfrastructureOptions { DataRoot = _root, Rid = "osx-arm64", Scope = InstallScope.User };
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync("INSERT INTO projects(id,name,created_at) VALUES('a','A',1),('b','B',1)");
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        TestData.DeleteTempRoot(_root);
+        return ValueTask.CompletedTask;
+    }
 }

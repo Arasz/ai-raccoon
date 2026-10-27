@@ -35,37 +35,12 @@ public sealed record ProjectIdsRepairResult(
         MetricsMoved + NoiseMoved;
 }
 
-/// <summary>
-///     The apply half of the project-ids repair (air-merge P2): folds every
-///     <see cref="ProjectIdsFoldPlan" /> loser into its winner across every id-keyed surface the P1
-///     census enumerates, deletes drop-listed ids with a tombstone per removed hash, and retires
-///     zero-entry projects rows. Each step runs in its own BEGIN IMMEDIATE transaction
-///     (per-batch serialization with ToolGate writers via busy_timeout + WAL — there is no ToolGate
-///     lock to hold, review MUST-1), so a failed step rolls back to the pre-step bank and the open
-///     repair_requests row retries it on the next maintenance pass.
-///     <para>
-///         Single-pass (d-426 SHOULD-5): the plan derives from the diagnose-time census, so a
-///         write under a folded id landing mid-apply re-creates the loser key — operators quiesce
-///         writers or loop derive→apply until a run reports no folds (the --apply receipt states this).
-///     </para>
-///     <para>
-///         Entries scope rule (D1): every committed row (<c>scope IN ('project', 'custom')</c>, any
-///         label including NULL-context bulk rows) folds — the d-426 keep is overturned, no consumer
-///         keys on (project_id, NULL-label) stability. Shared rows are cross-project content (H9:
-///         the shared write path keeps the writer's project_id, so shared-keyed loser rows are
-///         genuine) and never fold; they pin with a reason in the plan instead. Dropped ids delete
-///         to preserve them under). Metrics and noise re-key to the winner with the fold (D3;
-///         no vec/FTS shadows on either table, so no invalidation leg runs); workspaces and
-///         workspace scratch never move across projects; <c>source_id</c> rides along untouched
-///         (memory_source is content-keyed and local-only). Chunk renumber is NOT here — <see cref="Maintenance.ProjectIdsRepairJob" />
-///         runs <see cref="Ingestion.ChunkIndexRepair" /> as an ordered job step after this, and the
-///         existing PendingEmbedJob/CodeReindexJob drain the rows this invalidates.
-///     </para>
-/// </summary>
+/// <summary>Atomically folds, drops or retires project IDs across owned surfaces.
+/// Native graph owners refuse before any mutation; failures leave the bank unchanged.</summary>
 public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectScope scope)
 {
     private readonly ISharedProjectScope _scope = scope;
-    /// <summary>Applies the whole plan, step by step; returns the per-surface counts.</summary>
+    /// <summary>Checks ownership and applies every surface under one write lock; returns per-surface counts.</summary>
     public async Task<ProjectIdsRepairResult> ApplyAsync(SqliteConnection connection, ProjectIdsFoldPlan plan,
         CancellationToken cancellationToken = default)
     {
@@ -77,6 +52,13 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
             throw new ArgumentException("shared-project-reserved: repair cannot move or delete the shared target.");
         }
 
+        return await connection.InWriteTransactionAsync(
+            () => ApplyLockedAsync(connection, plan, cancellationToken), cancellationToken);
+    }
+
+    private async Task<ProjectIdsRepairResult> ApplyLockedAsync(SqliteConnection connection, ProjectIdsFoldPlan plan,
+        CancellationToken cancellationToken)
+    {
         await RefuseGraphOwnersAsync(connection, plan, cancellationToken);
 
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();

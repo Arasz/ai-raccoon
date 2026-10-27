@@ -47,6 +47,11 @@ public sealed class DecisionBankLifecycleTests : IDisposable
     {
         var ct = TestContext.Current.CancellationToken;
         var factory = Factory("fixture-original-key");
+        await using (var connection = await factory.OpenBankAsync(ct))
+        {
+            await connection.ExecuteAsync("INSERT INTO projects(id,name,created_at) VALUES('project','Project',1)");
+        }
+
         var store = new SqliteDecisionStore(factory, new SharedProjectScope());
         await store.WriteAsync("project", async (writer, token) =>
         {

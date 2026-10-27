@@ -41,6 +41,14 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await connection.InWriteTransactionAsync(async () =>
         {
+            var registered = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
+                "SELECT EXISTS(SELECT 1 FROM projects WHERE id=@projectId)", new { projectId },
+                cancellationToken: cancellationToken));
+            if (!registered)
+            {
+                throw new UnregisteredProjectException(projectId);
+            }
+
             await connection.ExecuteAsync(new CommandDefinition(
                 "INSERT INTO decision_projects(project_id,revision) VALUES(@projectId,0) ON CONFLICT(project_id) DO NOTHING",
                 new { projectId }, cancellationToken: cancellationToken));
