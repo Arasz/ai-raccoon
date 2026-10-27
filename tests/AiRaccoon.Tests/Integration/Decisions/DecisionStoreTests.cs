@@ -219,6 +219,30 @@ public sealed class DecisionStoreTests : IAsyncLifetime
         (await blocker.ExecuteScalarAsync<int>("SELECT count(*) FROM decision_projects WHERE project_id='a'")).ShouldBe(0);
     }
 
+    [RetryFact]
+    public async Task Fts_search_reads_only_current_project_rationale_and_treats_operators_as_text()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await Store().WriteAsync("a", async (writer, token) =>
+        {
+            await writer.AddTaskAsync(new DecisionTask("task", "Task", 1, Now, null), token);
+            await writer.AddRecordAsync(new DecisionRecord("decision", "task", 1, Now), token);
+            await writer.AddVersionAsync(new DecisionVersion("decision", 1, "task", 1,
+                new DecisionContent("t", "c", "s", "o", "obsolete rationale"), DecisionStatus.Accepted, Now, "actor", "session", null), token);
+            await writer.AddVersionAsync(new DecisionVersion("decision", 2, "task", 2,
+                new DecisionContent("t", "c", "s", "o", "fresh rationale"), DecisionStatus.Accepted, Now, "actor", "session", "clarify"), token);
+            return true;
+        }, ct);
+        await Store().ReadAsync("a", async (reader, token) =>
+        {
+            (await reader.SearchAsync("fresh", token)).Single().DecisionId.ShouldBe("decision");
+            (await reader.SearchAsync("obsolete", token)).ShouldBeEmpty();
+            (await reader.SearchAsync("OR \"*", token)).ShouldBeEmpty();
+            return true;
+        }, ct);
+        (await Store().ReadAsync("b", (reader, token) => reader.SearchAsync("fresh", token), ct)).ShouldBeEmpty();
+    }
+
     public async ValueTask InitializeAsync()
     {
         var options = new InfrastructureOptions { DataRoot = _root, Rid = "osx-arm64", Scope = InstallScope.User };

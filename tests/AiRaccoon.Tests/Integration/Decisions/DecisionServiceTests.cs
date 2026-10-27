@@ -15,7 +15,7 @@ namespace AiRaccoon.Tests.Integration.Decisions;
 
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
-public sealed class DecisionServiceTests : IAsyncLifetime
+public sealed partial class DecisionServiceTests : IAsyncLifetime
 {
     private readonly string _root = TestData.CreateTempRoot("decisions-service");
     private DecisionService Service()

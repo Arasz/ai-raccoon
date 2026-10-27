@@ -75,5 +75,38 @@ internal static class DecisionSchema
             FOREIGN KEY(project_id,task_id) REFERENCES decision_tasks(project_id,task_id),
             FOREIGN KEY(project_id,decision_id) REFERENCES decisions(project_id,decision_id)
         );
+        CREATE TABLE IF NOT EXISTS decision_search (
+            id INTEGER PRIMARY KEY, project_id TEXT NOT NULL, decision_id TEXT NOT NULL,
+            title TEXT NOT NULL, category TEXT NOT NULL, scenario TEXT NOT NULL, outcome TEXT NOT NULL, reasoning TEXT NOT NULL,
+            UNIQUE(project_id,decision_id),
+            FOREIGN KEY(project_id,decision_id) REFERENCES decisions(project_id,decision_id)
+        );
+        CREATE VIRTUAL TABLE IF NOT EXISTS decision_fts USING fts5(title,category,scenario,outcome,reasoning,
+            content='decision_search',content_rowid='id');
+        CREATE TRIGGER IF NOT EXISTS decision_search_ai AFTER INSERT ON decision_search BEGIN
+            INSERT INTO decision_fts(rowid,title,category,scenario,outcome,reasoning)
+                VALUES(new.id,new.title,new.category,new.scenario,new.outcome,new.reasoning);
+        END;
+        CREATE TRIGGER IF NOT EXISTS decision_search_ad AFTER DELETE ON decision_search BEGIN
+            INSERT INTO decision_fts(decision_fts,rowid,title,category,scenario,outcome,reasoning)
+                VALUES('delete',old.id,old.title,old.category,old.scenario,old.outcome,old.reasoning);
+        END;
+        CREATE TRIGGER IF NOT EXISTS decision_search_au AFTER UPDATE ON decision_search BEGIN
+            INSERT INTO decision_fts(decision_fts,rowid,title,category,scenario,outcome,reasoning)
+                VALUES('delete',old.id,old.title,old.category,old.scenario,old.outcome,old.reasoning);
+            INSERT INTO decision_fts(rowid,title,category,scenario,outcome,reasoning)
+                VALUES(new.id,new.title,new.category,new.scenario,new.outcome,new.reasoning);
+        END;
+        CREATE TRIGGER IF NOT EXISTS decision_versions_search_ai AFTER INSERT ON decision_versions BEGIN
+            INSERT INTO decision_search(project_id,decision_id,title,category,scenario,outcome,reasoning)
+                VALUES(new.project_id,new.decision_id,new.title,new.category,new.scenario,new.outcome,new.reasoning)
+            ON CONFLICT(project_id,decision_id) DO UPDATE SET
+                title=excluded.title,category=excluded.category,scenario=excluded.scenario,outcome=excluded.outcome,reasoning=excluded.reasoning;
+        END;
+        INSERT INTO decision_search(project_id,decision_id,title,category,scenario,outcome,reasoning)
+            SELECT v.project_id,v.decision_id,v.title,v.category,v.scenario,v.outcome,v.reasoning
+            FROM decision_versions v JOIN decisions d ON d.project_id=v.project_id AND d.decision_id=v.decision_id AND d.current_version=v.version
+            WHERE true ON CONFLICT(project_id,decision_id) DO NOTHING;
+        INSERT INTO decision_fts(decision_fts) VALUES('rebuild');
         """;
 }

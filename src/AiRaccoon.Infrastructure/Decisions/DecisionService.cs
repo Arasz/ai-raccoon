@@ -164,4 +164,5 @@ public sealed partial class DecisionService(IDecisionStore store, TimeProvider t
             ?? throw NotFound("Current decision version");
     }
     private DateTimeOffset Now => timeProvider.GetUtcNow();
+    private IDecisionStore Store => store;
 }

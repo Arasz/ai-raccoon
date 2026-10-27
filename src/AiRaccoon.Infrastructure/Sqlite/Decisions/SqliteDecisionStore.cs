@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AiRaccoon.Core.Decisions;
 using AiRaccoon.Core.Projects;
 using CommunityToolkit.Diagnostics;
@@ -89,6 +90,32 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
 
         public async Task<IReadOnlyList<DecisionVersion>> VersionsAsync(string decisionId, CancellationToken cancellationToken) =>
             (await Rows("SELECT * FROM decision_versions WHERE project_id=@projectId AND decision_id=@decisionId ORDER BY version", new { decisionId }, cancellationToken)).Select(Version).ToArray();
+
+        public async Task<IReadOnlyList<DecisionVersion>> CurrentVersionsAsync(CancellationToken cancellationToken) =>
+            (await Rows("SELECT v.* FROM decision_versions v JOIN decisions d ON d.project_id=v.project_id AND d.decision_id=v.decision_id AND d.current_version=v.version WHERE v.project_id=@projectId ORDER BY v.decision_id", null, cancellationToken)).Select(Version).ToArray();
+
+        public async Task<IReadOnlyList<DecisionVersion>> AllVersionsAsync(CancellationToken cancellationToken) =>
+            (await Rows("SELECT * FROM decision_versions WHERE project_id=@projectId ORDER BY decision_id,version", null, cancellationToken)).Select(Version).ToArray();
+
+        public async Task<IReadOnlyList<DecisionSearchHit>> SearchAsync(string query, CancellationToken cancellationToken)
+        {
+            DecisionText.Required(query, 2000, nameof(query));
+            var terms = Regex.Matches(query, @"[\p{L}\p{N}_]+").Select(match => match.Value).ToArray();
+            Guard.HasSizeLessThanOrEqualTo(terms, 64, nameof(query));
+            if (terms.Length == 0)
+            {
+                return [];
+            }
+
+            var match = string.Join(" AND ", terms.Select(term => "\"" + term + "\""));
+            return (await Rows("""
+                SELECT s.decision_id,bm25(decision_fts) AS raw_rank FROM decision_fts
+                JOIN decision_search s ON s.id=decision_fts.rowid
+                WHERE decision_fts MATCH @match AND s.project_id=@projectId
+                ORDER BY raw_rank,s.decision_id
+                """, new { match }, cancellationToken))
+                .Select(row => new DecisionSearchHit(Text(row, "decision_id"), Convert.ToDouble(row["raw_rank"], CultureInfo.InvariantCulture))).ToArray();
+        }
 
         public async Task<IReadOnlyList<DecisionEdge>> EdgesAsync(CancellationToken cancellationToken) =>
             (await Rows("SELECT * FROM decision_edges WHERE project_id=@projectId ORDER BY source_id,kind,target_id,edge_id", null, cancellationToken)).Select(Edge).ToArray();

@@ -14,6 +14,9 @@ public interface IDecisionReader
     Task<DecisionRecord?> RecordAsync(string decisionId, CancellationToken cancellationToken);
     Task<IReadOnlyList<DecisionRecord>> RecordsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<DecisionVersion>> VersionsAsync(string decisionId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<DecisionVersion>> CurrentVersionsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<DecisionVersion>> AllVersionsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<DecisionSearchHit>> SearchAsync(string query, CancellationToken cancellationToken);
     Task<IReadOnlyList<DecisionEdge>> EdgesAsync(CancellationToken cancellationToken);
     Task<DecisionReceipt?> ReceiptAsync(string requestId, CancellationToken cancellationToken);
     Task<IReadOnlyList<DecisionImport>> ImportsAsync(CancellationToken cancellationToken);

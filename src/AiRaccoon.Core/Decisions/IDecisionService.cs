@@ -11,4 +11,9 @@ public interface IDecisionService
     Task<DecisionResult<DecisionEdge>> LinkAsync(string projectId, DecisionWrite write, string sourceId, string targetId, DecisionEdgeKind kind, string reason, long expectedProjectRevision, CancellationToken cancellationToken = default);
     Task<DecisionResult<DecisionEdge>> UnlinkAsync(string projectId, DecisionWrite write, string edgeId, string reason, long expectedProjectRevision, CancellationToken cancellationToken = default);
     Task<DecisionResult<DecisionDetails>> GetAsync(string projectId, string decisionId, int? version = null, bool includeHistory = false, CancellationToken cancellationToken = default);
+    Task<DecisionResult<DecisionExport>> ExportAsync(string projectId, DecisionTaskSelector? selector = null, CancellationToken cancellationToken = default);
+    Task<DecisionResult<DecisionPreview>> PreviewAsync(string projectId, DecisionPreviewOptions? options = null, CancellationToken cancellationToken = default);
+    Task<DecisionResult<DecisionQueryResult>> QueryAsync(string projectId, DecisionQuery? query = null, CancellationToken cancellationToken = default);
+    Task<DecisionResult<DecisionQueryResult>> PrecedentsAsync(string projectId, string scenario, string? category = null, int limit = 5, bool includeInactive = false, CancellationToken cancellationToken = default);
+    Task<DecisionResult<DecisionGraph>> GraphAsync(string projectId, DecisionGraphRequest request, CancellationToken cancellationToken = default);
 }
