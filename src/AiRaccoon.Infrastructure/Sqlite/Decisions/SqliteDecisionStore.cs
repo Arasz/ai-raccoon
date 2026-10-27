@@ -101,13 +101,12 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
         {
             DecisionText.Required(query, 2000, nameof(query));
             var terms = Regex.Matches(query, @"[\p{L}\p{N}_]+").Select(match => match.Value).ToArray();
-            Guard.HasSizeLessThanOrEqualTo(terms, 64, nameof(query));
             if (terms.Length == 0)
             {
                 return [];
             }
 
-            var match = string.Join(" AND ", terms.Select(term => "\"" + term + "\""));
+            var match = MatchTerms(terms, 0, terms.Length);
             return (await Rows("""
                 SELECT s.decision_id,bm25(decision_fts) AS raw_rank FROM decision_fts
                 JOIN decision_search s ON s.id=decision_fts.rowid
@@ -201,6 +200,17 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
             Optional(row, "removed_revision") is null ? null : Number(row, "removed_revision"), OptionalTime(row, "removed_at"), Optional(row, "removal_task_id"), Optional(row, "removal_reason"), Optional(row, "removal_actor"), Optional(row, "removal_session_id"));
         private static string Text(IDictionary<string, object> row, string key) => Convert.ToString(row[key], CultureInfo.InvariantCulture)!;
         private static string? Optional(IDictionary<string, object> row, string key) => row[key] is null or DBNull ? null : Text(row, key);
+        private static string MatchTerms(string[] terms, int start, int count)
+        {
+            if (count == 1)
+            {
+                return "\"" + terms[start] + "\"";
+            }
+
+            var left = count / 2;
+            return "(" + MatchTerms(terms, start, left) + " AND " + MatchTerms(terms, start + left, count - left) + ")";
+        }
+
         private static long Number(IDictionary<string, object> row, string key) => Convert.ToInt64(row[key], CultureInfo.InvariantCulture);
         private static DateTimeOffset Time(IDictionary<string, object> row, string key) => DateTimeOffset.Parse(Text(row, key), CultureInfo.InvariantCulture);
         private static DateTimeOffset? OptionalTime(IDictionary<string, object> row, string key) => Optional(row, key) is { } text ? DateTimeOffset.Parse(text, CultureInfo.InvariantCulture) : null;

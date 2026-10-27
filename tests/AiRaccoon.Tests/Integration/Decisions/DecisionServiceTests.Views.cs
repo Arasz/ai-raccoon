@@ -13,6 +13,16 @@ namespace AiRaccoon.Tests.Integration.Decisions;
 public sealed partial class DecisionServiceTests
 {
     [RetryFact]
+    public async Task Search_accepts_long_queries_with_more_than_64_terms()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var service = Service();
+        var query = string.Join(" ", Enumerable.Repeat("x", 1000));
+        (await service.QueryAsync("a", new DecisionQuery(Query: query), ct)).Value.Method.ShouldBe("fts");
+        (await service.PrecedentsAsync("a", query, cancellationToken: ct)).Value.Method.ShouldBe("fts");
+    }
+
+    [RetryFact]
     public async Task Latest_task_is_registration_order_including_an_empty_task()
     {
         var ct = TestContext.Current.CancellationToken;
