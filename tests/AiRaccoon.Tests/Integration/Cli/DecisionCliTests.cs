@@ -160,6 +160,24 @@ public sealed class DecisionCliTests : IAsyncLifetime
         Directory.GetFiles(_outputDirectory).ShouldBe([destination]);
     }
 
+    /// <summary>A render that fails after it began writing leaves the destination as it was and no staging file behind.</summary>
+    [RetryFact]
+    public async Task DecisionCli_RenderFailingMidFile_LeavesNoStagingFileAndTheDestinationUntouched()
+    {
+        var destination = Path.Combine(_outputDirectory, "export.json");
+        await File.WriteAllTextAsync(destination, "previous export", Ct);
+
+        await Should.ThrowAsync<IOException>(() => DecisionCommands.PublishAsync(destination, force: true, async writer =>
+        {
+            await writer.WriteAsync("{\"partial\":");
+            await writer.FlushAsync(Ct);
+            throw new IOException("the disk filled mid-export");
+        }, Ct));
+
+        (await File.ReadAllTextAsync(destination, Ct)).ShouldBe("previous export");
+        Directory.GetFiles(_outputDirectory).ShouldBe([destination]);
+    }
+
     [RetryFact]
     public async Task DecisionCli_InterruptedStdoutExportPrintsNothingAndFails()
     {

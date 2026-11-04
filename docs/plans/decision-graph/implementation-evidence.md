@@ -113,7 +113,8 @@ Every test drives the real CLI dispatcher (`ConfigCommands`) against a real toke
 |---|---|---|---|---|
 | `DecisionCli_DefaultNAllMatchBackend` (4 rows) | Default, `--tasks 2`, `--all` and repeated `--task-id` select the expected tasks, and the CLI export equals the backend's `/export` for the same selector field by field (revision included, `exportedAt` excluded) | `--tasks N` sent as `last: 1` | 1/4 | 4/4 |
 | same | | no flag sends `all: true` | 1/4 | 4/4 |
-| `DecisionCli_InterruptedFileIsNotPublished` | A reset mid-export exits nonzero, leaves the existing destination byte-identical, prints nothing and leaves no staging file | open the destination for writing before the request | 1/1 | 1/1 |
+| `DecisionCli_InterruptedFileIsNotPublished` | A reset while the answer is read exits nonzero, leaves the existing destination byte-identical and prints nothing; the read fails before publishing starts, so no staging file is ever created | open the destination for writing before the request | 1/1 | 1/1 |
+| `DecisionCli_RenderFailingMidFile_LeavesNoStagingFileAndTheDestinationUntouched` | A render that fails after its first write into the staging file leaves the destination byte-identical and deletes the staging file | drop `File.Delete(staged)` from the `catch` | 1/1 | 1/1 |
 | `DecisionCommandTreeTests.MixedOrOutOfRangeSelectors_AreParseErrors` (5 rows, export and preview) | Exclusive selector parsing | drop the exclusivity error | 3/5 | 5/5 |
 | `DecisionCli_ExistingFileIsRefusedWithoutForce_AndReplacedOwnerOnlyWithIt` | No overwrite without `--force`; with it the file is replaced, `0600`, no staging file left | drop the existing-file check | 1/1 | 1/1 |
 | `DecisionCli_PreviewTextSanitizesTerminalControls` | ESC/OSC, BEL, C1 CSI and bidi overrides never reach stdout | print the server text unsanitized | 1/1 | 1/1 |
@@ -122,4 +123,38 @@ Every test drives the real CLI dispatcher (`ConfigCommands`) against a real toke
 
 Also green without a dedicated mutation: empty project (valid empty arrays), latest-after-`task register` with four concurrent exports identical at one revision, stdout interruption (nothing printed, nonzero), task registration printing generated ids to stderr and replaying with explicit ids, an unregistered project exiting 18, and preview JSON counts. `SettingsCommandTreeTests` now lists `decisions` in the top level and its leaves in the no-configuration-write sweep. After the last commit the decision classes, the CLI classes (tree, help, exit codes, routing, bank-open, write-ledger) and the repo-wide source gates (`NoHandRolledCryptoTests`, `NoConfigureAwaitTests`, `LoggerMessageEventIdTests`, `RetrySurfaceGateTests`, `LayeringRulesTests`) passed, 768/768.
 
-Limits worth knowing. The CLI parses the full JSON answer in memory before writing it, as the server already builds the whole snapshot in memory; output is then written in array-element chunks. A failure during rendering (after the answer was read) deletes the staging file in the same `catch`, but no test injects one. `decisions record|get|query` and `import-semantica` from api.md's CLI listing are not part of this step.
+Limits worth knowing. The CLI parses the full JSON answer in memory before writing it, as the server already builds the whole snapshot in memory; output is then written in array-element chunks. A failure during rendering (after the answer was read) deletes the staging file in the same `catch`; `DecisionCli_RenderFailingMidFile_LeavesNoStagingFileAndTheDestinationUntouched` injects one. `import-semantica` belongs to the migration step.
+
+### CLI follow-up: record, get and query
+
+`decisions record --input` reads one JSON object, refuses it before sending (exit 10, nothing sent, no ids announced) when it is not an object, repeats a key, or names `taskId`, `sessionId` or `requestId`, then completes it with `--task-id` and the given or generated retry ids and posts it to `P/records`. An unreadable file exits 80. `decisions get` sends `GET P/records/{id}?includeHistory=`, printing the result as JSON or as Markdown escaped like the export (`DecisionMarkdown.RenderDecision`). `decisions query` posts `--query`/`--category` to `P/query`.
+
+| Check | What it proves | Mutation | Red | Green |
+|---|---|---|---|---|
+| `DecisionCli_Record_RefusesAnInputItCannotSendAsIs_BeforeSending` (5 rows) | Write fields in the input are refused, not sent as a second copy | drop the write-field check | 2/5 | 5/5 |
+| same | Duplicate keys get the CLI's own refusal | parse with `AllowDuplicateProperties = true` | 1/5 | 5/5 |
+| `DecisionCli_Get_HistoryMatchesBackend_AndMarkdownEscapesDecisionText` | `--history` returns both versions equal to the backend's; Markdown shows ESC/bidi/`<script>` inert | always send `includeHistory=false` | 1/1 | 1/1 |
+| same, and the export Markdown test | Version titles are escaped | `Version` prints the raw title | 2/2 | 2/2 |
+| `DecisionCli_Query_MatchesBackend` (4 rows) | `--query`/`--category` reach the server; output equals the backend's | drop `--category` | 2/4 | 4/4 |
+| `DecisionCommandTreeTests.RecordGetQuery_ParseTheirDocumentedFlags` | The verbs are in the tree with their flags | remove `get` from the tree | 1/1 | 1/1 |
+
+Also green without a dedicated mutation: record replay with explicit ids, an unregistered task refused (exit 17, nothing recorded), an unknown decision (exit 17, `decision-not-found` on stderr), required-argument parse errors, and the three leaves in `SettingsCommandTreeTests`' no-configuration-write sweep.
+
+### Review follow-ups
+
+An independent review of the MCP and CLI tests found mutations that survived. Each check below now goes red under the reviewer's mutation.
+
+| Check | What it proves | Mutation | Red | Green |
+|---|---|---|---|---|
+| `DecisionServiceTests.Graph_follows_a_chain_one_step_per_depth` | On A→B→C→D, depth 2 returns three nodes with reason `depth`, depth 3 all four | `node.Depth >= Math.Min(request.Depth, 1)` | 1/1 | 1/1 |
+| `DecisionApiTests.GraphBounds_AreTheSameOnBothAdapters` (7 rows) | depth 11/-1 and maxNodes 0/501 are `invalid-argument` (400) over HTTP and MCP; depth 10, maxNodes 500 and 1 are accepted | depth guard 0..1000 | 1/7 | 7/7 |
+| same | | maxNodes guard 0..100000 | 2/7 | 7/7 |
+| same | | depth guard 0..9 | 1/7 | 7/7 |
+| `Graph_cuts_edges_past_the_internal_cap_and_counts_the_rest` | The cap is the literal 2000 | `GraphEdgeLimit = 1999` | 1/1 | 1/1 |
+| `DecisionCommandTreeTests.TasksAtItsBounds_IsAccepted` (2 rows) | `--tasks 1` and `--tasks 1000` parse and map to `last` | upper bound 999 | 1/2 | 2/2 |
+| `DecisionEndpointTests.RecordAndGet_…`, `RegisterTask_…` | `data.projectId` is the project, and the value is the task or decision asked for | result `ProjectId` replaced | 2/2 | 2/2 |
+| `DecisionServiceTests.Transition_replay_returns_the_first_result_without_a_second_version` | A replayed transition returns the first version and revision; the same request id with another target status conflicts | transition payload hash omits `targetStatus` | 1/1 | 1/1 |
+| `DecisionServiceTests.Unlink_replay_returns_the_first_removal_even_after_the_revision_moved` | A replayed unlink returns the first removal at its revision; another reason conflicts | unlink payload hash omits `reason` | 1/1 | 1/1 |
+| `DecisionApiTests.DomainRefusals_HaveTheSameKindOnBothAdapters` | Conflict rows carry `currentVersion` and `currentProjectRevision` in both the HTTP problem and the MCP text | drop `currentVersion` from the details | 1/1 | 1/1 |
+
+`DecisionCommandTreeTests.ProjectId_IsRequired` now pins exit 10: a missing required option is `Usage.InvalidValue`, as `CliInput` maps it; `Usage.MissingValue` is for an option given without its value.

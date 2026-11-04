@@ -52,6 +52,21 @@ public sealed class DecisionCommandTreeTests
         CliArgs.TryParse(["decisions", "export"], out var parsed);
 
         parsed!.Errors.ShouldNotBeEmpty();
+        parsed.FailureCode.ShouldBe(ErrorCode.Usage.InvalidValue);
+    }
+
+    [Theory]
+    [InlineData("1")]
+    [InlineData("1000")]
+    public void TasksAtItsBounds_IsAccepted(string tasks)
+    {
+        foreach (var verb in new[] { "export", "preview" })
+        {
+            CliArgs.TryParse(["decisions", verb, "--project-id", Project, "--tasks", tasks], out var parsed);
+
+            parsed!.Errors.ShouldBeEmpty($"{verb} --tasks {tasks}");
+            DecisionCommands.Selector(parsed.ParsedCliArgs).ShouldBe(new DecisionTaskSelector(last: int.Parse(tasks, System.Globalization.CultureInfo.InvariantCulture)));
+        }
     }
 
     [Fact]

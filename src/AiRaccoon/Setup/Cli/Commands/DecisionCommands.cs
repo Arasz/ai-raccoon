@@ -286,7 +286,7 @@ internal sealed class DecisionCommands
     }
 
     /// <summary>Renders into an owner-only file beside <paramref name="destination" /> and renames it into place only once complete.</summary>
-    private static async Task PublishAsync(string destination, bool force, Func<TextWriter, Task> render, CancellationToken cancellationToken)
+    internal static async Task PublishAsync(string destination, bool force, Func<TextWriter, Task> render, CancellationToken cancellationToken)
     {
         var directory = Path.GetDirectoryName(destination)!;
         var staged = Path.Combine(directory, $".{Path.GetFileName(destination)}.{Guid.NewGuid():N}.partial");
