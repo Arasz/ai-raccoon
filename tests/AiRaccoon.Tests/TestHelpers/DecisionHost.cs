@@ -26,12 +26,14 @@ public sealed class DecisionHost : IAsyncDisposable
 
     internal const string Token = "decision-host-token";
     private readonly string _root;
+    private readonly bool _ownsRoot;
     private readonly WebApplication _app;
     private readonly List<McpClient> _clients = [];
 
-    private DecisionHost(string root, WebApplication app, HttpClient http)
+    private DecisionHost(string root, bool ownsRoot, WebApplication app, HttpClient http)
     {
         _root = root;
+        _ownsRoot = ownsRoot;
         _app = app;
         Http = http;
     }
@@ -40,15 +42,21 @@ public sealed class DecisionHost : IAsyncDisposable
 
     public IServiceProvider Services => _app.Services;
 
-    public static async Task<DecisionHost> StartAsync(string name, CancellationToken cancellationToken)
+    public static Task<DecisionHost> StartAsync(string name, CancellationToken cancellationToken) =>
+        StartAsync(TestData.CreateTempRoot(name), true, cancellationToken);
+
+    /// <summary>A host over an existing data root the caller owns: disposing it stops the server and keeps the bank.</summary>
+    public static Task<DecisionHost> OpenAsync(string root, CancellationToken cancellationToken) =>
+        StartAsync(root, false, cancellationToken);
+
+    private static async Task<DecisionHost> StartAsync(string root, bool ownsRoot, CancellationToken cancellationToken)
     {
-        var root = TestData.CreateTempRoot(name);
         var options = new InfrastructureOptions { DataRoot = root, Scope = InstallScope.User };
         var app = McpServerSetup.CreateWebHost(new ServerConfig(0, McpTransport.Http, options) { McpToken = Token });
         await app.StartAsync(cancellationToken);
         var http = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
         http.DefaultRequestHeaders.Add(McpTokenGate.HeaderName, Token);
-        return new DecisionHost(root, app, http);
+        return new DecisionHost(root, ownsRoot, app, http);
     }
 
     public Task RegisterAsync(string projectId, CancellationToken cancellationToken) =>
@@ -117,6 +125,9 @@ public sealed class DecisionHost : IAsyncDisposable
         Http.Dispose();
         await _app.StopAsync(CancellationToken.None);
         await _app.DisposeAsync();
-        TestData.DeleteTempRoot(_root);
+        if (_ownsRoot)
+        {
+            TestData.DeleteTempRoot(_root);
+        }
     }
 }

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Decisions;
 using AiRaccoon.Decisions;
@@ -29,6 +30,22 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
     private const string SessionIdText = "Your actual session id.";
     private const string RequestIdText = "A unique id for this command; resending the same command with it replays the first result.";
     private const string ActorText = "Who made the change; defaults to the session id. Recorded, never used for access.";
+
+    /// <summary>
+    ///     The SDK's options with the decision enums' snake_case converters ahead of its own enum converter, which
+    ///     would otherwise win over the types' attributes and refuse <c>depends_on</c>.
+    /// </summary>
+    internal static JsonSerializerOptions SerializerOptions { get; } = CreateSerializerOptions();
+
+    private static JsonSerializerOptions CreateSerializerOptions()
+    {
+        var options = new JsonSerializerOptions(McpJsonUtilities.DefaultOptions);
+        options.Converters.Insert(0, new DecisionEnumConverter<DecisionEdgeKind>());
+        options.Converters.Insert(0, new DecisionEnumConverter<DecisionStatus>());
+        options.Converters.Insert(0, new DecisionEnumConverter<DecisionDirection>());
+        options.MakeReadOnly();
+        return options;
+    }
 
     /// <summary>The decision tool names, read from this class's tool attributes.</summary>
     internal static IReadOnlySet<string> Names { get; } = typeof(DecisionTools).GetMethods()

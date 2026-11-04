@@ -138,7 +138,7 @@ internal static partial class McpServerSetup
                 .WithTools<QualityTools>()
                 .WithTools<PerformanceTools>()
                 .WithTools<ProjectTools>()
-                .WithTools<DecisionTools>()
+                .WithTools<DecisionTools>(DecisionTools.SerializerOptions)
                 .WithPrompts<MemoryPrompts>();
     }
 
