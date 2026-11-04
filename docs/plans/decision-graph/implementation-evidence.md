@@ -158,3 +158,26 @@ An independent review of the MCP and CLI tests found mutations that survived. Ea
 | `DecisionApiTests.DomainRefusals_HaveTheSameKindOnBothAdapters` | Conflict rows carry `currentVersion` and `currentProjectRevision` in both the HTTP problem and the MCP text | drop `currentVersion` from the details | 1/1 | 1/1 |
 
 `DecisionCommandTreeTests.ProjectId_IsRequired` now pins exit 10: a missing required option is `Usage.InvalidValue`, as `CliInput` maps it; `Usage.MissingValue` is for an option given without its value.
+
+## Migration acceptance
+
+Semantica import (`DecisionImport_DryRunReplayAndUnknownData`) is deferred to #924: no real exporter fixture exists. This section covers the rest of the `migration` step: graph-aware repair, deletion, encrypted backup and rekey.
+
+`DecisionGraphFixture` (`tests/AiRaccoon.Tests/Integration/Decisions/DecisionGraphFixture.cs`) seeds one project through `DecisionService`: two tasks, an amended decision, a live edge, a removed edge, replay receipts, and one `decision_imports` row. That fills all eight graph tables. The repair checks compare `total_changes()` on the repair connection before and after a refused repair, so a write that is later rolled back still fails the check. They also compare a dump of every ordinary table in the bank.
+
+No standalone project-deletion command exists. The only code that deletes a `projects` row is project-ID repair (fold, drop, retire). data-model.md says repair refuses any retired or loser project that owns graph rows, so for a graph owner the deletion contract is refusal with the whole graph left intact. Removing every graph table in FK-safe (reverse) order is already covered by the sync snapshot exclusion (`SyncService` `DecisionSchema.TableNames.Reverse()`, populated FK-enforced snapshot test above).
+
+| Check | What it proves | Mutation (production) | Red | Green |
+|---|---|---|---|---|
+| `DecisionProjectRepairTests.DecisionRepair_TwoGraphsRefused` | Folding a loser into a winner, both with full graphs, throws before any write, reports all eight of the loser's graph tables, and leaves the bank unchanged | remove the `RefuseGraphOwnersAsync` call | 6/7 | 7/7 |
+| same | | report only the first occupied table | 5/7 | 7/7 |
+| same | | run the preflight after the folds, just before the `projects` rewrite (the rollback still restores rows) | 4/7 | 7/7 |
+| `DecisionProjectRepairTests.DecisionRepair_FoldAndConflictReport` | A plan with a graph-free fold plus an occupied loser is refused as a whole, names `occupied` and exactly its `decision_projects`/`decision_tasks`, and writes nothing. The graph-free fold alone then moves the entry, retires the loser and leaves the winner's graph unchanged (rows, revision, task order, receipts, edge history, FTS rows) | `INSERT OR REPLACE` the winner's `decision_projects` row during the fold | 1/7 | 7/7 |
+| same | | remove the preflight call; report only the first table; late preflight (rows above) | red in each | 7/7 |
+| `DecisionProjectRepairTests.DecisionDelete_GraphOwnerIsRefusedWithItsWholeGraphIntact` (fold/drop/retire) | Every repair path that deletes a project row refuses a full-graph owner, with no writes and an identical bank | leave dropped and retired ids out of the preflight | drop+retire 2/3 rows (3/7 class) | 7/7 |
+| `DecisionBankLifecycleTests.DecisionBank_EncryptedBackupAndRekeyKeepTheWholeGraph` | After a checkpoint, a file copy of the encrypted bank restores the whole graph under the old key. After `RekeyBankAsync`, the original reopens under the new key with an identical graph dump and a working `decision_fts` match. The old key, and a keyless open of either file, are refused | `PRAGMA rekey` replaced by a `SELECT` | 1/2 | 2/2 |
+| same | | main open path drops `csb.Password` | 1/2 | 2/2 |
+
+The late-preflight mutation leaves the retire row green, which is correct: retire writes nothing before the `projects` rewrite. The backup and rekey mutations act on the file and the key, not on graph tables. Both operate on the whole bank file, so no graph-specific production mutation exists. Graph completeness there comes from the eight-table dump equality.
+
+After restoring production code, the whole solution built with no warnings. Every `Decision*` class, every ProjectId/repair/census class and the source gates (`NoHandRolledCryptoTests`, `NoConfigureAwaitTests`, `LoggerMessageEventIdTests`, `RetrySurfaceGateTests`, `LayeringRulesTests`, `ProjectIdAliasDefaultCollectionGateTests`) passed: 61 classes, 693/693.

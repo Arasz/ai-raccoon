@@ -1,6 +1,6 @@
 # Decision graph implementation plan
 
-Status: implementing in PR #923. Model and SQLite storage/schema v23 are complete and independently reviewed; service is in progress. Adapters, CLI, import and release remain pending. See implementation-evidence.md for executed checks.
+Status: implementing in PR #923. Model, storage/schema v23, service, adapters, CLI and the graph-aware repair, deletion, backup and rekey checks of the migration step are complete. Semantica import is deferred to #924. Release remains pending. See implementation-evidence.md for executed checks.
 
 ## Deliverables and traceability
 
@@ -58,7 +58,7 @@ Each row names an observable failure and a mutation that must turn its test red.
 | DecisionApi_AnnotationsAndGuardParity | CLI bypasses policy; discovery hides flags | Remove HTTP gate or explicit false annotation |
 | DecisionCli_DefaultNAllMatchBackend | Flags select decisions instead of tasks | Apply N after flattening decisions |
 | DecisionCli_InterruptedFileIsNotPublished | Failed stream overwrites valid export | Write destination before completion |
-| DecisionImport_DryRunReplayAndUnknownData | Migration destroys legacy metadata | Write during dry run or drop unsupported raw record |
+| DecisionImport_DryRunReplayAndUnknownData (deferred to #924) | Migration destroys legacy metadata | Write during dry run or drop unsupported raw record |
 | DecisionRepair_FoldAndConflictReport | Repair folds a nonempty retired graph or changes winner graph | Bypass occupied-loser graph preflight or use INSERT OR REPLACE |
 | DecisionIntegration_RestartAndAccessModes | Works only within one process/full mode | Use a process-local repository instead of persistent store, or bypass committed-write access guard |
 

@@ -213,8 +213,8 @@
         },
         "migration": {
           "id": "migration",
-          "goal": "Provide explicit Semantica import and graph-aware repair refusal/deletion",
-          "instructions": "Own import preview/apply service, HTTP/CLI wiring, source fixtures and project repair/deletion integration. Dry run first; require mapping, source digest and revision for apply. Preserve unknown raw payload and task mapping, refuse unresolved causal endpoints, replay namespace/external IDs without overwrite. Project repair must refuse before any mutation whenever a retired project has graph rows, including two nonempty graphs; graph-free losers can fold without changing winner graph. Do not merge graph order/revision/replay namespaces. Delete owned graph FK-safely; backup/rekey retain graph. Reject implicit accepted statuses and direct file-to-SQL writes. Report fixture counts, preflight refusal/rollback and rekey/restart evidence.",
+          "goal": "Provide graph-aware repair refusal/deletion and backup/rekey coverage; Semantica import deferred to #924",
+          "instructions": "Semantica import (preview/apply service, HTTP/CLI wiring, source fixtures, dry run, raw payload preservation, replay) is deferred to #924: no real exporter fixture exists. Own project repair/deletion integration. Project repair must refuse before any mutation whenever a retired project has graph rows, including two nonempty graphs; graph-free losers can fold without changing winner graph. Do not merge graph order/revision/replay namespaces. Delete owned graph FK-safely; backup/rekey retain graph. Report fixture counts, preflight refusal/rollback and rekey/restart evidence.",
           "effort": "high",
           "depends_on": [
             "cli"
@@ -222,10 +222,12 @@
           "acceptance_criteria": [
             {
               "id": "migration-contract",
-              "statement": "Dry run writes nothing; apply atomic/replay-safe; raw source preserved; occupied retired graphs block repair without changes; deletion and rekey handle complete graph.",
-              "check": "DecisionImport_DryRunReplayAndUnknownData; DecisionRepair_TwoGraphsRefused; DecisionRepair_FoldAndConflictReport; encrypted backup/rekey and deletion fixtures",
-              "status": "unchecked",
-              "evidence": []
+              "statement": "Occupied retired graphs block repair without changes; graph-free losers fold without changing the winner graph; deletion and rekey handle the complete graph. Import (dry run, atomic replay-safe apply, raw source preservation) is deferred to #924.",
+              "check": "DecisionRepair_TwoGraphsRefused; DecisionRepair_FoldAndConflictReport; DecisionDelete_GraphOwnerIsRefusedWithItsWholeGraphIntact; DecisionBank_EncryptedBackupAndRekeyKeepTheWholeGraph",
+              "status": "passed",
+              "evidence": [
+                "DecisionProjectRepairTests 7/7 and DecisionBankLifecycleTests 2/2 over a fixture filling all eight graph tables; refusals leave total_changes() and a whole-bank dump unchanged; each named check went red under its production mutation (6 mutations, see implementation-evidence.md Migration acceptance) and green after restore. Decision, ProjectId/repair/census and source-gate classes 693/693."
+              ]
             }
           ],
           "files": [
@@ -236,7 +238,7 @@
             "tests/AiRaccoon.Tests/Integration/Decisions/**"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "complete"
         },
         "release": {
           "id": "release",
