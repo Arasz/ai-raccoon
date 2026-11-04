@@ -89,6 +89,39 @@ public sealed partial class DecisionServiceTests
         shallow.OmittedEdges.ShouldBeNull();
     }
 
+    /// <summary>A chain A→B→C→D: each extra depth step reaches exactly one more decision, and a cut chain says why.</summary>
+    [RetryFact]
+    public async Task Graph_follows_a_chain_one_step_per_depth()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var service = Service();
+        await service.RegisterTaskAsync("a", new DecisionWrite("task", "s", "register"), "Task", cancellationToken: ct);
+        var chain = new List<string>();
+        foreach (var name in new[] { "A", "B", "C", "D" })
+        {
+            chain.Add((await service.RecordAsync("a", new DecisionWrite("task", "s", "record-" + name),
+                new DecisionContent(name, "architecture", "s", "o", "r"), DecisionStatus.Accepted, ct)).Value.DecisionId);
+        }
+
+        var revision = (await service.ExportAsync("a", cancellationToken: ct)).ProjectRevision;
+        for (var i = 0; i < 3; i++)
+        {
+            revision = (await service.LinkAsync("a", new DecisionWrite("task", "s", $"link-{i}"), chain[i], chain[i + 1],
+                DecisionEdgeKind.DependsOn, "requires", revision, ct)).ProjectRevision;
+        }
+
+        var two = (await service.GraphAsync("a", new DecisionGraphRequest(chain[0], Depth: 2), ct)).Value;
+        two.Nodes.Select(node => node.DecisionId).ShouldBe(chain.Take(3), ignoreOrder: true);
+        two.Edges.Count.ShouldBe(2);
+        two.Truncated.ShouldBeTrue();
+        two.Reasons.ShouldBe(["depth"]);
+
+        var three = (await service.GraphAsync("a", new DecisionGraphRequest(chain[0], Depth: 3), ct)).Value;
+        three.Nodes.Select(node => node.DecisionId).ShouldBe(chain, ignoreOrder: true);
+        three.Edges.Count.ShouldBe(3);
+        three.Truncated.ShouldBeFalse();
+    }
+
     /// <summary>Edges among the visited nodes past the internal cap are cut and counted, not silently dropped.</summary>
     [RetryFact]
     public async Task Graph_cuts_edges_past_the_internal_cap_and_counts_the_rest()
@@ -122,7 +155,7 @@ public sealed partial class DecisionServiceTests
         var graph = (await service.GraphAsync("a", new DecisionGraphRequest(ids[0], DecisionDirection.Both, Depth: 1, MaxNodes: 500, IncludeContext: true), ct)).Value;
 
         graph.Nodes.Count.ShouldBe(ids.Count);
-        graph.Edges.Count.ShouldBe(DecisionService.GraphEdgeLimit);
+        graph.Edges.Count.ShouldBe(2000);
         graph.Truncated.ShouldBeTrue();
         graph.Reasons.ShouldBe(["edges"]);
         graph.OmittedNodes.ShouldBe(0);

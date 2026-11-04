@@ -144,10 +144,22 @@ public sealed class DecisionApiTests : IAsyncLifetime
         var id = DecisionIdOf((await Mcp("record_decision", _project)).Body);
 
         await AssertDomainAsync("get_decision", new() { ["decisionId"] = "missing" }, "decision-not-found", 404);
-        await AssertDomainAsync("transition_decision", Write("stale", new()
+        var stale = await AssertDomainAsync("transition_decision", Write("stale", new()
         {
             ["decisionId"] = id, ["expectedVersion"] = 2, ["targetStatus"] = "accepted", ["changeReason"] = "why"
         }), "decision-conflict", 409);
+        stale.Mcp.Body.ShouldContain("currentVersion=1");
+        JsonDocument.Parse(stale.Http.Body).RootElement.GetProperty("currentVersion").GetInt32().ShouldBe(1);
+        var otherArgs = DecisionOperations.Named("record_decision").McpArgs(_project);
+        otherArgs["requestId"] = "other";
+        var otherId = DecisionIdOf((await _host.McpAsync(_mcp, "record_decision", otherArgs, Ct)).Body);
+        var revision = JsonDocument.Parse((await Mcp("export_decisions", _project)).Body).RootElement.GetProperty("data").GetProperty("projectRevision").GetInt64();
+        var staleLink = await AssertDomainAsync("link_decisions", Write("stale-link", new()
+        {
+            ["sourceId"] = id, ["targetId"] = otherId, ["kind"] = "supports", ["reason"] = "why", ["expectedProjectRevision"] = revision - 1
+        }), "decision-conflict", 409);
+        staleLink.Mcp.Body.ShouldContain($"currentProjectRevision={revision}");
+        JsonDocument.Parse(staleLink.Http.Body).RootElement.GetProperty("currentProjectRevision").GetInt64().ShouldBe(revision);
         await AssertDomainAsync("transition_decision", Write("illegal", new()
         {
             ["decisionId"] = id, ["expectedVersion"] = 1, ["targetStatus"] = "deprecated", ["changeReason"] = "why"
@@ -206,7 +218,29 @@ public sealed class DecisionApiTests : IAsyncLifetime
         mcp.Kind.ShouldBe(kind, $"{operation.Tool} mcp: {mcp.Body}");
     }
 
-    private async Task AssertDomainAsync(string tool, Dictionary<string, object?> args, string kind, int status)
+    public static TheoryData<int, int, string, int> GraphBounds() => new()
+    {
+        { 11, 100, "invalid-argument", 400 },
+        { -1, 100, "invalid-argument", 400 },
+        { 2, 0, "invalid-argument", 400 },
+        { 2, 501, "invalid-argument", 400 },
+        { 10, 100, "ok", 200 },
+        { 0, 500, "ok", 200 },
+        { 2, 1, "ok", 200 }
+    };
+
+    /// <summary>Graph depth is 0..10 and maxNodes 1..500 on both adapters; just past either bound is invalid, at it is accepted.</summary>
+    [RetryTheory]
+    [MemberData(nameof(GraphBounds))]
+    public async Task GraphBounds_AreTheSameOnBothAdapters(int depth, int maxNodes, string kind, int status)
+    {
+        (await Mcp("register_decision_task", _project)).Kind.ShouldBe("ok");
+        var id = DecisionIdOf((await Mcp("record_decision", _project)).Body);
+
+        await AssertDomainAsync("get_decision_graph", new() { ["decisionId"] = id, ["depth"] = depth, ["maxNodes"] = maxNodes }, kind, status);
+    }
+
+    private async Task<(DecisionHost.Outcome Http, DecisionHost.Outcome Mcp)> AssertDomainAsync(string tool, Dictionary<string, object?> args, string kind, int status)
     {
         var template = DecisionOperations.Named(tool);
         var operation = template with { Args = args };
@@ -215,6 +249,7 @@ public sealed class DecisionApiTests : IAsyncLifetime
         http.Status.ShouldBe(status, http.Body);
         http.Kind.ShouldBe(kind, http.Body);
         mcp.Kind.ShouldBe(kind, mcp.Body);
+        return (http, mcp);
     }
 
     private static Dictionary<string, object?> Write(string requestId, Dictionary<string, object?> rest)

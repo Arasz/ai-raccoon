@@ -143,6 +143,43 @@ public sealed partial class DecisionServiceTests : IAsyncLifetime
     }
 
     [RetryFact]
+    public async Task Transition_replay_returns_the_first_result_without_a_second_version()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (service, first, _, _) = await AcceptedPairAsync();
+        var write = new DecisionWrite("task", "session", "deprecate");
+        var deprecated = await service.TransitionAsync("a", write, first, 1, DecisionStatus.Deprecated, "obsolete", ct);
+
+        var replay = await Service().TransitionAsync("a", write, first, 1, DecisionStatus.Deprecated, "obsolete", ct);
+
+        replay.Replayed.ShouldBeTrue();
+        replay.ProjectRevision.ShouldBe(deprecated.ProjectRevision);
+        replay.Value.Version.ShouldBe(deprecated.Value.Version);
+        (await service.GetAsync("a", first, includeHistory: true, cancellationToken: ct)).Value.Versions.Count.ShouldBe(2);
+        var changed = await Should.ThrowAsync<DecisionException>(() => service.TransitionAsync("a", write, first, 1, DecisionStatus.Rejected, "obsolete", ct));
+        changed.Kind.ShouldBe("decision-request-conflict");
+    }
+
+    [RetryFact]
+    public async Task Unlink_replay_returns_the_first_removal_even_after_the_revision_moved()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (service, first, second, revision) = await AcceptedPairAsync();
+        var edge = await service.LinkAsync("a", new DecisionWrite("task", "session", "link"), first, second, DecisionEdgeKind.DependsOn, "prerequisite", revision, ct);
+        var write = new DecisionWrite("task", "session", "unlink");
+        var removed = await service.UnlinkAsync("a", write, edge.Value.EdgeId, "new evidence", edge.ProjectRevision, ct);
+
+        var replay = await Service().UnlinkAsync("a", write, edge.Value.EdgeId, "new evidence", edge.ProjectRevision, ct);
+
+        replay.Replayed.ShouldBeTrue();
+        replay.ProjectRevision.ShouldBe(removed.ProjectRevision);
+        replay.Value.RemovedRevision.ShouldBe(removed.Value.RemovedRevision);
+        (await service.ExportAsync("a", cancellationToken: ct)).ProjectRevision.ShouldBe(removed.ProjectRevision);
+        var changed = await Should.ThrowAsync<DecisionException>(() => service.UnlinkAsync("a", write, edge.Value.EdgeId, "other reason", edge.ProjectRevision, ct));
+        changed.Kind.ShouldBe("decision-request-conflict");
+    }
+
+    [RetryFact]
     public async Task Invalid_links_are_refused_as_invalid_even_with_a_stale_revision()
     {
         var ct = TestContext.Current.CancellationToken;

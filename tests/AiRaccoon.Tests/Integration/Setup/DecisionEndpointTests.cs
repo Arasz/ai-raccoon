@@ -32,10 +32,15 @@ public sealed class DecisionEndpointTests : IAsyncLifetime
         (await Http.PostAsJsonAsync(root + "/tasks", new { taskId = "task", sessionId = "s", requestId = "task", title = "Task" }, Ct)).EnsureSuccessStatusCode();
         var record = await Http.PostAsJsonAsync(root + "/records", new { taskId = "task", sessionId = "s", requestId = "record", title = "Title", category = "architecture", scenario = "Scenario", outcome = "Outcome", reasoning = "Reason" }, Ct);
         record.StatusCode.ShouldBe(HttpStatusCode.OK);
-        using var json = JsonDocument.Parse(await record.Content.ReadAsStringAsync(Ct));
+        var recordBody = await record.Content.ReadAsStringAsync(Ct);
+        ProjectIdOf(recordBody).ShouldBe(_project);
+        using var json = JsonDocument.Parse(recordBody);
         var id = json.RootElement.GetProperty("data").GetProperty("value").GetProperty("decisionId").GetString();
         var get = await Http.GetAsync(root + "/records/" + id, Ct);
         get.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var getBody = await get.Content.ReadAsStringAsync(Ct);
+        ProjectIdOf(getBody).ShouldBe(_project);
+        JsonDocument.Parse(getBody).RootElement.GetProperty("data").GetProperty("value").GetProperty("record").GetProperty("decisionId").GetString().ShouldBe(id);
         var stale = await Http.PostAsJsonAsync(root + "/records/" + id + "/transition", new { taskId = "task", sessionId = "s", requestId = "transition", expectedVersion = 2, targetStatus = "accepted", changeReason = "accept" }, Ct);
         stale.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         var invalid = await Http.PostAsJsonAsync(root + "/records/" + id + "/transition", new { taskId = "task", sessionId = "s", requestId = "invalid", expectedVersion = 0, targetStatus = "accepted", changeReason = "accept" }, Ct);
@@ -50,7 +55,8 @@ public sealed class DecisionEndpointTests : IAsyncLifetime
             new { taskId = "task-1", sessionId = "session-1", requestId = "request-1", title = "Task" }, Ct);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = await response.Content.ReadAsStringAsync(Ct);
-        body.ShouldContain("task-1");
+        ProjectIdOf(body).ShouldBe(_project);
+        JsonDocument.Parse(body).RootElement.GetProperty("data").GetProperty("value").GetProperty("taskId").GetString().ShouldBe("task-1");
     }
 
     /// <summary>A read-only project refuses every committed write with the existing access refusal.</summary>
