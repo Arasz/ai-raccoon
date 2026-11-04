@@ -24,7 +24,7 @@ namespace AiRaccoon.Tests.Unit.Setup.Cli;
 public class SettingsCommandTreeTests
 {
     /// <summary>The end-state top level: one config noun plus the operations that are not configuration.</summary>
-    private static readonly string[] TopLevel = ["settings", "model", "watch", "extract", "encryption", "repair", "project", "serve", "noise", "doctor"];
+    private static readonly string[] TopLevel = ["settings", "model", "watch", "extract", "encryption", "repair", "project", "serve", "noise", "doctor", "decisions"];
 
     /// <summary>
     ///     Every configuration leaf, with a sample argv that satisfies its arguments. The coverage test
@@ -129,7 +129,10 @@ public class SettingsCommandTreeTests
         ["project id get"] = ["--name", "acme"],
         ["project id check"] = ["0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"],
         ["watch add"] = ["0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70", "/tmp"],
-        ["watch remove"] = ["0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70", "/tmp"]
+        ["watch remove"] = ["0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70", "/tmp"],
+["decisions task register"] = ["--project-id", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70", "--task-id", "t", "--title", "T"],
+["decisions export"] = ["--project-id", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"],
+["decisions preview"] = ["--project-id", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"]
     };
 
     public static TheoryData<string[]> SettingsArgv()

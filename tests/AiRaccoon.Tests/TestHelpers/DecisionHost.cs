@@ -24,7 +24,7 @@ public sealed class DecisionHost : IAsyncDisposable
     /// <summary>What a call answered: <c>ok</c> or the refusal kind, plus the body text.</summary>
     public sealed record Outcome(string Kind, string Body, int Status = 0);
 
-    private const string Token = "decision-host-token";
+    internal const string Token = "decision-host-token";
     private readonly string _root;
     private readonly WebApplication _app;
     private readonly List<McpClient> _clients = [];

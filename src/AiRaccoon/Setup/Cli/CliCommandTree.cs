@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Parsing;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Hosting.Node;
@@ -77,6 +78,7 @@ internal static class CliCommandTree
         root.Add(ProjectCommand());
         root.Add(ServeCommand());
         root.Add(DoctorCommand());
+        root.Add(DecisionsCommand());
         return root;
     }
 
@@ -500,6 +502,97 @@ internal static class CliCommandTree
         {
             ScopeCommand("Scope allowlist (absolute paths, covers dir + subdirs) — the paths this server may read")
         };
+
+    /// <summary>The project decision graph, read and written only through the server.</summary>
+    private static Command DecisionsCommand()
+    {
+        var register = new Command("register",
+            "Registers a task in the project's server order (same as register_decision_task); register it at work start, before its first decision. " +
+            "Without --session-id/--request-id the CLI generates them and prints them to stderr before sending; pass them back to retry safely.")
+        {
+            ProjectIdOption(),
+            new Option<string>("--task-id") { Description = "The task's identity", HelpName = "task", Required = true },
+            new Option<string>("--title") { Description = "The task's title", HelpName = "text", Required = true },
+            new Option<string?>("--source-ref") { Description = "Where the task is tracked (a URI); never fetched", HelpName = "uri" },
+            new Option<string?>("--session-id") { Description = "The writing session, for an exact retry", HelpName = "id" },
+            new Option<string?>("--request-id") { Description = "The request identity, for an exact retry", HelpName = "id" }
+        };
+
+        var export = new Command("export",
+            "Writes the complete selected snapshot — every decision version, edge history, boundary stubs, referenced tasks and import records — as JSON (default, lossless) or Markdown. " +
+            "Selects the latest task by default. The output is plaintext even for an encrypted bank. With --output the file is written beside the destination and published only once complete; " +
+            "an existing file is refused without --force. A nonzero exit means nothing was written.")
+        {
+            ProjectIdOption(),
+            ChoiceOption("--format", "json", "json", "markdown"),
+            new Option<string?>("--output") { Description = "Publish to this file instead of stdout (owner-only)", HelpName = "path" },
+            new Option<bool>("--force") { Description = "Replace an existing --output file" }
+        };
+        AddTaskSelection(export);
+
+        var preview = new Command("preview",
+            "A compact, budgeted summary of the selected tasks' decisions and direct links, as plain text (default) or JSON. Selects the latest task by default; " +
+            "--all still applies the display limits — only export is complete. Terminal controls in decision text are replaced before printing.")
+        {
+            ProjectIdOption(),
+            ChoiceOption("--format", "text", "text", "json"),
+            new Option<int?>("--max-decisions") { Description = "Decisions shown (1-100; server default 20)", HelpName = "N" },
+            new Option<int?>("--max-edges") { Description = "Edges shown (0-200; server default 30)", HelpName = "N" },
+            new Option<int?>("--max-chars") { Description = "Text budget in Unicode scalar values (1000-50000; server default 12000)", HelpName = "N" }
+        };
+        AddTaskSelection(preview);
+
+        return new Command("decisions",
+            "The project decision graph through the server (the CLI never opens the bank): register tasks, export complete snapshots, preview compact summaries.")
+        {
+            new Command("task", "Decision tasks: the unit export and preview select by") { register },
+            export,
+            preview
+        };
+    }
+
+    private static Option<string> ProjectIdOption() =>
+        new("--project-id") { Description = "The project the decisions belong to", HelpName = "id", Required = true };
+
+    private static Option<string> ChoiceOption(string name, string defaultValue, params string[] choices)
+    {
+        var option = new Option<string>(name)
+        {
+            Description = $"Output format: {string.Join('|', choices)} (default {defaultValue})",
+            HelpName = "format",
+            DefaultValueFactory = _ => defaultValue
+        };
+        option.AcceptOnlyFromAmong(choices);
+        return option;
+    }
+
+    /// <summary>--tasks N, --all and repeated --task-id: at most one of them; none means the server's default (the latest task).</summary>
+    private static void AddTaskSelection(Command command)
+    {
+        var tasks = new Option<int?>("--tasks") { Description = "The latest N registered tasks, not N decisions (1-1000)", HelpName = "N" };
+        var all = new Option<bool>("--all") { Description = "Every task in the project" };
+        var taskIds = new Option<string[]>("--task-id") { Description = "A named task; repeat for several (up to 100)", HelpName = "task" };
+        tasks.Validators.Add(result =>
+        {
+            if (result.GetValueOrDefault<int?>() is { } count && count is < 1 or > 1000)
+            {
+                result.AddError($"--tasks must be between 1 and 1000, got {count}.");
+            }
+        });
+        command.Add(tasks);
+        command.Add(all);
+        command.Add(taskIds);
+        command.Validators.Add(result =>
+        {
+            var chosen = new OptionResult?[] { result.GetResult(tasks), result.GetResult(all), result.GetResult(taskIds) }
+                .Where(option => option is { Implicit: false })
+                .ToArray();
+            if (chosen.Length > 1)
+            {
+                chosen[^1]!.AddError("Choose only one of --tasks, --all or --task-id.");
+            }
+        });
+    }
 
     /// <summary>The watches table is data, not configuration, so registering and listing watches stays top level.</summary>
     private static Command WatchCommand() =>

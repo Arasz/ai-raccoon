@@ -28,7 +28,8 @@ internal sealed class ConfigCommands(
     DoctorCommands doctor,
     ModelDownloadCommands modelDownload,
     ProjectIdCommands projectIds,
-    WatchRegistrationCommands watchRegistrations)
+    WatchRegistrationCommands watchRegistrations,
+    DecisionCommands decisions)
 {
     public async Task<int> RunAsync(CliInput cliInput,
         StandardStreams streams,
@@ -144,6 +145,9 @@ internal sealed class ConfigCommands(
                 ["project", "id", "register"] => await projectIds.RegisterAsync(parsedCliArgs, streams, ctx),
                 ["project", "id", "get"] => await projectIds.GetAsync(parsedCliArgs, streams, ctx),
                 ["project", "id", "check"] => await projectIds.CheckAsync(parsedCliArgs, streams, ctx),
+                ["decisions", "task", "register"] => await decisions.RegisterTaskAsync(parsedCliArgs, streams, ctx),
+                ["decisions", "export"] => await decisions.ExportAsync(parsedCliArgs, streams, ctx),
+                ["decisions", "preview"] => await decisions.PreviewAsync(parsedCliArgs, streams, ctx),
                 _ => throw new UnhandledCommandException($"unhandled command: {string.Join(' ', commandPath)}")
             };
         }

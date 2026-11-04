@@ -3,6 +3,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Decisions.Client;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Settings;
@@ -29,6 +30,7 @@ internal static class CliServerBinding
             services.AddSingleton<IWatchRegisteredStore>(store);
             services.AddSingleton<IProjectDirectory>(store);
             services.AddSingleton<IWatchControl>(store);
+            services.AddSingleton<IDecisionClient>(store);
         }
     }
 }
