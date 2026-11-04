@@ -165,7 +165,7 @@ Semantica import (`DecisionImport_DryRunReplayAndUnknownData`) is deferred to #9
 
 `DecisionGraphFixture` (`tests/AiRaccoon.Tests/Integration/Decisions/DecisionGraphFixture.cs`) seeds one project through `DecisionService`: two tasks, an amended decision, a live edge, a removed edge, replay receipts, and one `decision_imports` row. That fills all eight graph tables. The repair checks compare `total_changes()` on the repair connection before and after a refused repair, so a write that is later rolled back still fails the check. They also compare a dump of every ordinary table in the bank.
 
-No standalone project-deletion command exists. The only code that deletes a `projects` row is project-ID repair (fold, drop, retire). data-model.md says repair refuses any retired or loser project that owns graph rows, so for a graph owner the deletion contract is refusal with the whole graph left intact. Removing every graph table in FK-safe (reverse) order is already covered by the sync snapshot exclusion (`SyncService` `DecisionSchema.TableNames.Reverse()`, populated FK-enforced snapshot test above).
+No standalone project-deletion command exists. The only code that deletes a `projects` row is project-ID repair (fold, drop, retire). data-model.md states the v1 contract: no project deletion, and repair holds back or refuses any retired, dropped or loser project that owns graph rows, so a graph owner keeps its whole graph. Removing every graph table in FK-safe (reverse) order is already covered by the sync snapshot exclusion (`SyncService` `DecisionSchema.TableNames.Reverse()`, populated FK-enforced snapshot test above).
 
 | Check | What it proves | Mutation (production) | Red | Green |
 |---|---|---|---|---|
