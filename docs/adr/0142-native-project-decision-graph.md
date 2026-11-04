@@ -24,7 +24,7 @@ The detailed [data model](../plans/decision-graph/data-model.md), [API contract]
 
 Embedding graph JSON as ordinary memory cannot enforce ownership or atomic supersession. A general entity/RDF graph expands the problem beyond decisions. A second graph database or SQLite file duplicates deployment, encryption and backup lifecycle. Typed tables in the current bank give the required constraints with fewer moving parts.
 
-This adds migrations, graph-aware project repair/deletion, sync exclusion and a dedicated retrieval surface. It does not replace Semantica NER, generic graph operations or every export format. Proposed records remain mutable until acceptance; once accepted, later architecture changes receive a new ADR.
+This adds migrations, graph-aware project repair/deletion, sync exclusion and a dedicated retrieval surface. It does not replace Semantica NER, generic graph operations or every export format. Proposed and accepted decision records accept amendments; each amendment appends a version with its change reason, so history is never rewritten. Rejected, superseded and deprecated records are terminal and immutable; a changed direction is a new decision that supersedes the old one.
 
 ## Acceptance
 
