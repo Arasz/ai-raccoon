@@ -53,3 +53,19 @@ The eight `service-contract` checks live in `tests/AiRaccoon.Tests/Integration/D
 | Task headers emitted without the budget check | 1 | ManyEmptyTasks |
 
 With production restored, `DecisionServiceTests` passed 21/21 in four separate runs and `RetrySurfaceGateTests` passed 2/2. No production defect was found. Traversal termination is still covered by `Graph_preserves_causal_direction_and_explicit_depth_and_node_bounds`.
+
+## Review fixes
+
+An adversarial review of the pull request confirmed five findings. Each fix below was seen red before the change and green after it.
+
+| Finding | Check | Red | Green |
+|---|---|---|---|
+| Decision-only project planned for retirement, so the repair request threw on every maintenance pass | `DecisionProjectRepairTests.Census_pins_a_registered_project_that_owns_only_decisions_instead_of_retiring_it`, `DecisionProjectRepairJobTests.Repair_request_folds_unrelated_ids_and_finishes_when_a_project_owns_only_decisions` | 2/6 | 6/6 |
+| Required text measured untrimmed; identifiers accepted U+202E, U+200B, U+2028, U+2029, U+00AD and padding | `DecisionTextTests` | 8/14 | 14/14 |
+| Cyclic or self link with a stale revision returned a revision conflict | `DecisionServiceTests.Invalid_links_are_refused_as_invalid_even_with_a_stale_revision` | 1/22 | 22/22 |
+| v23 ladder step re-ran decision DDL the digest-gated Ddl had already run | `DecisionBankLifecycleTests.Version_twenty_two_bank_migrates_without_losing_existing_settings` now checks every decision table; removing the decision DDL from the Ddl turned it red | 2/2 | 2/2 |
+| `AmendAsync` read the clock directly | refactor only, covered by the existing service tests | n/a | 115/115 |
+
+The census now counts decision graph rows per id as an attachment, so a graph owner is never retire-eligible. The repair still refuses to fold or drop a graph owner. After all five fixes, the project-id repair classes, every decision class and the repo-wide source gates (`NoHandRolledCryptoTests`, `NoConfigureAwaitTests`, `RetrySurfaceGateTests`, `LoggerMessageEventIdTests`, `ProjectIdAliasDefaultCollectionGateTests`) passed 492/492.
+
+The `INSERT ... SELECT` backfill and `decision_fts` rebuild remain in `DecisionSchema.Ddl`. They run once per schema digest change and no longer run a second time from the ladder.
