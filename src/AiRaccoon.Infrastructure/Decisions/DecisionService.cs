@@ -87,7 +87,7 @@ public sealed partial class DecisionService(IDecisionStore store, TimeProvider t
             {
                 if (receipt.PayloadHash != hash)
                 {
-                    throw new DecisionException("decision-request-conflict", "This requestId already identifies a different command. Use a new requestId.");
+                    throw new DecisionException(DecisionErrorKinds.RequestConflict, "This requestId already identifies a different command. Use a new requestId.");
                 }
 
                 return JsonSerializer.Deserialize<DecisionResult<T>>(receipt.ResultJson)! with { Replayed = true };
@@ -114,8 +114,8 @@ public sealed partial class DecisionService(IDecisionStore store, TimeProvider t
     }
 
     private sealed record Mutation<T>(T Value, bool Changed = true);
-    private static DecisionException NotFound(string resource) => new("decision-not-found", $"{resource} was not found in this project.");
-    private static DecisionException Conflict(string message, int? version = null, long? revision = null) => new("decision-conflict", message, version, revision);
+    private static DecisionException NotFound(string resource) => new(DecisionErrorKinds.NotFound, $"{resource} was not found in this project.");
+    private static DecisionException Conflict(string message, int? version = null, long? revision = null) => new(DecisionErrorKinds.Conflict, message, version, revision);
 
     public Task<DecisionResult<DecisionVersion>> AmendAsync(string projectId, DecisionWrite write, string decisionId,
         int expectedVersion, string changeReason, DecisionContent content, CancellationToken cancellationToken = default)
@@ -131,7 +131,7 @@ public sealed partial class DecisionService(IDecisionStore store, TimeProvider t
             }
             catch (InvalidOperationException exception)
             {
-                throw new DecisionException("decision-invalid-transition", exception.Message);
+                throw new DecisionException(DecisionErrorKinds.InvalidTransition, exception.Message);
             }
 
             var amended = current with

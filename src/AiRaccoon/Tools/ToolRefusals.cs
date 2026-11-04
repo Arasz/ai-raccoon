@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
 using AiRaccoon.Core.Access;
+using AiRaccoon.Core.Decisions;
+using AiRaccoon.Decisions;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
@@ -85,6 +87,9 @@ internal static partial class ToolRefusals
     ///     PromotionTools.cs). Kept next to <see cref="RefusalPrefixes" /> so the doc-drift test's expected set stays code-derived.
     /// </summary>
     internal static readonly IReadOnlyCollection<string> DirectThrowPrefixes = ["invalid-params"];
+
+    /// <summary>The decision tools' own refusal kinds, mapped by <see cref="DecisionRefusals" /> rather than by exception type.</summary>
+    internal static IReadOnlyCollection<string> DecisionPrefixes => DecisionErrorKinds.All;
 
     /// <summary>
     ///     The remedy clause appended to a mapped refusal whose own message names none — what an
@@ -179,6 +184,12 @@ internal static partial class ToolRefusals
             catch (OperationCanceledException)
             {
                 return Cancelled(request);
+            }
+            catch (Exception ex) when (DecisionTools.Names.Contains(request.Params?.Name ?? string.Empty)
+                                       && DecisionRefusals.For(ex) is { } refusal)
+            {
+                // The decision tools refuse exactly as their HTTP routes do: one shared mapping.
+                return Refused(request, refusal.Text, refusal.Kind, LevelFor(refusal.Kind));
             }
             catch (Exception ex) when (PrefixFor(ex) is { } prefix)
             {

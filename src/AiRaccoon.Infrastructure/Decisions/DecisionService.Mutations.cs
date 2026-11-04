@@ -11,7 +11,7 @@ public sealed partial class DecisionService
         DecisionText.Required(changeReason, 2000, nameof(changeReason));
         if (targetStatus == DecisionStatus.Superseded)
         {
-            throw new DecisionException("decision-invalid-transition", "Use supersede_decision to record the replacement and its permanent edge together.");
+            throw new DecisionException(DecisionErrorKinds.InvalidTransition, "Use supersede_decision to record the replacement and its permanent edge together.");
         }
 
         return MutateAsync(projectId, write, "transition", new { decisionId, expectedVersion, targetStatus, changeReason }, async (writer, revision, ct) =>
@@ -34,7 +34,7 @@ public sealed partial class DecisionService
             var replaced = await CurrentAsync(writer, replacedId, expectedReplacedVersion, ct);
             if (replacement.Status != DecisionStatus.Accepted || replaced.Status != DecisionStatus.Accepted)
             {
-                throw new DecisionException("decision-invalid-transition", "Both replacement and replaced decisions must be accepted.");
+                throw new DecisionException(DecisionErrorKinds.InvalidTransition, "Both replacement and replaced decisions must be accepted.");
             }
 
             var live = (await writer.EdgesAsync(ct)).Where(edge => edge.RemovedRevision is null).ToArray();
@@ -93,7 +93,7 @@ public sealed partial class DecisionService
             var edge = (await writer.EdgesAsync(ct)).SingleOrDefault(edge => edge.EdgeId == edgeId) ?? throw NotFound("Edge");
             if (edge.Kind == DecisionEdgeKind.Supersedes)
             {
-                throw new DecisionException("decision-invalid-transition", "A supersession edge is permanent.");
+                throw new DecisionException(DecisionErrorKinds.InvalidTransition, "A supersession edge is permanent.");
             }
 
             if (edge.RemovedRevision is not null)
@@ -129,7 +129,7 @@ public sealed partial class DecisionService
         }
         catch (InvalidOperationException exception)
         {
-            throw new DecisionException("decision-invalid-transition", exception.Message);
+            throw new DecisionException(DecisionErrorKinds.InvalidTransition, exception.Message);
         }
     }
 
@@ -141,7 +141,7 @@ public sealed partial class DecisionService
         }
         catch (InvalidOperationException exception)
         {
-            throw new DecisionException("decision-invalid-link", exception.Message);
+            throw new DecisionException(DecisionErrorKinds.InvalidLink, exception.Message);
         }
     }
 

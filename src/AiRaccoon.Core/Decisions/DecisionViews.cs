@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 namespace AiRaccoon.Core.Decisions;
 
 public sealed record DecisionSearchHit(string DecisionId, double Rank);
@@ -15,6 +16,7 @@ public sealed record DecisionQueryResult(IReadOnlyList<DecisionMatch> Decisions,
     string? NextAfterId, string Method);
 public sealed record DecisionQuery(string? Query = null, string? Category = null, IReadOnlyList<DecisionStatus>? Statuses = null,
     DecisionTaskSelector? Selector = null, int Limit = 20, string? AfterId = null);
+[JsonConverter(typeof(DecisionEnumConverter<DecisionDirection>))]
 public enum DecisionDirection { Upstream, Downstream, Both }
 public sealed record DecisionGraphRequest(string DecisionId, DecisionDirection Direction = DecisionDirection.Upstream,
     int Depth = 2, int MaxNodes = 100, bool IncludeContext = false);

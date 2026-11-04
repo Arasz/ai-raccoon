@@ -499,6 +499,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
 
         var codePrefixes = ToolRefusals.RefusalPrefixes.Values
             .Concat(ToolRefusals.DirectThrowPrefixes)
+            .Concat(ToolRefusals.DecisionPrefixes)
             .Concat([ToolRefusals.CancelledPrefix, ToolRefusals.BankBusyPrefix, ToolRefusals.UnknownToolPrefix])
             .ToHashSet(StringComparer.Ordinal);
 

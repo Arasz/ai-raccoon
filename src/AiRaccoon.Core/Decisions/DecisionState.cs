@@ -1,7 +1,9 @@
+using System.Text.Json.Serialization;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Core.Decisions;
 
+[JsonConverter(typeof(DecisionEnumConverter<DecisionStatus>))]
 public enum DecisionStatus { Proposed, Accepted, Rejected, Superseded, Deprecated }
 
 /// <summary>A decision's immutable lifecycle state; transitions return a new value.</summary>
