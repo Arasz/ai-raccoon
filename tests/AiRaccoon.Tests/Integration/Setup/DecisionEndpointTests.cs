@@ -43,6 +43,24 @@ public sealed class DecisionEndpointTests : IAsyncLifetime
     }
 
     [RetryFact]
+    public async Task RecordAndGet_UseTheSameProjectAndExposeConflictsAndValidation()
+    {
+        var root = $"/decisions/projects/{Project}";
+        (await _http.PostAsJsonAsync(root + "/tasks", new { taskId = "task", sessionId = "s", requestId = "task", title = "Task" }, Ct)).EnsureSuccessStatusCode();
+        var record = await _http.PostAsJsonAsync(root + "/records", new { taskId = "task", sessionId = "s", requestId = "record", title = "Title", category = "architecture", scenario = "Scenario", outcome = "Outcome", reasoning = "Reason" }, Ct);
+        record.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var json = System.Text.Json.JsonDocument.Parse(await record.Content.ReadAsStringAsync(Ct));
+        var id = json.RootElement.GetProperty("data").GetProperty("value").GetProperty("decisionId").GetString();
+        var get = await _http.GetAsync(root + "/records/" + id, Ct);
+        get.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var stale = await _http.PostAsJsonAsync(root + "/records/" + id + "/transition", new { taskId = "task", sessionId = "s", requestId = "transition", expectedVersion = 2, targetStatus = 1, changeReason = "accept" }, Ct);
+        stale.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        var invalid = await _http.PostAsJsonAsync(root + "/records/" + id + "/transition", new { taskId = "task", sessionId = "s", requestId = "invalid", expectedVersion = 0, targetStatus = 1, changeReason = "accept" }, Ct);
+        invalid.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await _http.GetAsync(root + "/records/missing", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [RetryFact]
     public async Task RegisterTask_UsesProjectGateAndReturnsTask()
     {
         var response = await _http.PostAsJsonAsync($"/decisions/projects/{Project}/tasks",
