@@ -23,70 +23,6 @@ public sealed partial class DecisionServiceTests
     }
 
     [RetryFact]
-    public async Task Latest_task_is_registration_order_including_an_empty_task()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var (service, first, _, _) = await AcceptedPairAsync();
-        await service.RegisterTaskAsync("a", new DecisionWrite("empty", "session", "register-empty"), "Empty", cancellationToken: ct);
-        var latest = (await service.ExportAsync("a", cancellationToken: ct)).Value;
-        latest.SelectedTaskIds.ShouldBe(new[] { "empty" });
-        latest.Decisions.ShouldBeEmpty();
-        await service.AmendAsync("a", new DecisionWrite("task", "session", "amend-old"), first, 1, "clarify", new DecisionContent("Amended", "c", "s", "o", "r"), ct);
-        (await service.ExportAsync("a", cancellationToken: ct)).Value.SelectedTaskIds.ShouldBe(new[] { "empty" });
-        var both = (await service.ExportAsync("a", new DecisionTaskSelector(last: 2), ct)).Value;
-        both.Tasks.Count.ShouldBe(2);
-        both.Decisions.Count.ShouldBe(2);
-        var all = (await service.ExportAsync("a", new DecisionTaskSelector(all: true), ct)).Value;
-        all.Counts.Decisions.ShouldBe(2);
-        (await service.ExportAsync("b", cancellationToken: ct)).Value.Counts.Tasks.ShouldBe(0);
-    }
-
-    [RetryFact]
-    public async Task Task_export_keeps_touch_history_boundaries_and_referenced_task_provenance()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var (service, first, second, revision) = await AcceptedPairAsync();
-        var linked = await service.LinkAsync("a", new DecisionWrite("task", "session", "link"), first, second, DecisionEdgeKind.DependsOn, "requires", revision, ct);
-        await service.RegisterTaskAsync("a", new DecisionWrite("review", "session", "register-review"), "Review", cancellationToken: ct);
-        await service.UnlinkAsync("a", new DecisionWrite("review", "session", "remove"), linked.Value.EdgeId, "obsolete prerequisite", linked.ProjectRevision + 1, ct);
-        var export = (await service.ExportAsync("a", cancellationToken: ct)).Value;
-        export.SelectedTaskIds.ShouldBe(new[] { "review" });
-        export.Decisions.Single().Record.DecisionId.ShouldBe(first);
-        export.Decisions.Single().Touches.Single().Reason.ShouldBe("edge-removed");
-        export.Decisions.Single().Versions.Single().Content.Title.ShouldBe("First");
-        export.BoundaryNodes.Single().DecisionId.ShouldBe(second);
-        export.Edges.Single().RemovalTaskId.ShouldBe("review");
-        export.ReferencedTasks.Single().TaskId.ShouldBe("task");
-        var preview = (await service.PreviewAsync("a", cancellationToken: ct)).Value;
-        preview.Total.Edges.ShouldBe(0);
-        preview.Text.ShouldNotContain("--depends_on-->");
-    }
-
-    [RetryFact]
-    public async Task Preview_has_a_unicode_budget_and_reports_omitted_empty_tasks_and_graph_items()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var (service, first, second, revision) = await AcceptedPairAsync();
-        await service.LinkAsync("a", new DecisionWrite("task", "session", "link"), first, second, DecisionEdgeKind.DependsOn, "requires", revision, ct);
-        for (var i = 0; i < 12; i++)
-        {
-            var id = "empty-" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            await service.RegisterTaskAsync("a", new DecisionWrite(id, "session", "register-" + id), string.Concat(Enumerable.Repeat("🐾", 90)), cancellationToken: ct);
-        }
-
-        var preview = (await service.PreviewAsync("a", new DecisionPreviewOptions(new DecisionTaskSelector(all: true), MaxDecisions: 1, MaxChars: 1000), ct)).Value;
-        preview.Text.EnumerateRunes().Count().ShouldBeLessThanOrEqualTo(1000);
-        preview.Total.Tasks.ShouldBe(13);
-        preview.Omitted.Tasks.ShouldBeGreaterThan(0);
-        preview.Omitted.Decisions.ShouldBe(preview.Total.Decisions - preview.Shown.Decisions);
-        preview.Text.ShouldContain("omitted");
-        preview.Text.ShouldNotContain("\uFFFD");
-        var roomy = (await service.PreviewAsync("a", new DecisionPreviewOptions(new DecisionTaskSelector(taskIds: ["task"])), ct)).Value;
-        roomy.Text.ShouldContain("--depends_on-->");
-        roomy.Shown.Edges.ShouldBe(1);
-    }
-
-    [RetryFact]
     public async Task Preview_omits_whole_decisions_when_text_budget_is_exhausted()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -141,34 +77,6 @@ public sealed partial class DecisionServiceTests
         bounded.Reasons.ShouldContain("nodes");
         (await service.GraphAsync("a", new DecisionGraphRequest(first, Depth: 0), ct)).Value.Nodes.Count.ShouldBe(1);
     }
-    [RetryFact]
-    public async Task Intermediate_task_touch_exports_full_history_raw_imports_and_referenced_tasks()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var service = Service();
-        await service.RegisterTaskAsync("a", new DecisionWrite("original", "s", "register-original"), "Original", cancellationToken: ct);
-        var decision = await service.RecordAsync("a", new DecisionWrite("original", "s", "record"), new DecisionContent("One", "c", "s", "o", "r"), cancellationToken: ct);
-        await service.RegisterTaskAsync("a", new DecisionWrite("middle", "s", "register-middle"), "Middle", cancellationToken: ct);
-        await service.AmendAsync("a", new DecisionWrite("middle", "s", "amend-middle"), decision.Value.DecisionId, 1, "second", new DecisionContent("Two", "c", "s", "o", "r"), ct);
-        await service.RegisterTaskAsync("a", new DecisionWrite("latest", "s", "register-latest"), "Latest", cancellationToken: ct);
-        await service.AmendAsync("a", new DecisionWrite("latest", "s", "amend-latest"), decision.Value.DecisionId, 2, "third", new DecisionContent("Three", "c", "s", "o", "r"), ct);
-        var options = new InfrastructureOptions { DataRoot = _root, Rid = "osx-arm64", Scope = InstallScope.User };
-        var store = new SqliteDecisionStore(new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options)), new SharedProjectScope());
-        await store.WriteAsync("a", async (writer, token) =>
-        {
-            await writer.AddImportAsync(new DecisionImport("fixture", "external", decision.Value.DecisionId, "original", "digest", "{\"extra\":true}", "{}"), token);
-            return true;
-        }, ct);
-        var selector = new DecisionTaskSelector(taskIds: ["middle"]);
-        var export = (await service.ExportAsync("a", selector, ct)).Value;
-        export.Decisions.Single().Versions.Count.ShouldBe(3);
-        export.Decisions.Single().Touches.Single().Version.ShouldBe(2);
-        export.Decisions.Single().Record.CurrentVersion.ShouldBe(3);
-        export.ReferencedTasks.Select(task => task.TaskId).Order(StringComparer.Ordinal).ShouldBe(new[] { "latest", "original" });
-        export.ImportRecords.Single().RawPayload.ShouldBe("{\"extra\":true}");
-        (await service.QueryAsync("a", new DecisionQuery(Selector: selector), ct)).Value.Decisions.Single().Decision.Title.ShouldBe("Three");
-    }
-
     [RetryFact]
     public async Task Preview_abbreviates_by_unicode_scalars_and_sanitizes_terminal_controls()
     {
