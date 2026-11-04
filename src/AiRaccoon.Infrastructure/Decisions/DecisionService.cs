@@ -32,7 +32,7 @@ public sealed partial class DecisionService(IDecisionStore store, TimeProvider t
                 return new Mutation<DecisionTask>(existing, false);
             }
 
-            var task = new DecisionTask(write.TaskId, title, tasks.Count == 0 ? 1 : checked(tasks.Max(task => task.RegisteredOrder) + 1), timeProvider.GetUtcNow(), sourceRef);
+            var task = new DecisionTask(write.TaskId, title, tasks.Count == 0 ? 1 : checked(tasks.Max(task => task.RegisteredOrder) + 1), Now, sourceRef);
             await writer.AddTaskAsync(task, ct);
             return new Mutation<DecisionTask>(task);
         }, cancellationToken, requireTask: false);
@@ -45,7 +45,7 @@ public sealed partial class DecisionService(IDecisionStore store, TimeProvider t
         Guard.IsTrue(status is DecisionStatus.Proposed or DecisionStatus.Accepted, nameof(status));
         return MutateAsync(projectId, write, "record", new { content, status }, async (writer, revision, ct) =>
         {
-            var now = timeProvider.GetUtcNow();
+            var now = Now;
             var id = Guid.CreateVersion7(now).ToString();
             var version = new DecisionVersion(id, 1, write.TaskId, revision, content, status, now, write.Actor, write.SessionId, null);
             await writer.AddRecordAsync(new DecisionRecord(id, write.TaskId, 1, now), ct);
@@ -137,7 +137,7 @@ public sealed partial class DecisionService(IDecisionStore store, TimeProvider t
             var amended = current with
             {
                 Version = checked(current.Version + 1), TaskId = write.TaskId, ProjectRevision = revision,
-                Content = content, RecordedAt = timeProvider.GetUtcNow(), Actor = write.Actor,
+                Content = content, RecordedAt = Now, Actor = write.Actor,
                 SessionId = write.SessionId, ChangeReason = changeReason
             };
             await writer.AddVersionAsync(amended, ct);
