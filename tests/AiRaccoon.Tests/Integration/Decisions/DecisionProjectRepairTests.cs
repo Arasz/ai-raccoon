@@ -79,5 +79,25 @@ public sealed class DecisionProjectRepairTests : IDisposable
         (await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM projects WHERE id='loser'")).ShouldBe(0);
     }
 
+    [RetryFact]
+    public async Task Census_pins_a_registered_project_that_owns_only_decisions_instead_of_retiring_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var options = new InfrastructureOptions { DataRoot = _root, Rid = "osx-arm64", Scope = InstallScope.User };
+        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        await using var connection = await factory.OpenBankAsync(ct);
+        await connection.ExecuteAsync("""
+            INSERT INTO projects(id,name,created_at) VALUES('graph-only','GraphOnly',1),('empty','Empty',1);
+            INSERT INTO decision_projects(project_id,revision) VALUES('graph-only',0);
+            """);
+
+        var census = await ProjectIdCensus.CollectAsync(connection, ct);
+        var plan = ProjectIdsFoldPlan.FromCensus(census, ProjectIdAliasMap.Empty);
+
+        census.Row("graph-only").DecisionRows.ShouldBe(1);
+        plan.RetiredProjects.ShouldNotContain("graph-only");
+        plan.RetiredProjects.ShouldContain("empty");
+    }
+
     public void Dispose() => TestData.DeleteTempRoot(_root);
 }
