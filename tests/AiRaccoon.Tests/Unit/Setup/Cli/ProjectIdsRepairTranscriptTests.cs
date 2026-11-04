@@ -30,7 +30,7 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
     [
         "dry-run-no-map", "dry-run-no-map-template-exists", "apply-no-map", "dry-run-default-map", "queue-only-default-map", "dry-run-default-map-overridden", "invalid-default-map", "dry-run-with-map", "dry-run-converged",
         "queue-only-actionable", "queue-only-attention", "queue-only-converged", "apply-loop",
-        "missing-map", "telemetry-quality-pinned-only"
+        "missing-map", "telemetry-quality-pinned-only", "dry-run-decision-graph-held-back"
     ];
 
     [Theory]
@@ -60,7 +60,7 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
             "queue-only-default-map" => ["repair", "project-ids", "--apply", "--queue-only"],
             "dry-run-default-map-overridden" => ["repair", "project-ids", "--map", WriteFile("override.json", new ProjectIdAliasMap([], ["jsaa"], []).ToJson())],
             "invalid-default-map" => ["repair", "project-ids"],
-            "dry-run-with-map" or "dry-run-converged" => ["repair", "project-ids", "--map", mapPath],
+            "dry-run-with-map" or "dry-run-converged" or "dry-run-decision-graph-held-back" => ["repair", "project-ids", "--map", mapPath],
             "queue-only-actionable" or "queue-only-attention" or "queue-only-converged" =>
                 ["repair", "project-ids", "--apply", "--queue-only", "--map", mapPath],
             "apply-loop" or "telemetry-quality-pinned-only" => ["repair", "project-ids", "--apply", "--map", mapPath],
@@ -96,6 +96,7 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
             "dry-run-converged" or "queue-only-converged" or "apply-no-map" => ConvergedReport(),
             "queue-only-attention" => AttentionReport(),
             "telemetry-quality-pinned-only" => TelemetryWithQualityReport(),
+            "dry-run-decision-graph-held-back" => DecisionGraphReport(),
             _ => MixedReport()
         };
         var store = new InMemorySettings { ProjectIdsReport = report };
@@ -151,16 +152,35 @@ public sealed class ProjectIdsRepairTranscriptTests : IDisposable
             Row("metrics-and-quality", metricsRows: 2, qualityRows: 1)
         ], 0, 0, 0, 0, []);
 
+    private static ProjectIdCensusReport DecisionGraphReport() => new(
+        [
+            Row("jsaa", registered: true, entries: 3),
+            Row("job-search-ai-assistant", entries: 2, decisionRows: 4),
+            Row("qa-noise-project", entries: 1)
+        ], 0, 0, 0, 0, []);
+
     private static ProjectIdCensusReport ConvergedReport() => new(
         [Row("jsaa", registered: true, entries: 3), Row("ai-badger", registered: true, entries: 1)], 0, 0, 0, 0, []);
 
     private static ProjectIdCensusRow Row(string projectId, bool registered = false, string? registeredName = null,
-        long entries = 0, long nullContext = 0, long queued = 0, long metricsRows = 0, long qualityRows = 0) =>
+        long entries = 0, long nullContext = 0, long queued = 0, long metricsRows = 0, long qualityRows = 0,
+        long decisionRows = 0) =>
         new(projectId, registered, registeredName, entries, 0, 0, 0, nullContext,
-            0, 0, 0, 0, 0, 0, queued, 0, qualityRows, 0, 0, 0, 0, 0, metricsRows, 0, []);
+            0, 0, 0, 0, 0, 0, queued, 0, qualityRows, 0, 0, 0, 0, 0, metricsRows, 0, []) { DecisionRows = decisionRows };
 
     private static readonly Dictionary<string, string> Expected = new(StringComparer.Ordinal)
     {
+        ["dry-run-decision-graph-held-back"] = """
+            exit 0; requested nothing
+            --- stdout
+            project-ids repair: 3 id(s) censused — 0 fold, 1 drop (test residue), 0 retire (registered, empty), 0 need a human to attribute, 1 pinned (waiting with reasons below), 1 need nothing (already correct or empty). Dry run — pass --apply to run this.
+            project-ids repair: 2 id(s) own entries with no projects-table registration.
+            project-ids repair: 1 id(s) pinned — waiting with reasons below:
+              pinned-decision-graph: 'job-search-ai-assistant' — owns 4 decision graph row(s) — native graph merging and deletion are not supported, so the id stays where it is until a graph repair exists
+            project-ids repair: 'qa-noise-project' is test residue — deletes with a tombstone per removed hash
+            project-ids repair: summary — repair needed: 0 fold, 1 drop, 0 retire, 0 unresolved, 1 pinned (pinned-decision-graph: 'job-search-ai-assistant') — pass --apply to run the loop until it reports converged.
+            --- stderr
+            """,
         ["dry-run-no-map"] = """
             exit 0; requested nothing
             --- stdout

@@ -551,6 +551,48 @@ public sealed class ProjectIdsFoldPlanTests
         plan.RetiredProjects.ShouldBeEmpty("open workspaces block retire — the id waits, it is not empty");
     }
 
+    [Fact]
+    public void FromCensus_GraphOwningAliasLoser_IsHeldBackWhileTheUnrelatedFoldPlans()
+    {
+        var report = Report(
+            Row("job-search-ai-assistant", projectEntries: 2, decisionRows: 3),
+            Row("AI-RACCOON", projectEntries: 1));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Folds.ShouldBe([new ProjectIdFold("AI-RACCOON", "ai-raccoon")]);
+        var pin = plan.Pinned.ShouldHaveSingleItem();
+        pin.ProjectId.ShouldBe("job-search-ai-assistant");
+        pin.Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedDecisionGraph);
+        pin.Reason.ShouldContain("3 decision graph row(s)");
+    }
+
+    [Fact]
+    public void FromCensus_GraphOwningDroppedId_IsHeldBackWhileTheUnrelatedDropPlans()
+    {
+        var report = Report(
+            Row("qa-noise-project", projectEntries: 1, decisionRows: 1),
+            Row("manual-sweep", projectEntries: 1));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Dropped.ShouldBe(["manual-sweep"]);
+        plan.Pinned.ShouldHaveSingleItem().ShouldBe(new ProjectIdPin("qa-noise-project",
+            ProjectIdsFoldPlan.PinnedDecisionGraph, plan.Pinned[0].Reason));
+    }
+
+    [Fact]
+    public void FromCensus_GraphOwnerAttributedByName_IsHeldBack()
+    {
+        var report = Report(Row("01a03024-0000-7000-8000-000000000002", projectEntries: 1, registered: true,
+            registeredName: "job-search-ai-assistant", decisionRows: 2));
+
+        var plan = ProjectIdsFoldPlan.FromCensus(report, FixtureMap());
+
+        plan.Folds.ShouldBeEmpty();
+        plan.Pinned.ShouldHaveSingleItem().Bucket.ShouldBe(ProjectIdsFoldPlan.PinnedDecisionGraph);
+    }
+
     // Explicit fixture: machine ids as TEST DATA (allowed). Production Default is empty (ADR-0099).
     private static ProjectIdAliasMap FixtureMap() => new(
         [new ProjectIdAliasEntry("job-search-ai-assistant", "jsaa"), new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")],
@@ -591,11 +633,13 @@ public sealed class ProjectIdsFoldPlanTests
         long workspaceEntries = 0,
         long openWorkspaces = 0,
         long openWorkspaceEntries = 0,
+        long decisionRows = 0,
         params string[] settingsKeys) =>
         new(projectId, registered, registeredName, projectEntries, customEntries, sharedEntries, workspaceEntries, nullContextEntries, 0, 0, 0, 0, 0, 0,
             queued, discards, qualityRows, watches, 0, 0, 0, workspaces, metricsRows, noiseRows, settingsKeys)
         {
             OpenWorkspaces = openWorkspaces,
-            OpenWorkspaceEntries = openWorkspaceEntries
+            OpenWorkspaceEntries = openWorkspaceEntries,
+            DecisionRows = decisionRows
         };
 }
