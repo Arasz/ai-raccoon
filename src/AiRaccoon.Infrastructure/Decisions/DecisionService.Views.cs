@@ -5,6 +5,9 @@ namespace AiRaccoon.Infrastructure.Decisions;
 
 public sealed partial class DecisionService
 {
+    /// <summary>The most edges one graph walk returns; the rest are reported as omitted.</summary>
+    internal const int GraphEdgeLimit = 2000;
+
     public Task<DecisionResult<DecisionExport>> ExportAsync(string projectId, DecisionTaskSelector? selector = null,
         CancellationToken cancellationToken = default) => Store.ReadAsync(projectId, async (reader, ct) =>
     {
@@ -145,16 +148,16 @@ public sealed partial class DecisionService
             }
 
             var contained = live.Where(edge => visited.Contains(edge.SourceId) && visited.Contains(edge.TargetId)).ToArray();
-            if (contained.Length > 2000)
+            if (contained.Length > GraphEdgeLimit)
             {
                 reasons.Add("edges");
             }
 
             var unknown = reasons.Contains("depth") || reasons.Contains("nodes");
             return new DecisionResult<DecisionGraph>(projectId, snapshot.Revision,
-                new DecisionGraph(visited.Order(StringComparer.Ordinal).Select(id => Node(snapshot.Current[id])).ToArray(), contained.Take(2000).ToArray(),
+                new DecisionGraph(visited.Order(StringComparer.Ordinal).Select(id => Node(snapshot.Current[id])).ToArray(), contained.Take(GraphEdgeLimit).ToArray(),
                     reasons.Count > 0, reasons.Order(StringComparer.Ordinal).ToArray(), unknown ? null : 0,
-                    unknown ? null : Math.Max(0, contained.Length - 2000)));
+                    unknown ? null : Math.Max(0, contained.Length - GraphEdgeLimit)));
         }, cancellationToken);
     }
 

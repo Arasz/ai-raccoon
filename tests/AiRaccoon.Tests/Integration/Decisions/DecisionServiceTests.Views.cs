@@ -1,6 +1,7 @@
 using System.Text;
 using AiRaccoon.Core.Decisions;
 using AiRaccoon.Core.Projects;
+using AiRaccoon.Infrastructure.Decisions;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Decisions;
@@ -75,7 +76,57 @@ public sealed partial class DecisionServiceTests
         bounded.Edges.ShouldBeEmpty();
         bounded.Truncated.ShouldBeTrue();
         bounded.Reasons.ShouldContain("nodes");
-        (await service.GraphAsync("a", new DecisionGraphRequest(first, Depth: 0), ct)).Value.Nodes.Count.ShouldBe(1);
+        upstream.Truncated.ShouldBeFalse();
+        upstream.Reasons.ShouldBeEmpty();
+        upstream.OmittedNodes.ShouldBe(0);
+        upstream.OmittedEdges.ShouldBe(0);
+        var shallow = (await service.GraphAsync("a", new DecisionGraphRequest(first, Depth: 0), ct)).Value;
+        shallow.Nodes.Single().DecisionId.ShouldBe(first);
+        shallow.Edges.ShouldBeEmpty();
+        shallow.Truncated.ShouldBeTrue();
+        shallow.Reasons.ShouldBe(["depth"]);
+        shallow.OmittedNodes.ShouldBeNull();
+        shallow.OmittedEdges.ShouldBeNull();
+    }
+
+    /// <summary>Edges among the visited nodes past the internal cap are cut and counted, not silently dropped.</summary>
+    [RetryFact]
+    public async Task Graph_cuts_edges_past_the_internal_cap_and_counts_the_rest()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var service = Service();
+        await service.RegisterTaskAsync("a", new DecisionWrite("task", "s", "register"), "Task", cancellationToken: ct);
+        var ids = new List<string>();
+        for (var i = 0; ids.Count * (ids.Count - 1) <= DecisionService.GraphEdgeLimit; i++)
+        {
+            var recorded = await service.RecordAsync("a", new DecisionWrite("task", "s", $"record-{i}"),
+                new DecisionContent($"D{i}", "architecture", "s", "o", "r"), DecisionStatus.Accepted, ct);
+            ids.Add(recorded.Value.DecisionId);
+        }
+
+        var pairs = ids.SelectMany(source => ids.Where(target => target != source).Select(target => (source, target)))
+            .Take(DecisionService.GraphEdgeLimit + 1).ToArray();
+        await Store().WriteAsync("a", async (writer, token) =>
+        {
+            var revision = await writer.RevisionAsync(token) + 1;
+            foreach (var (source, target) in pairs)
+            {
+                await writer.AddEdgeAsync(new DecisionEdge(Guid.CreateVersion7().ToString("N"), source, target, DecisionEdgeKind.Supports,
+                    "seeded", "task", revision, DateTimeOffset.UnixEpoch, "s", "s"), token);
+            }
+
+            await writer.SetRevisionAsync(revision, token);
+            return 0;
+        }, ct);
+
+        var graph = (await service.GraphAsync("a", new DecisionGraphRequest(ids[0], DecisionDirection.Both, Depth: 1, MaxNodes: 500, IncludeContext: true), ct)).Value;
+
+        graph.Nodes.Count.ShouldBe(ids.Count);
+        graph.Edges.Count.ShouldBe(DecisionService.GraphEdgeLimit);
+        graph.Truncated.ShouldBeTrue();
+        graph.Reasons.ShouldBe(["edges"]);
+        graph.OmittedNodes.ShouldBe(0);
+        graph.OmittedEdges.ShouldBe(1);
     }
     [RetryFact]
     public async Task Preview_abbreviates_by_unicode_scalars_and_sanitizes_terminal_controls()
