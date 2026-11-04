@@ -56,12 +56,18 @@ internal static class DecisionGraphFixture
         return dump.ToString();
     }
 
-    /// <summary>Every row of every ordinary table in the bank, in a stable order.</summary>
+    /// <summary>The schema (every table, index and trigger), the AUTOINCREMENT counters and every row of every ordinary table, in a stable order.</summary>
     public static async Task<string> DumpBankAsync(SqliteConnection connection)
     {
         var tables = await connection.QueryAsync<string>(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND sql NOT LIKE 'CREATE VIRTUAL%' ORDER BY name");
         var dump = new StringBuilder();
+        dump.Append(await DumpQueryAsync(connection, "sqlite_master", "SELECT type,name,sql FROM sqlite_master ORDER BY name"));
+        if (await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM sqlite_master WHERE name='sqlite_sequence'") > 0)
+        {
+            dump.Append(await DumpQueryAsync(connection, "sqlite_sequence", "SELECT name,seq FROM sqlite_sequence ORDER BY name"));
+        }
+
         foreach (var table in tables)
         {
             dump.Append(await DumpTableAsync(connection, table, "", null));
@@ -73,13 +79,16 @@ internal static class DecisionGraphFixture
     public static Task<long> TotalChangesAsync(SqliteConnection connection) =>
         connection.ExecuteScalarAsync<long>("SELECT total_changes()");
 
-    private static async Task<string> DumpTableAsync(SqliteConnection connection, string table, string filter, object? args)
+    private static Task<string> DumpTableAsync(SqliteConnection connection, string table, string filter, object? args) =>
+        DumpQueryAsync(connection, table, $"SELECT * FROM \"{table}\"{filter}", args);
+
+    private static async Task<string> DumpQueryAsync(SqliteConnection connection, string label, string sql, object? args = null)
     {
-        var rows = (await connection.QueryAsync($"SELECT * FROM \"{table}\"{filter}", args))
+        var rows = (await connection.QueryAsync(sql, args))
             .Select(row => string.Join("|", ((IDictionary<string, object?>)row)
                 .Select(column => $"{column.Key}={Format(column.Value)}")))
             .Order(StringComparer.Ordinal);
-        return $"[{table}]\n{string.Join("\n", rows)}\n";
+        return $"[{label}]\n{string.Join("\n", rows)}\n";
     }
 
     private static string Format(object? value) => value switch

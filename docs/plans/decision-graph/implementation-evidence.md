@@ -60,7 +60,7 @@ An adversarial review of the pull request confirmed five findings. Each fix belo
 
 | Finding | Check | Red | Green |
 |---|---|---|---|
-| Decision-only project planned for retirement, so the repair request threw on every maintenance pass | `DecisionProjectRepairTests.Census_pins_a_registered_project_that_owns_only_decisions_instead_of_retiring_it`, `DecisionProjectRepairJobTests.Repair_request_folds_unrelated_ids_and_finishes_when_a_project_owns_only_decisions` | 2/6 | 6/6 |
+| Decision-only project planned for retirement, so the repair request threw on every maintenance pass | `DecisionProjectRepairTests.Census_keeps_a_registered_project_that_owns_only_decisions_instead_of_retiring_it`, `DecisionProjectRepairJobTests.Repair_request_folds_unrelated_ids_and_finishes_when_a_project_owns_only_decisions` | 2/6 | 6/6 |
 | Required text measured untrimmed; identifiers accepted U+202E, U+200B, U+2028, U+2029, U+00AD and padding | `DecisionTextTests` | 8/14 | 14/14 |
 | Cyclic or self link with a stale revision returned a revision conflict | `DecisionServiceTests.Invalid_links_are_refused_as_invalid_even_with_a_stale_revision` | 1/22 | 22/22 |
 | v23 ladder step re-ran decision DDL the digest-gated Ddl had already run | `DecisionBankLifecycleTests.Version_twenty_two_bank_migrates_without_losing_existing_settings` now checks every decision table; removing the decision DDL from the Ddl turned it red | 2/2 | 2/2 |
@@ -194,3 +194,19 @@ A review found that an alias loser or dropped id owning both entries and graph r
 | `DecisionProjectRepairTests.DecisionRepair_ReportsEveryOccupiedLoserWithItsTables` | One refused plan names both occupied projects, each with its own tables, and writes nothing | 1/8 (only the first project reported) | 8/8 |
 
 `DecisionRepair_TwoGraphsRefused`, `DecisionRepair_FoldAndConflictReport` and `DecisionDelete_GraphOwnerIsRefusedWithItsWholeGraphIntact` now assert a single owner in `Owners`. After the last change the solution built with no warnings, and every `Decision*` class, every ProjectId/repair/census class and the source gates (`NoHandRolledCryptoTests`, `NoConfigureAwaitTests`, `LoggerMessageEventIdTests`, `RetrySurfaceGateTests`, `LayeringRulesTests`, `ProjectIdAliasDefaultCollectionGateTests`) passed: 61 classes, 699/699.
+
+### Held-back ids at the gate
+
+The independent review-tests pass at 252eff6a found that `ProjectIdsRepairJob.RunAsync` still persisted the whole requested map through `ProjectIdAliases.PersistAppliedAsync` and loaded it into `ProjectIdAliasMap.Default`. That included the alias or drop of an id the planner had held back. `ToolGate.RequireAsync` folds every call through `Default`, so after the job a held-back alias loser resolved to its winner and a held-back dropped id was refused as retired. Its graph rows were intact but no call could reach them. The job now persists `map.Without(...)` the `pinned-decision-graph` ids, and the same review's minor findings are fixed.
+
+| Test | What it proves | Red | Green |
+| --- | --- | --- | --- |
+| `DecisionProjectRepairJobTests.Repair_request_holds_back_a_graph_owning_loser_with_entries_and_finishes_the_rest` | After the job, `Default.Apply("graph-loser")` is still `graph-loser`, the real `ToolGate` returns `graph-loser` for a decision read, and only the applied alias is stored | 1/3 (`Apply` returned `winner`) | 3/3 |
+| `DecisionProjectRepairJobTests.Repair_request_holds_back_a_dropped_graph_owner_and_keeps_it_reachable` | A held-back drop is neither stored nor applied: the id is not retired, the gate passes it and its entry and graph are untouched | 1/3 (`Apply` returned `Dropped = true`) | 3/3 |
+| `ProjectIdAliasMapTests.Without_RemovesTheNamedAliasesAndDrops_AndKeepsTheRest` | `Without` removes the named aliases and drops and keeps canonicals | did not compile before `Without` existed | 50/50 |
+| `DecisionGraphFixture.DumpBankAsync` (used by `DecisionProjectRepairTests`) | The dump now includes `sqlite_master` (type, name, sql) and `sqlite_sequence`, so a repair that changes the schema is caught | Dropping trigger `decision_versions_search_ai` before the transaction: 0/8 failed with the old dump, 5/8 with the new one | 8/8 |
+| `DecisionProjectRepairTests.DecisionRepair_ReportsEveryOccupiedLoserWithItsTables` | Also asserts `total_changes()` is unchanged by the refusal, like its siblings | — | 8/8 |
+
+`Census_pins_a_registered_project_that_owns_only_decisions_instead_of_retiring_it` is renamed `Census_keeps_a_registered_project_that_owns_only_decisions_instead_of_retiring_it`: its body asserts the project is not retired, not that it is pinned.
+
+An id held back only through its registered name (the alias key is the name, the pinned id is the guid) is not filtered, because the gate is asked for the guid, which the alias does not cover.

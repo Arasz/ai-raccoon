@@ -99,6 +99,7 @@ public sealed class DecisionProjectRepairTests : IDisposable
             INSERT INTO decision_tasks(project_id,task_id,title,registered_order,registered_at) VALUES('second','t','T',1,'2026-11-04');
             """);
         var bank = await DecisionGraphFixture.DumpBankAsync(connection);
+        var changes = await DecisionGraphFixture.TotalChangesAsync(connection);
 
         var error = await Should.ThrowAsync<DecisionGraphRepairException>(() => Repair().ApplyAsync(connection,
             new ProjectIdsFoldPlan([new ProjectIdFold("first", "winner")], ["second"], [], []), ct));
@@ -108,6 +109,7 @@ public sealed class DecisionProjectRepairTests : IDisposable
         error.Owners[1].Tables.Order(StringComparer.Ordinal).ShouldBe(["decision_projects", "decision_tasks"]);
         error.Message.ShouldContain("'first'");
         error.Message.ShouldContain("'second'");
+        (await DecisionGraphFixture.TotalChangesAsync(connection)).ShouldBe(changes, "the refusal writes nothing");
         (await DecisionGraphFixture.DumpBankAsync(connection)).ShouldBe(bank);
     }
 
@@ -176,7 +178,7 @@ public sealed class DecisionProjectRepairTests : IDisposable
     }
 
     [RetryFact]
-    public async Task Census_pins_a_registered_project_that_owns_only_decisions_instead_of_retiring_it()
+    public async Task Census_keeps_a_registered_project_that_owns_only_decisions_instead_of_retiring_it()
     {
         var ct = TestContext.Current.CancellationToken;
         var options = new InfrastructureOptions { DataRoot = _root, Rid = "osx-arm64", Scope = InstallScope.User };
