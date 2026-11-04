@@ -102,6 +102,15 @@ public sealed class ProjectIdAliasMap
 
     public IReadOnlyList<string> Dropped => [.. _dropped];
 
+    /// <summary>A copy without the aliases and drops keyed by <paramref name="projectIds" />; canonicals are kept.</summary>
+    public ProjectIdAliasMap Without(IEnumerable<string> projectIds)
+    {
+        Guard.IsNotNull(projectIds);
+        var held = new HashSet<string>(projectIds, StringComparer.Ordinal);
+        return new ProjectIdAliasMap(Aliases.Where(entry => !held.Contains(entry.Alias)), _canonicals,
+            _dropped.Where(id => !held.Contains(id)));
+    }
+
     /// <summary>True when the map carries no aliases, canonicals, or drops — steady-state pass-through.</summary>
     public bool IsEmpty => _aliases.Count == 0 && _canonicals.Count == 0 && _dropped.Count == 0;
 
