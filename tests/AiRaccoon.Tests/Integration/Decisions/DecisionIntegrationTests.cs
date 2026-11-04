@@ -81,20 +81,17 @@ public sealed class DecisionIntegrationTests : IAsyncLifetime
             $"the bank lost or changed decisions across the restart\nbefore: {before}\nafter: {after}");
         after["projectRevision"]!.GetValue<long>().ShouldBe(before["projectRevision"]!.GetValue<long>());
 
-        var get = await Mcp(second, mcp, "get_decision", new() { ["decisionId"] = stored });
-        get.Kind.ShouldBe("ok", get.Body);
-        get.Body.ShouldContain("Store decisions in the bank");
-        var query = await Mcp(second, mcp, "query_decisions", new());
-        query.Kind.ShouldBe("ok", query.Body);
+        var get = await ReadAsync(second, mcp, "get_decision", new() { ["decisionId"] = stored }, ["get", stored, "--project-id", _project]);
+        get.ToJsonString().ShouldContain("Store decisions in the bank");
+        var query = (await ReadAsync(second, mcp, "query_decisions", new(), ["query", "--project-id", _project])).ToJsonString();
         foreach (var id in new[] { stored, bank, cli })
         {
-            query.Body.ShouldContain(id);
+            query.ShouldContain(id);
         }
 
-        var graph = await Mcp(second, mcp, "get_decision_graph", new() { ["decisionId"] = stored });
-        graph.Kind.ShouldBe("ok", graph.Body);
-        var edges = JsonNode.Parse(graph.Body)!["data"]!["value"]!["edges"]!.AsArray();
-        edges.Count.ShouldBe(1, graph.Body);
+        var graph = await ReadAsync(second, mcp, "get_decision_graph", new() { ["decisionId"] = stored }, null);
+        var edges = graph["value"]!["edges"]!.AsArray();
+        edges.Count.ShouldBe(1, graph.ToJsonString());
         edges[0]!.ToJsonString().ShouldContain(bank);
         edges[0]!.ToJsonString().ShouldContain("depends_on");
 
@@ -180,6 +177,25 @@ public sealed class DecisionIntegrationTests : IAsyncLifetime
         return host.McpAsync(client, tool, args, Ct);
     }
 
+    /// <summary>One read sent over HTTP, MCP and, when it has a verb, the CLI: each must succeed with the same data.</summary>
+    private async Task<JsonNode> ReadAsync(DecisionHost host, McpClient client, string tool, Dictionary<string, object?> args, string[]? cliArgs)
+    {
+        var http = await host.HttpAsync(DecisionOperations.Named(tool) with { Args = args }, _project, Ct);
+        var overMcp = await Mcp(host, client, tool, new Dictionary<string, object?>(args));
+        http.ShouldBeOk();
+        overMcp.ShouldBeOk();
+        var data = WithoutNulls(JsonNode.Parse(http.Body)!["data"]!);
+        JsonNode.DeepEquals(WithoutNulls(JsonNode.Parse(overMcp.Body)!["data"]!), data).ShouldBeTrue($"{tool}: HTTP {http.Body}\nMCP {overMcp.Body}");
+        if (cliArgs is not null)
+        {
+            var (exit, stdout, stderr) = await Cli(host, cliArgs);
+            exit.ShouldBe(0, stderr);
+            JsonNode.DeepEquals(WithoutNulls(JsonNode.Parse(stdout)!), data).ShouldBeTrue($"{tool}: HTTP {http.Body}\nCLI {stdout}");
+        }
+
+        return data;
+    }
+
     private async Task<string> RecordOverHttpAsync(DecisionHost host, string taskId, string title)
     {
         var response = await host.Http.PostAsJsonAsync(Root + "/records", Content(taskId, title, "r-" + title), Ct);
@@ -220,6 +236,40 @@ public sealed class DecisionIntegrationTests : IAsyncLifetime
 
     private static string Id(string body, string path = "data") =>
         (path == "data" ? JsonNode.Parse(body)!["data"]!["value"] : JsonNode.Parse(body)![path])!["decisionId"]!.GetValue<string>();
+
+    /// <summary>A copy with null-valued properties removed: MCP omits them, HTTP writes them.</summary>
+    private static JsonNode WithoutNulls(JsonNode node)
+    {
+        var copy = node.DeepClone();
+        Strip(copy);
+        return copy;
+
+        static void Strip(JsonNode? current)
+        {
+            switch (current)
+            {
+                case JsonObject obj:
+                    foreach (var name in obj.Where(p => p.Value is null).Select(p => p.Key).ToArray())
+                    {
+                        obj.Remove(name);
+                    }
+
+                    foreach (var (_, value) in obj)
+                    {
+                        Strip(value);
+                    }
+
+                    break;
+                case JsonArray array:
+                    foreach (var item in array)
+                    {
+                        Strip(item);
+                    }
+
+                    break;
+            }
+        }
+    }
 
     private static JsonNode Without(JsonNode node, params string[] names)
     {
