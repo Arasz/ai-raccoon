@@ -73,7 +73,7 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV18Async" /> (rowless watch fingerprints dropped once),
     ///     <see cref="MigrateToV19Async" /> (ADR-0133, `ctx` is the vec0 partition key again),
     ///     <see cref="MigrateToV20Async" /> (the entry kind, denormalised onto the row),
-    ///     <see cref="MigrateToV21Async" /> (ADR-0141, the kind is a second vec0 partition key). Not every schema change needs a ladder
+    ///     <see cref="MigrateToV21Async" /> (ADR-0141, the kind is a second vec0 partition key); v23 (the decision tables) has no step of its own, because the digest-gated Ddl creates them. Not every schema change needs a ladder
     ///     step: a trigger body replacement that is safely re-runnable on every open belongs in the
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
@@ -934,12 +934,6 @@ internal static class MemorySchema
         if (healthy && storedVersion < 22)
         {
             await MigrateToV22Async(connection, cancellationToken);
-        }
-
-        if (healthy && storedVersion < 23)
-        {
-            await connection.ExecuteAsync(new CommandDefinition(Decisions.DecisionSchema.Ddl,
-                cancellationToken: cancellationToken));
         }
 
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
