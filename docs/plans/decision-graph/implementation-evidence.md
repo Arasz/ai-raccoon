@@ -32,3 +32,24 @@ Independent review reproduced a real graph-owner retirement race without product
 Repair now runs preflight plus all rewrites in one BEGIN IMMEDIATE transaction, existing nested bank writes use savepoints, and graph writers recheck registration after acquiring their write lock. The combined transaction/decision/project-fold/populated-snapshot run passed 40/40. Owner fixture setup now registers real project rows. A follow-up independent review is pending.
 
 Service registration/record/replay/read passed its first behavior test; amendment/stale replay/concurrency passed 3/3. Four missing mutation-operation cases then went red, and implementing lifecycle transitions, links/removals and supersession produced 7/7 passing service tests, including an injected SQLite failure after edge insertion that proves all-or-none supersession and retry receipts.
+
+## Service acceptance
+
+The eight `service-contract` checks live in `tests/AiRaccoon.Tests/Integration/Decisions/DecisionServiceTests.Acceptance.cs`. Four overlapping view tests were folded into them. Each mutation came from the `implementation.md` table and was applied to production code. After each one the whole solution was rebuilt and `DecisionServiceTests` was run (21 tests). The named check went red every time:
+
+| Mutation | Failed / 21 | Named check red |
+|---|---|---|
+| Tasks sorted by latest edit revision, not `registered_order` | 5 | LastUsesRegistrationOrder, EmptyNewestTaskRemains |
+| Tasks selected only through an origin join to decisions | 5 | EmptyNewestTaskRemains |
+| Version-touch membership dropped | 1 | RevisionAndEdgeTouchCount |
+| Edge-touch membership dropped | 2 | RevisionAndEdgeTouchCount |
+| Boundary stubs dropped | 1 | BoundaryClosureAndHistory |
+| History filtered to selected-task versions | 2 | BoundaryClosureAndHistory |
+| Read transaction removed (writer interleaved after the revision read) | 1 | ConcurrentWriterSingleSnapshot |
+| Omission counts suppressed | 3 | CountsAndUnicodeBudget, ManyEmptyTasks |
+| Excerpt sliced by UTF-16 unit | 2 | CountsAndUnicodeBudget |
+| `removal_task_id` persisted as NULL | 3 | TaskProvenanceSurvivesRestart |
+| `removal_task_id` dropped on read | 2 | TaskProvenanceSurvivesRestart |
+| Task headers emitted without the budget check | 1 | ManyEmptyTasks |
+
+With production restored, `DecisionServiceTests` passed 21/21 in four separate runs and `RetrySurfaceGateTests` passed 2/2. No production defect was found. Traversal termination is still covered by `Graph_preserves_causal_direction_and_explicit_depth_and_node_bounds`.

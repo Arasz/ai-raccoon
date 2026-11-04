@@ -117,8 +117,10 @@
               "id": "service-contract",
               "statement": "Latest/N/all include empty tasks and revision/edge touches; export closes endpoints and retains selected history; preview limits are honest; traversal bounds terminate.",
               "check": "DecisionSelection_LastUsesRegistrationOrder; DecisionSelection_EmptyNewestTaskRemains; DecisionSelection_RevisionAndEdgeTouchCount; DecisionExport_BoundaryClosureAndHistory; DecisionExport_ConcurrentWriterSingleSnapshot; DecisionPreview_CountsAndUnicodeBudget; DecisionEdgeRemoval_TaskProvenanceSurvivesRestart; DecisionPreview_ManyEmptyTasks",
-              "status": "unchecked",
-              "evidence": []
+              "status": "passed",
+              "evidence": [
+                "All 8 named checks in tests/AiRaccoon.Tests/Integration/Decisions/DecisionServiceTests.Acceptance.cs pass (DecisionServiceTests 21/21); each went red under its implementation.md mutation (12 mutations, see implementation-evidence.md Service acceptance) and green after restore at 9af6a213."
+              ]
             }
           ],
           "files": [
@@ -126,8 +128,20 @@
             "tests/AiRaccoon.Tests/Unit/Decisions/**"
           ],
           "resources": [],
-          "status": "in_progress",
-          "started_at": "2026-10-26T20:03:10Z"
+          "status": "complete",
+          "started_at": "2026-10-26T20:03:10Z",
+          "completed_at": "2026-11-04T00:00:00Z",
+          "completion": {
+            "forced": false,
+            "evidence": [
+              {
+                "kind": "test",
+                "summary": "DecisionServiceTests 21/21 and RetrySurfaceGateTests 2/2; 12 targeted production mutations each turned their named check red, restored build green.",
+                "ref": "docs/plans/decision-graph/implementation-evidence.md",
+                "recorded_at": "2026-11-04T00:00:00Z"
+              }
+            ]
+          }
         },
         "adapters": {
           "id": "adapters",
