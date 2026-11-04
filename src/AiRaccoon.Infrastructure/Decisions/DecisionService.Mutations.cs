@@ -75,8 +75,8 @@ public sealed partial class DecisionService
                 return new Mutation<DecisionEdge>(existing, false);
             }
 
-            await RequireRevisionAsync(writer, expectedProjectRevision, ct);
             EnsureCanLink(sourceId, targetId, kind, live);
+            await RequireRevisionAsync(writer, expectedProjectRevision, ct);
             var edge = NewEdge(write, revision, sourceId, targetId, kind, reason);
             await writer.AddEdgeAsync(edge, ct);
             return new Mutation<DecisionEdge>(edge);

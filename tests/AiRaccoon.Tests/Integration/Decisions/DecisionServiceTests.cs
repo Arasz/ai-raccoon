@@ -143,6 +143,20 @@ public sealed partial class DecisionServiceTests : IAsyncLifetime
     }
 
     [RetryFact]
+    public async Task Invalid_links_are_refused_as_invalid_even_with_a_stale_revision()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (service, first, second, revision) = await AcceptedPairAsync();
+        var edge = await service.LinkAsync("a", new DecisionWrite("task", "session", "link"), first, second, DecisionEdgeKind.DependsOn, "prerequisite", revision, ct);
+        var cycle = await Should.ThrowAsync<DecisionException>(() => service.LinkAsync("a", new DecisionWrite("task", "session", "stale-cycle"), second, first, DecisionEdgeKind.DependsOn, "cycle", revision, ct));
+        cycle.Kind.ShouldBe("decision-invalid-link");
+        var self = await Should.ThrowAsync<DecisionException>(() => service.LinkAsync("a", new DecisionWrite("task", "session", "stale-self"), first, first, DecisionEdgeKind.DependsOn, "self", revision, ct));
+        self.Kind.ShouldBe("decision-invalid-link");
+        var replay = await service.LinkAsync("a", new DecisionWrite("task", "session", "link-again"), first, second, DecisionEdgeKind.DependsOn, "prerequisite", revision, ct);
+        replay.Value.EdgeId.ShouldBe(edge.Value.EdgeId);
+    }
+
+    [RetryFact]
     public async Task Supersession_is_one_revision_and_keeps_its_edge_permanent()
     {
         var ct = TestContext.Current.CancellationToken;
