@@ -100,3 +100,26 @@ Review follow-up, same commit range:
 | same | report 0 omitted edges | 1/23 | 23/23 |
 
 Tool-surface gates updated with the new tools: `McpToolContractTests` (input snapshot, output-schema rule), `ScopeCheckTests`, `McpToolCompositionTests`, `ToolInventoryTests` (docs/reference/agent-memory-server.md table and count) and `ToolRefusalsTests` (error-shapes table now lists the six decision kinds). After the last commit the decision classes, the tool-surface classes and the repo-wide source gates (`NoHandRolledCryptoTests`, `NoConfigureAwaitTests`, `RetrySurfaceGateTests`, `LoggerMessageEventIdTests`) passed. `DecisionProjectRepairJobTests` ran with the granite model data present locally.
+
+## CLI acceptance
+
+`ai-raccoon decisions task register | export | preview` (`DecisionCommands`, tree in `CliCommandTree.DecisionsCommand`) reach the decision routes through the CLI's existing server binding: `ServerSettingsStore` and `LazyServerSettingsStore` implement `IDecisionClient` over `DecisionHttpClient` (`src/AiRaccoon/Decisions/Client/`), and the `encryption` graph gets a refusing `DirectGraphDecisionClient`. The CLI sends the same request records the HTTP adapter binds, so enums and defaults come from one declaration. Export and preview send no selector unless a flag names one, leaving the default (latest task) to the server. `--tasks`, `--all` and `--task-id` are mutually exclusive at parse time (exit 10).
+
+The CLI reads the whole answer before writing anything: a body that ends early exits 62 with "nothing was published" and prints nothing. `--output` stages an owner-only file beside the destination and renames it into place; an existing destination needs `--force`. JSON output is the result's project header followed by the export's own fields, written element by element with the default (escaping) encoder. Markdown renders the same snapshot with control and format runes shown as `\uXXXX`, Markdown punctuation escaped and source URIs as code. Preview text replaces control, format and separator runes with U+FFFD one for one, so the server's Unicode budget still holds; the server's own `Display` leaves bidi and other format characters in place, so this step is not redundant.
+
+Every test drives the real CLI dispatcher (`ConfigCommands`) against a real token-guarded web host (`DecisionHost`) through the production `LazyServerSettingsStore` → `ServerSettingsStore` path. The interruption fixture passes the server's real bytes through and resets the connection after 64 bytes of the export body.
+
+| Check | What it proves | Mutation | Red | Green |
+|---|---|---|---|---|
+| `DecisionCli_DefaultNAllMatchBackend` (4 rows) | Default, `--tasks 2`, `--all` and repeated `--task-id` select the expected tasks, and the CLI export equals the backend's `/export` for the same selector field by field (revision included, `exportedAt` excluded) | `--tasks N` sent as `last: 1` | 1/4 | 4/4 |
+| same | | no flag sends `all: true` | 1/4 | 4/4 |
+| `DecisionCli_InterruptedFileIsNotPublished` | A reset mid-export exits nonzero, leaves the existing destination byte-identical, prints nothing and leaves no staging file | open the destination for writing before the request | 1/1 | 1/1 |
+| `DecisionCommandTreeTests.MixedOrOutOfRangeSelectors_AreParseErrors` (5 rows, export and preview) | Exclusive selector parsing | drop the exclusivity error | 3/5 | 5/5 |
+| `DecisionCli_ExistingFileIsRefusedWithoutForce_AndReplacedOwnerOnlyWithIt` | No overwrite without `--force`; with it the file is replaced, `0600`, no staging file left | drop the existing-file check | 1/1 | 1/1 |
+| `DecisionCli_PreviewTextSanitizesTerminalControls` | ESC/OSC, BEL, C1 CSI and bidi overrides never reach stdout | print the server text unsanitized | 1/1 | 1/1 |
+| `DecisionCli_PreviewTextStaysWithinTheUnicodeBudget` | `--max-chars 1000` bounds astral-heavy output in Unicode scalars, with no broken surrogate | drop `--max-chars` forwarding | 1/1 | 1/1 |
+| `DecisionCli_MarkdownExportKeepsFullTextAndEscapesTerminalAndMarkup` | Markdown keeps a 600-character rationale whole and shows ESC/bidi/`<script>` inert | `Inline` returns raw text | 1/1 | 1/1 |
+
+Also green without a dedicated mutation: empty project (valid empty arrays), latest-after-`task register` with four concurrent exports identical at one revision, stdout interruption (nothing printed, nonzero), task registration printing generated ids to stderr and replaying with explicit ids, an unregistered project exiting 18, and preview JSON counts. `SettingsCommandTreeTests` now lists `decisions` in the top level and its leaves in the no-configuration-write sweep. After the last commit the decision classes, the CLI classes (tree, help, exit codes, routing, bank-open, write-ledger) and the repo-wide source gates (`NoHandRolledCryptoTests`, `NoConfigureAwaitTests`, `LoggerMessageEventIdTests`, `RetrySurfaceGateTests`, `LayeringRulesTests`) passed, 768/768.
+
+Limits worth knowing. The CLI parses the full JSON answer in memory before writing it, as the server already builds the whole snapshot in memory; output is then written in array-element chunks. A failure during rendering (after the answer was read) deletes the staging file in the same `catch`, but no test injects one. `decisions record|get|query` and `import-semantica` from api.md's CLI listing are not part of this step.

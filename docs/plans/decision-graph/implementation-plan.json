@@ -175,7 +175,12 @@
           "completion": {
             "forced": false,
             "evidence": [
-              {"kind": "test", "summary": "DecisionApiTests 20/20, DecisionEndpointTests 23/23, DecisionServiceTests 23/23, tool-surface contract classes and source gates green; 13 targeted mutations each turned their named check red.", "ref": "docs/plans/decision-graph/implementation-evidence.md", "recorded_at": "2026-11-04T00:00:00Z"}
+              {
+                "kind": "test",
+                "summary": "DecisionApiTests 20/20, DecisionEndpointTests 23/23, DecisionServiceTests 23/23, tool-surface contract classes and source gates green; 13 targeted mutations each turned their named check red.",
+                "ref": "docs/plans/decision-graph/implementation-evidence.md",
+                "recorded_at": "2026-11-04T00:00:00Z"
+              }
             ]
           }
         },
@@ -192,8 +197,10 @@
               "id": "cli-contract",
               "statement": "CLI default/N/all/explicit selection matches backend; empty/latest/concurrent cases are deterministic; interrupted files are not published and nonzero exit is returned.",
               "check": "DecisionCli_DefaultNAllMatchBackend; DecisionCli_InterruptedFileIsNotPublished; terminal-control/Unicode preview fixtures",
-              "status": "unchecked",
-              "evidence": []
+              "status": "passed",
+              "evidence": [
+                "DecisionCliTests 16/16 against a real token-guarded server (selector parity rows for default/--tasks 2/--all/--task-id x2 compared field by field with the backend's own /export; empty project; latest-after-register with four concurrent exports identical; interrupted file and stdout; --force/owner-only publish; Markdown escaping; preview control/bidi sanitization, Unicode budget and JSON counts) and DecisionCommandTreeTests 8/8; each named check went red under its mutation (8 CLI mutations, see implementation-evidence.md CLI acceptance) and green after restore. Decision, CLI and source-gate classes 768/768."
+              ]
             }
           ],
           "files": [
@@ -202,7 +209,7 @@
             "tests/AiRaccoon.Tests/Integration/Cli/**"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "complete"
         },
         "migration": {
           "id": "migration",
