@@ -18,8 +18,9 @@ namespace AiRaccoon.Tests.Integration.Decisions;
 public sealed class DecisionBankLifecycleTests : IDisposable
 {
     private readonly string _root = TestData.CreateTempRoot("decisions-bank");
-    private SqliteConnectionFactory Factory(string? key = null) => new(
-        new InfrastructureOptions { DataRoot = _root, Rid = "osx-arm64", Scope = InstallScope.User }, new FixtureKey(key));
+    private readonly string _backupRoot = TestData.CreateTempRoot("decisions-bank-backup");
+    private SqliteConnectionFactory Factory(string? key = null, string? root = null) => new(
+        new InfrastructureOptions { DataRoot = root ?? _root, Rid = "osx-arm64", Scope = InstallScope.User }, new FixtureKey(key));
 
     [RetryFact]
     public async Task Version_twenty_two_bank_migrates_without_losing_existing_settings()
@@ -44,31 +45,41 @@ public sealed class DecisionBankLifecycleTests : IDisposable
     }
 
     [RetryFact]
-    public async Task Encrypted_decision_graph_survives_rekey_and_refuses_plaintext_open()
+    public async Task DecisionBank_EncryptedBackupAndRekeyKeepTheWholeGraph()
     {
         var ct = TestContext.Current.CancellationToken;
         var factory = Factory("fixture-original-key");
+        string graph;
         await using (var connection = await factory.OpenBankAsync(ct))
         {
             await connection.ExecuteAsync("INSERT INTO projects(id,name,created_at) VALUES('project','Project',1)");
+            await DecisionGraphFixture.SeedAsync(factory, connection, "project", ct);
+            graph = await DecisionGraphFixture.DumpGraphAsync(connection);
+            await connection.ExecuteAsync("PRAGMA wal_checkpoint(TRUNCATE)");
         }
 
-        var store = new SqliteDecisionStore(factory, new SharedProjectScope());
-        await store.WriteAsync("project", async (writer, token) =>
-        {
-            var now = new DateTimeOffset(2026, 10, 26, 12, 0, 0, TimeSpan.Zero);
-            await writer.AddTaskAsync(new DecisionTask("task", "Encrypted decision task", 1, now, null), token);
-            await writer.AddRecordAsync(new DecisionRecord("decision", "task", 1, now), token);
-            await writer.AddVersionAsync(new DecisionVersion("decision", 1, "task", 1,
-                new DecisionContent("Encrypted title", "architecture", "scenario", "outcome", "reason"),
-                DecisionStatus.Accepted, now, "actor", "session", null), token);
-            return true;
-        }, ct);
+        SqliteConnection.ClearAllPools();
+        var backup = Factory("fixture-original-key", _backupRoot);
+        Directory.CreateDirectory(Path.GetDirectoryName(backup.BankPath)!);
+        File.Copy(factory.BankPath, backup.BankPath);
+
         await factory.RekeyBankAsync("fixture-replacement-key", ct);
-        var reopened = new SqliteDecisionStore(Factory("fixture-replacement-key"), new SharedProjectScope());
-        var versions = await reopened.ReadAsync("project", (reader, token) => reader.VersionsAsync("decision", token), ct);
-        versions.Single().Content.Title.ShouldBe("Encrypted title");
+
+        await using (var rekeyed = await Factory("fixture-replacement-key").OpenBankAsync(ct))
+        {
+            (await DecisionGraphFixture.DumpGraphAsync(rekeyed)).ShouldBe(graph);
+            (await rekeyed.ExecuteScalarAsync<long>("SELECT count(*) FROM decision_fts WHERE decision_fts MATCH 'kept'")).ShouldBe(1);
+        }
+
+        await using (var restored = await backup.OpenBankAsync(ct))
+        {
+            (await DecisionGraphFixture.DumpGraphAsync(restored)).ShouldBe(graph);
+        }
+
+        SqliteConnection.ClearAllPools();
         await Should.ThrowAsync<BankKeyMissingException>(() => Factory().OpenBankWithKeyAsync(null, ct));
+        await Should.ThrowAsync<BankKeyMismatchException>(() => Factory("fixture-original-key").OpenBankAsync(ct));
+        await Should.ThrowAsync<BankKeyMissingException>(() => Factory(null, _backupRoot).OpenBankWithKeyAsync(null, ct));
     }
 
     private sealed class FixtureKey(string? passphrase) : IEncryptionKeyResolver
@@ -76,5 +87,9 @@ public sealed class DecisionBankLifecycleTests : IDisposable
         public Task<ResolvedKey> ResolveAsync(CancellationToken cancellationToken = default) => Task.FromResult(new ResolvedKey(passphrase, "env"));
     }
 
-    public void Dispose() => TestData.DeleteTempRoot(_root);
+    public void Dispose()
+    {
+        TestData.DeleteTempRoot(_root);
+        TestData.DeleteTempRoot(_backupRoot);
+    }
 }
