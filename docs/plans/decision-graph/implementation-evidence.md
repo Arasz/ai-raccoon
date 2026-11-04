@@ -181,3 +181,16 @@ No standalone project-deletion command exists. The only code that deletes a `pro
 The late-preflight mutation leaves the retire row green, which is correct: retire writes nothing before the `projects` rewrite. The backup and rekey mutations act on the file and the key, not on graph tables. Both operate on the whole bank file, so no graph-specific production mutation exists. Graph completeness there comes from the eight-table dump equality.
 
 After restoring production code, the whole solution built with no warnings. Every `Decision*` class, every ProjectId/repair/census class and the source gates (`NoHandRolledCryptoTests`, `NoConfigureAwaitTests`, `LoggerMessageEventIdTests`, `RetrySurfaceGateTests`, `LayeringRulesTests`, `ProjectIdAliasDefaultCollectionGateTests`) passed: 61 classes, 693/693.
+
+## Repair hold-back
+
+A review found that an alias loser or dropped id owning both entries and graph rows was still planned. The repair preflight then threw on every maintenance poll, the request never finished, and unrelated folds waited behind it. The planner now holds such an id back as `pinned-decision-graph`, with a reason that counts its graph rows, on the alias, name-attributed and drop paths. The rest of the plan runs. `RefuseGraphOwnersAsync` stays as the preflight behind it, and it now names every occupied project with its tables in one exception instead of stopping at the first.
+
+| Test | What it proves | Red | Green |
+| --- | --- | --- | --- |
+| `ProjectIdsFoldPlanTests.FromCensus_GraphOwningAliasLoser_IsHeldBackWhileTheUnrelatedFoldPlans`, `..._GraphOwningDroppedId_IsHeldBackWhileTheUnrelatedDropPlans`, `..._GraphOwnerAttributedByName_IsHeldBack` | A graph owner with entries is pinned with a reason; the unrelated fold or drop is still planned | 3/46 failed before the planner change; removing only the name-path check failed 1/46 | 46/46 |
+| `DecisionProjectRepairJobTests.Repair_request_holds_back_a_graph_owning_loser_with_entries_and_finishes_the_rest` | The request completes, the unrelated fold applies, the loser's entry and full graph are untouched, and the second pass returns false without throwing | 1/2 (threw `DecisionGraphRepairException`) | 2/2 |
+| `ProjectIdsRepairTranscriptTests.Transcript_IsUnchanged(dry-run-decision-graph-held-back)` | The dry-run report shows the `pinned-decision-graph` line and reason, and counts no fold for the held-back id | 1/16 (report planned the fold) | 16/16 |
+| `DecisionProjectRepairTests.DecisionRepair_ReportsEveryOccupiedLoserWithItsTables` | One refused plan names both occupied projects, each with its own tables, and writes nothing | 1/8 (only the first project reported) | 8/8 |
+
+`DecisionRepair_TwoGraphsRefused`, `DecisionRepair_FoldAndConflictReport` and `DecisionDelete_GraphOwnerIsRefusedWithItsWholeGraphIntact` now assert a single owner in `Owners`. After the last change the solution built with no warnings, and every `Decision*` class, every ProjectId/repair/census class and the source gates (`NoHandRolledCryptoTests`, `NoConfigureAwaitTests`, `LoggerMessageEventIdTests`, `RetrySurfaceGateTests`, `LayeringRulesTests`, `ProjectIdAliasDefaultCollectionGateTests`) passed: 61 classes, 699/699.
