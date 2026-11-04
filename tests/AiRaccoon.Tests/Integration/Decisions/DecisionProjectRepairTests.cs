@@ -17,34 +17,103 @@ public sealed class DecisionProjectRepairTests : IDisposable
 {
     private readonly string _root = TestData.CreateTempRoot("decision-project-repair");
 
+    private SqliteConnectionFactory Factory()
+    {
+        var options = new InfrastructureOptions { DataRoot = _root, Rid = "osx-arm64", Scope = InstallScope.User };
+        return new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+    }
+
+    private static ProjectIdsRepair Repair() => new(new FakeTimeProvider(), new SharedProjectScope());
+
+    [RetryFact]
+    public async Task DecisionRepair_TwoGraphsRefused()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var factory = Factory();
+        await using var connection = await factory.OpenBankAsync(ct);
+        await connection.ExecuteAsync("""
+            INSERT INTO projects(id,name,created_at) VALUES('loser','Loser',1),('winner','Winner',1);
+            INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label, created_at, updated_at, embed_state)
+                VALUES ('loser-entry','loser-entry','loser-entry','seed.md','s','project','loser','ctx',1,1,'pending');
+            """);
+        await DecisionGraphFixture.SeedAsync(factory, connection, "loser", ct);
+        await DecisionGraphFixture.SeedAsync(factory, connection, "winner", ct);
+        var bank = await DecisionGraphFixture.DumpBankAsync(connection);
+        var changes = await DecisionGraphFixture.TotalChangesAsync(connection);
+
+        var error = await Should.ThrowAsync<DecisionGraphRepairException>(() => Repair().ApplyAsync(connection,
+            new ProjectIdsFoldPlan([new ProjectIdFold("loser", "winner")], [], [], []), ct));
+
+        error.ProjectId.ShouldBe("loser");
+        error.Tables.Order(StringComparer.Ordinal).ShouldBe(DecisionGraphFixture.GraphTables);
+        (await DecisionGraphFixture.TotalChangesAsync(connection)).ShouldBe(changes, "refusal precedes every statement that writes");
+        (await DecisionGraphFixture.DumpBankAsync(connection)).ShouldBe(bank);
+    }
+
+    [RetryFact]
+    public async Task DecisionRepair_FoldAndConflictReport()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var factory = Factory();
+        await using var connection = await factory.OpenBankAsync(ct);
+        await connection.ExecuteAsync("""
+            INSERT INTO projects(id,name,created_at) VALUES('graph-free','GraphFree',1),('occupied','Occupied',1),('winner','Winner',1);
+            INSERT INTO entries (hash, path, value, source_file, section, scope, project_id, context_label, created_at, updated_at, embed_state)
+                VALUES ('free-entry','free-entry','free-entry','seed.md','s','project','graph-free','ctx',1,1,'pending');
+            INSERT INTO decision_projects(project_id,revision) VALUES('occupied',1);
+            INSERT INTO decision_tasks(project_id,task_id,title,registered_order,registered_at) VALUES('occupied','t','T',1,'2026-11-04');
+            """);
+        await DecisionGraphFixture.SeedAsync(factory, connection, "winner", ct);
+        var winnerGraph = await DecisionGraphFixture.DumpGraphAsync(connection, "winner");
+        var bank = await DecisionGraphFixture.DumpBankAsync(connection);
+        var changes = await DecisionGraphFixture.TotalChangesAsync(connection);
+
+        var conflict = await Should.ThrowAsync<DecisionGraphRepairException>(() => Repair().ApplyAsync(connection,
+            new ProjectIdsFoldPlan([new ProjectIdFold("graph-free", "winner"), new ProjectIdFold("occupied", "winner")], [], [], []), ct));
+
+        conflict.ProjectId.ShouldBe("occupied");
+        conflict.Tables.Order(StringComparer.Ordinal).ShouldBe(["decision_projects", "decision_tasks"]);
+        conflict.Message.ShouldContain("'occupied'");
+        (await DecisionGraphFixture.TotalChangesAsync(connection)).ShouldBe(changes, "the graph-free fold waits for the whole plan");
+        (await DecisionGraphFixture.DumpBankAsync(connection)).ShouldBe(bank);
+
+        await Repair().ApplyAsync(connection, new ProjectIdsFoldPlan([new ProjectIdFold("graph-free", "winner")], [], [], []), ct);
+
+        (await connection.ExecuteScalarAsync<string>("SELECT project_id FROM entries WHERE hash='free-entry'")).ShouldBe("winner");
+        (await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM projects WHERE id='graph-free'")).ShouldBe(0);
+        (await DecisionGraphFixture.DumpGraphAsync(connection, "winner")).ShouldBe(winnerGraph);
+        (await DecisionGraphFixture.DumpGraphAsync(connection, "graph-free")).ShouldBe(await DecisionGraphFixture.DumpGraphAsync(connection, "nobody"));
+    }
+
     [RetryTheory]
     [InlineData("fold")]
     [InlineData("drop")]
     [InlineData("retire")]
-    public async Task Graph_owners_block_every_retirement_path_before_any_mutation(string operation)
+    public async Task DecisionDelete_GraphOwnerIsRefusedWithItsWholeGraphIntact(string operation)
     {
         var ct = TestContext.Current.CancellationToken;
-        var options = new InfrastructureOptions { DataRoot = _root, Rid = "osx-arm64", Scope = InstallScope.User };
-        var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
+        var factory = Factory();
         await using var connection = await factory.OpenBankAsync(ct);
         await connection.ExecuteAsync("""
             INSERT INTO projects(id,name,created_at) VALUES('loser','Loser',1),('winner','Winner',1);
-            INSERT INTO decision_projects(project_id,revision) VALUES('loser',0),('winner',0);
             INSERT INTO settings(key,value) VALUES('watch.enabled.loser','true');
             """);
+        await DecisionGraphFixture.SeedAsync(factory, connection, "loser", ct);
+        var bank = await DecisionGraphFixture.DumpBankAsync(connection);
+        var changes = await DecisionGraphFixture.TotalChangesAsync(connection);
         var plan = operation switch
         {
             "fold" => new ProjectIdsFoldPlan([new ProjectIdFold("loser", "winner")], [], [], []),
             "drop" => new ProjectIdsFoldPlan([], ["loser"], [], []),
             _ => new ProjectIdsFoldPlan([], [], ["loser"], [])
         };
-        var error = await Should.ThrowAsync<DecisionGraphRepairException>(() =>
-            new ProjectIdsRepair(new FakeTimeProvider(), new SharedProjectScope()).ApplyAsync(connection, plan, ct));
+
+        var error = await Should.ThrowAsync<DecisionGraphRepairException>(() => Repair().ApplyAsync(connection, plan, ct));
+
         error.ProjectId.ShouldBe("loser");
-        error.Tables.ShouldContain("decision_projects");
-        (await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM projects WHERE id IN ('loser','winner')")).ShouldBe(2);
-        (await connection.ExecuteScalarAsync<string>("SELECT value FROM settings WHERE key='watch.enabled.loser'")).ShouldBe("true");
-        (await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM decision_projects")).ShouldBe(2);
+        error.Tables.Order(StringComparer.Ordinal).ShouldBe(DecisionGraphFixture.GraphTables);
+        (await DecisionGraphFixture.TotalChangesAsync(connection)).ShouldBe(changes);
+        (await DecisionGraphFixture.DumpBankAsync(connection)).ShouldBe(bank);
     }
 
     [RetryFact]
