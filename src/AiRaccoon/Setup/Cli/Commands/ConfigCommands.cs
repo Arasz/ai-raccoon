@@ -146,6 +146,9 @@ internal sealed class ConfigCommands(
                 ["project", "id", "get"] => await projectIds.GetAsync(parsedCliArgs, streams, ctx),
                 ["project", "id", "check"] => await projectIds.CheckAsync(parsedCliArgs, streams, ctx),
                 ["decisions", "task", "register"] => await decisions.RegisterTaskAsync(parsedCliArgs, streams, ctx),
+                ["decisions", "record"] => await decisions.RecordAsync(parsedCliArgs, streams, ctx),
+                ["decisions", "get"] => await decisions.GetAsync(parsedCliArgs, streams, ctx),
+                ["decisions", "query"] => await decisions.QueryAsync(parsedCliArgs, streams, ctx),
                 ["decisions", "export"] => await decisions.ExportAsync(parsedCliArgs, streams, ctx),
                 ["decisions", "preview"] => await decisions.PreviewAsync(parsedCliArgs, streams, ctx),
                 _ => throw new UnhandledCommandException($"unhandled command: {string.Join(' ', commandPath)}")

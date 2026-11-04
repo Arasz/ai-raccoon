@@ -3,6 +3,7 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Projects;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AiRaccoon.Core.Decisions;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Decisions;
@@ -126,6 +127,18 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     /// <inheritdoc />
     public async Task<JsonDocument> PreviewAsync(string projectId, DecisionPreviewOptions options, CancellationToken cancellationToken = default) =>
         await AsDecisionClient(await InnerAsync(cancellationToken)).PreviewAsync(projectId, options, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<JsonDocument> RecordAsync(string projectId, JsonObject body, CancellationToken cancellationToken = default) =>
+        await AsDecisionClient(await InnerAsync(cancellationToken)).RecordAsync(projectId, body, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<JsonDocument> GetAsync(string projectId, string decisionId, bool includeHistory, CancellationToken cancellationToken = default) =>
+        await AsDecisionClient(await InnerAsync(cancellationToken)).GetAsync(projectId, decisionId, includeHistory, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default) =>
+        await AsDecisionClient(await InnerAsync(cancellationToken)).QueryAsync(projectId, query, cancellationToken);
 
     /// <summary>Same reasoning as <see cref="AsMigrationStore" />, for the decision routes.</summary>
     private static IDecisionClient AsDecisionClient(ISettingsStore store) =>

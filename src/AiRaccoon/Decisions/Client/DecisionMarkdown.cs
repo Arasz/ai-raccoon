@@ -76,6 +76,21 @@ internal static class DecisionMarkdown
         }
     }
 
+    /// <summary>One decision as `decisions get` returns it: its record and the versions the server sent.</summary>
+    public static IEnumerable<string> RenderDecision(string projectId, long projectRevision, DecisionDetails details)
+    {
+        var record = details.Record;
+        var current = details.Versions.FirstOrDefault(version => version.Version == record.CurrentVersion) ?? details.Versions.LastOrDefault();
+        yield return $"# Decision {Code(record.DecisionId)} {Inline(current?.Content.Title ?? string.Empty)}";
+        yield return string.Empty;
+        yield return $"- Project: {Code(projectId)}; revision {projectRevision.ToString(CultureInfo.InvariantCulture)}";
+        yield return $"- Origin task: {Code(record.OriginTaskId)}; created {Time(record.CreatedAt)}; current version {record.CurrentVersion}";
+        foreach (var line in details.Versions.SelectMany(Version))
+        {
+            yield return line;
+        }
+    }
+
     /// <summary>Text for a Markdown line: terminal controls made visible, Markdown punctuation escaped, list and heading starts defused.</summary>
     internal static string Inline(string text)
     {

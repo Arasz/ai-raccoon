@@ -2,6 +2,7 @@ using System.Buffers;
 using System.CommandLine;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AiRaccoon.Core.Decisions;
 using AiRaccoon.Decisions;
 using AiRaccoon.Decisions.Client;
@@ -11,12 +12,17 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
-///     `decisions task register | export | preview` over the server's decision routes. Machine output
+///     `decisions task register | record | get | query | export | preview` over the server's decision routes. Machine output
 ///     goes to stdout, diagnostics to stderr; an export is printed or published only once it is complete.
 /// </summary>
 internal sealed class DecisionCommands
 {
     private static readonly JsonWriterOptions JsonOutput = new() { Indented = true };
+
+    /// <summary>The write fields the CLI owns; an input file naming them would send a second, conflicting copy.</summary>
+    private static readonly string[] WriteFields = ["taskId", "sessionId", "requestId"];
+
+    private static readonly JsonDocumentOptions StrictJson = new() { AllowDuplicateProperties = false };
 
     private readonly IDecisionClient _client;
 
@@ -37,20 +43,102 @@ internal sealed class DecisionCommands
 
     public async Task<int> RegisterTaskAsync(ParseResult parseResult, StandardStreams streams, CancellationToken cancellationToken)
     {
+        var (sessionId, requestId) = await RetryIdsAsync(parseResult, streams, "registration");
+        var request = new RegisterTaskRequest(parseResult.GetValue<string>("--task-id")!, sessionId, requestId,
+            parseResult.GetValue<string>("--title")!, parseResult.GetValue<string?>("--source-ref"));
+        using var response = await _client.RegisterTaskAsync(ProjectId(parseResult), request, cancellationToken);
+        await WriteJsonAsync(streams.Output, json => Data(response).WriteTo(json), cancellationToken);
+        return ErrorCode.Ok.Success;
+    }
+
+    public async Task<int> RecordAsync(ParseResult parseResult, StandardStreams streams, CancellationToken cancellationToken)
+    {
+        var input = parseResult.GetValue<string>("--input")!;
+        string text;
+        try
+        {
+            text = await File.ReadAllTextAsync(input, cancellationToken);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await streams.WriteErrorLineAsync($"ai-raccoon: could not read {TerminalText.Visible(input)} ({TerminalText.Visible(ex.Message)}); nothing was sent");
+            return ErrorCode.Environment.IoFailed;
+        }
+
+        if (RecordBody(text) is not { } body)
+        {
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: {TerminalText.Visible(input)} must hold one JSON object with unique fields and without {string.Join(", ", WriteFields)} — " +
+                "the task comes from --task-id and the retry identity from --session-id/--request-id; nothing was sent");
+            return ErrorCode.Usage.InvalidValue;
+        }
+
+        var (sessionId, requestId) = await RetryIdsAsync(parseResult, streams, "record");
+        body["taskId"] = parseResult.GetValue<string>("--task-id");
+        body["sessionId"] = sessionId;
+        body["requestId"] = requestId;
+        using var response = await _client.RecordAsync(ProjectId(parseResult), body, cancellationToken);
+        await WriteJsonAsync(streams.Output, json => Data(response).WriteTo(json), cancellationToken);
+        return ErrorCode.Ok.Success;
+    }
+
+    public async Task<int> GetAsync(ParseResult parseResult, StandardStreams streams, CancellationToken cancellationToken)
+    {
+        var projectId = ProjectId(parseResult);
+        using var response = await _client.GetAsync(projectId, parseResult.GetValue<string>("decision")!, parseResult.GetValue<bool>("--history"), cancellationToken);
+        var data = Data(response);
+        if (parseResult.GetValue<string>("--format") != "markdown")
+        {
+            await WriteJsonAsync(streams.Output, json => data.WriteTo(json), cancellationToken);
+            return ErrorCode.Ok.Success;
+        }
+
+        var details = data.GetProperty("value").Deserialize<DecisionDetails>(JsonSerializerOptions.Web)!;
+        foreach (var line in DecisionMarkdown.RenderDecision(data.GetProperty("projectId").GetString()!, data.GetProperty("projectRevision").GetInt64(), details))
+        {
+            await streams.Output.WriteLineAsync(line);
+        }
+
+        return ErrorCode.Ok.Success;
+    }
+
+    public async Task<int> QueryAsync(ParseResult parseResult, StandardStreams streams, CancellationToken cancellationToken)
+    {
+        var query = new DecisionQuery(parseResult.GetValue<string?>("--query"), parseResult.GetValue<string?>("--category"));
+        using var response = await _client.QueryAsync(ProjectId(parseResult), query, cancellationToken);
+        await WriteJsonAsync(streams.Output, json => Data(response).WriteTo(json), cancellationToken);
+        return ErrorCode.Ok.Success;
+    }
+
+    /// <summary>The record request in <paramref name="text" />, or null when it is not one object with unique fields the CLI may complete.</summary>
+    private static JsonObject? RecordBody(string text)
+    {
+        try
+        {
+            return JsonNode.Parse(text, documentOptions: StrictJson) is JsonObject body
+                   && !body.Select(field => field.Key).Any(name => WriteFields.Contains(name, StringComparer.OrdinalIgnoreCase))
+                ? body
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The flags' session and request ids, generating and announcing any that are missing so the caller can retry.</summary>
+    private static async Task<(string SessionId, string RequestId)> RetryIdsAsync(ParseResult parseResult, StandardStreams streams, string what)
+    {
         var sessionId = parseResult.GetValue<string?>("--session-id");
         var requestId = parseResult.GetValue<string?>("--request-id");
         if (sessionId is null || requestId is null)
         {
             sessionId ??= "cli-" + Guid.CreateVersion7().ToString("N");
             requestId ??= Guid.CreateVersion7().ToString("N");
-            await streams.WriteErrorLineAsync($"ai-raccoon: sending with --session-id {sessionId} --request-id {requestId}; pass both to retry this registration safely");
+            await streams.WriteErrorLineAsync($"ai-raccoon: sending with --session-id {sessionId} --request-id {requestId}; pass both to retry this {what} safely");
         }
 
-        var request = new RegisterTaskRequest(parseResult.GetValue<string>("--task-id")!, sessionId, requestId,
-            parseResult.GetValue<string>("--title")!, parseResult.GetValue<string?>("--source-ref"));
-        using var response = await _client.RegisterTaskAsync(ProjectId(parseResult), request, cancellationToken);
-        await WriteJsonAsync(streams.Output, json => Data(response).WriteTo(json), cancellationToken);
-        return ErrorCode.Ok.Success;
+        return (sessionId, requestId);
     }
 
     public async Task<int> ExportAsync(ParseResult parseResult, StandardStreams streams, CancellationToken cancellationToken)

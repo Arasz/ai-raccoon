@@ -518,6 +518,35 @@ internal static class CliCommandTree
             new Option<string?>("--request-id") { Description = "The request identity, for an exact retry", HelpName = "id" }
         };
 
+        var record = new Command("record",
+            "Records one decision (same as record_decision) under a registered task; an unregistered task is refused. --input names a JSON file holding the record fields " +
+            "(title, category, scenario, outcome, reasoning, and optionally status, confidence, maker, alternatives, consequences, sources, validFrom, validUntil). " +
+            "Without --session-id/--request-id the CLI generates them and prints them to stderr before sending; pass them back to retry safely.")
+        {
+            ProjectIdOption(),
+            new Option<string>("--task-id") { Description = "The registered task the decision belongs to", HelpName = "task", Required = true },
+            new Option<string>("--input") { Description = "A JSON file holding the decision's fields", HelpName = "path", Required = true },
+            new Option<string?>("--session-id") { Description = "The writing session, for an exact retry", HelpName = "id" },
+            new Option<string?>("--request-id") { Description = "The request identity, for an exact retry", HelpName = "id" }
+        };
+
+        var get = new Command("get", "One decision (same as get_decision): its current version, or every version with --history, as JSON (default) or Markdown.")
+        {
+            new Argument<string>("decision") { Description = "The decision's id" },
+            ProjectIdOption(),
+            new Option<bool>("--history") { Description = "Include every version, not only the current one" },
+            ChoiceOption("--format", "json", "json", "markdown")
+        };
+
+        var query = new Command("query",
+            "Current decision summaries (same as query_decisions) as JSON: literal --query text matched by full-text search, optionally narrowed to one --category. " +
+            "With neither, lists the project's decisions by id.")
+        {
+            ProjectIdOption(),
+            new Option<string?>("--query") { Description = "Literal search text (1-2000 characters)", HelpName = "text" },
+            new Option<string?>("--category") { Description = "Only decisions in this category", HelpName = "category" }
+        };
+
         var export = new Command("export",
             "Writes the complete selected snapshot — every decision version, edge history, boundary stubs, referenced tasks and import records — as JSON (default, lossless) or Markdown. " +
             "Selects the latest task by default. The output is plaintext even for an encrypted bank. With --output the file is written beside the destination and published only once complete; " +
@@ -543,9 +572,12 @@ internal static class CliCommandTree
         AddTaskSelection(preview);
 
         return new Command("decisions",
-            "The project decision graph through the server (the CLI never opens the bank): register tasks, export complete snapshots, preview compact summaries.")
+            "The project decision graph through the server (the CLI never opens the bank): register tasks, record, get and query decisions, export complete snapshots, preview compact summaries.")
         {
             new Command("task", "Decision tasks: the unit export and preview select by") { register },
+            record,
+            get,
+            query,
             export,
             preview
         };

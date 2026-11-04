@@ -266,6 +266,187 @@ public sealed class DecisionCliTests : IAsyncLifetime
         preview["text"]!.GetValue<string>().ShouldContain("Shown tasks");
     }
 
+    [RetryFact]
+    public async Task DecisionCli_Record_SendsTheInputFileUnderTheNamedTask_AndGetReturnsIt()
+    {
+        await RegisterTaskAsync("t1", "First");
+        var input = await InputAsync("""
+            {"title":"Keep one bank","category":"architecture","scenario":"Where decisions live","outcome":"In the bank",
+             "reasoning":"One file to back up","alternatives":["A sidecar file"],"confidence":0.8}
+            """);
+
+        var (exit, stdout, stderr) = await Cli(["record", "--project-id", _project, "--task-id", "t1", "--input", input]);
+
+        exit.ShouldBe(0, stderr);
+        stderr.ShouldContain("--session-id");
+        stderr.ShouldContain("--request-id");
+        var recorded = JsonNode.Parse(stdout)!.AsObject();
+        recorded["replayed"]!.GetValue<bool>().ShouldBeFalse();
+        var value = recorded["value"]!.AsObject();
+        value["version"]!.GetValue<int>().ShouldBe(1);
+        value["taskId"]!.GetValue<string>().ShouldBe("t1");
+        value["status"]!.GetValue<string>().ShouldBe("proposed");
+        var decisionId = value["decisionId"]!.GetValue<string>();
+
+        var (getExit, got, getErr) = await Cli(["get", decisionId, "--project-id", _project]);
+
+        getExit.ShouldBe(0, getErr);
+        var backend = await BackendGetAsync(decisionId, includeHistory: false);
+        JsonNode.DeepEquals(JsonNode.Parse(got)!["value"], backend["value"]).ShouldBeTrue($"CLI get differs from the backend\nCLI: {got}\nbackend: {backend}");
+        backend["value"]!["versions"]!.AsArray().Single()!["content"]!["alternatives"]!.AsArray().Single()!.GetValue<string>().ShouldBe("A sidecar file");
+    }
+
+    [RetryFact]
+    public async Task DecisionCli_Record_ReplaysWithTheSameRequestId()
+    {
+        await RegisterTaskAsync("t1", "First");
+        var input = await InputAsync("""{"title":"T","category":"c","scenario":"s","outcome":"o","reasoning":"r"}""");
+        string[] argv = ["record", "--project-id", _project, "--task-id", "t1", "--input", input, "--session-id", "s", "--request-id", "r1"];
+        var (first, firstOut, firstErr) = await Cli(argv);
+        first.ShouldBe(0, firstErr);
+
+        var (exit, stdout, stderr) = await Cli(argv);
+
+        exit.ShouldBe(0, stderr);
+        stderr.ShouldNotContain("--request-id");
+        var replay = JsonNode.Parse(stdout)!;
+        replay["replayed"]!.GetValue<bool>().ShouldBeTrue();
+        replay["value"]!["decisionId"]!.GetValue<string>().ShouldBe(JsonNode.Parse(firstOut)!["value"]!["decisionId"]!.GetValue<string>());
+    }
+
+    [RetryFact]
+    public async Task DecisionCli_Record_RefusesAnUnregisteredTask_AndPrintsNothing()
+    {
+        var input = await InputAsync("""{"title":"T","category":"c","scenario":"s","outcome":"o","reasoning":"r"}""");
+
+        var (exit, stdout, stderr) = await Cli(["record", "--project-id", _project, "--task-id", "nope", "--input", input]);
+
+        exit.ShouldBe(ErrorCode.Usage.RequestRejected, stderr);
+        stdout.ShouldBeEmpty();
+        stderr.ShouldStartWith("ai-raccoon: ");
+        (await BackendExportAsync("""{"selector":{"all":true}}"""))["value"]!["decisions"]!.AsArray().ShouldBeEmpty();
+    }
+
+    public static TheoryData<string> UnusableInputs() => new()
+    {
+        """{"taskId":"t2","title":"T","category":"c","scenario":"s","outcome":"o","reasoning":"r"}""",
+        """{"requestId":"r","title":"T","category":"c","scenario":"s","outcome":"o","reasoning":"r"}""",
+        """["not an object"]""",
+        """{"title":"T",""",
+        """{"title":"T","title":"U","category":"c","scenario":"s","outcome":"o","reasoning":"r"}"""
+    };
+
+    [RetryTheory]
+    [MemberData(nameof(UnusableInputs))]
+    public async Task DecisionCli_Record_RefusesAnInputItCannotSendAsIs_BeforeSending(string json)
+    {
+        await RegisterTaskAsync("t1", "First");
+        var revision = (await BackendExportAsync("{}"))["projectRevision"]!.GetValue<long>();
+        var input = await InputAsync(json);
+
+        var (exit, stdout, stderr) = await Cli(["record", "--project-id", _project, "--task-id", "t1", "--input", input]);
+
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue, stderr);
+        stdout.ShouldBeEmpty();
+        stderr.ShouldNotContain("sending with");
+        stderr.ShouldContain("must hold one JSON object");
+        (await BackendExportAsync("{}"))["projectRevision"]!.GetValue<long>().ShouldBe(revision);
+    }
+
+    [RetryFact]
+    public async Task DecisionCli_Record_MissingInputFile_FailsWithIo()
+    {
+        var (exit, stdout, stderr) = await Cli(["record", "--project-id", _project, "--task-id", "t1", "--input", Path.Combine(_outputDirectory, "missing.json")]);
+
+        exit.ShouldBe(ErrorCode.Environment.IoFailed, stderr);
+        stdout.ShouldBeEmpty();
+    }
+
+    [RetryFact]
+    public async Task DecisionCli_Get_HistoryMatchesBackend_AndMarkdownEscapesDecisionText()
+    {
+        await RegisterTaskAsync("t1", "First");
+        var id = await RecordAsync("t1", "Hostile \u001b[31m<script>x</script> ‮title", "Why it matters");
+        await AmendAsync("t1", id, "Amended title");
+
+        var (exit, stdout, stderr) = await Cli(["get", id, "--project-id", _project, "--history"]);
+
+        exit.ShouldBe(0, stderr);
+        var backend = await BackendGetAsync(id, includeHistory: true);
+        backend["value"]!["versions"]!.AsArray().Count.ShouldBe(2);
+        JsonNode.DeepEquals(JsonNode.Parse(stdout)!["value"], backend["value"]).ShouldBeTrue($"CLI: {stdout}\nbackend: {backend}");
+
+        var (mdExit, markdown, mdErr) = await Cli(["get", id, "--project-id", _project, "--history", "--format", "markdown"]);
+
+        mdExit.ShouldBe(0, mdErr);
+        markdown.ShouldStartWith("# Decision ");
+        markdown.ShouldContain("Version 1");
+        markdown.ShouldContain("Version 2");
+        markdown.ShouldContain("Amended title");
+        markdown.ShouldContain("Why it matters");
+        markdown.ShouldNotContain("\u001b");
+        markdown.ShouldNotContain("‮");
+        markdown.ShouldNotContain("<script>");
+    }
+
+    [RetryFact]
+    public async Task DecisionCli_Get_UnknownDecision_ExitsRejectedAndPrintsNothing()
+    {
+        var (exit, stdout, stderr) = await Cli(["get", "no-such-decision", "--project-id", _project]);
+
+        exit.ShouldBe(ErrorCode.Usage.RequestRejected, stderr);
+        stdout.ShouldBeEmpty();
+        stderr.ShouldContain("decision-not-found");
+    }
+
+    public static TheoryData<string[], string> Queries() => new()
+    {
+        { [], "{}" },
+        { ["--query", "bank"], """{"query":"bank"}""" },
+        { ["--category", "process"], """{"category":"process"}""" },
+        { ["--query", "bank", "--category", "architecture"], """{"query":"bank","category":"architecture"}""" }
+    };
+
+    [RetryTheory]
+    [MemberData(nameof(Queries))]
+    public async Task DecisionCli_Query_MatchesBackend(string[] filters, string backendBody)
+    {
+        await SeedAsync();
+        await RecordAsync("t3", "Review every bank change", "Process", category: "process");
+
+        var (exit, stdout, stderr) = await Cli(["query", "--project-id", _project, .. filters]);
+
+        exit.ShouldBe(0, stderr);
+        using var content = new StringContent(backendBody, Encoding.UTF8, "application/json");
+        var response = await _host.Http.PostAsync(Root + "/query", content, Ct);
+        response.EnsureSuccessStatusCode();
+        var backend = JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!["data"]!;
+        var cli = JsonNode.Parse(stdout)!;
+        JsonNode.DeepEquals(cli["value"], backend["value"]).ShouldBeTrue($"CLI: {stdout}\nbackend: {backend}");
+        cli["value"]!["decisions"]!.AsArray().Count.ShouldBeGreaterThan(0);
+    }
+
+    private async Task<string> InputAsync(string json)
+    {
+        var path = Path.Combine(_outputDirectory, Guid.NewGuid().ToString("N") + ".json");
+        await File.WriteAllTextAsync(path, json, Ct);
+        return path;
+    }
+
+    private async Task<JsonNode> BackendGetAsync(string decisionId, bool includeHistory)
+    {
+        var response = await _host.Http.GetAsync($"{Root}/records/{decisionId}?includeHistory={(includeHistory ? "true" : "false")}", Ct);
+        response.EnsureSuccessStatusCode();
+        return JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!["data"]!;
+    }
+
+    private async Task AmendAsync(string taskId, string decisionId, string title) =>
+        (await _host.Http.PostAsJsonAsync($"{Root}/records/{decisionId}/amend", new
+        {
+            taskId, sessionId = "seed", requestId = Guid.NewGuid().ToString("N"), expectedVersion = 1, changeReason = "retitle",
+            content = new { title, category = "architecture", scenario = "Scenario", outcome = "Outcome", reasoning = "Why it matters" }
+        }, Ct)).EnsureSuccessStatusCode();
+
     private async Task<(int Exit, string Out, string Err)> Cli(string[] args)
     {
         var store = new LazyServerSettingsStore(_ =>
@@ -290,11 +471,11 @@ public sealed class DecisionCliTests : IAsyncLifetime
     private async Task RegisterTaskAsync(string taskId, string title) =>
         (await _host.Http.PostAsJsonAsync(Root + "/tasks", new { taskId, sessionId = "seed", requestId = "task-" + taskId, title }, Ct)).EnsureSuccessStatusCode();
 
-    private async Task<string> RecordAsync(string taskId, string title, string reasoning)
+    private async Task<string> RecordAsync(string taskId, string title, string reasoning, string category = "architecture")
     {
         var response = await _host.Http.PostAsJsonAsync(Root + "/records", new
         {
-            taskId, sessionId = "seed", requestId = Guid.NewGuid().ToString("N"), title, category = "architecture",
+            taskId, sessionId = "seed", requestId = Guid.NewGuid().ToString("N"), title, category,
             scenario = "Scenario", outcome = "Outcome", reasoning
         }, Ct);
         response.EnsureSuccessStatusCode();

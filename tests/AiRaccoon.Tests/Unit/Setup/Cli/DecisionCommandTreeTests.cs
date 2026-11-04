@@ -63,6 +63,43 @@ public sealed class DecisionCommandTreeTests
         export.Description.ShouldNotBeNull().ShouldContain("plaintext");
     }
 
+    public static TheoryData<string[]> IncompleteVerbs() => new()
+    {
+        new[] { "record", "--project-id", Project, "--input", "d.json" },
+        new[] { "record", "--project-id", Project, "--task-id", "t" },
+        new[] { "record", "--task-id", "t", "--input", "d.json" },
+        new[] { "get", "--project-id", Project },
+        new[] { "get", "d1" },
+        new[] { "get", "d1", "--project-id", Project, "--format", "text" },
+        new[] { "query" }
+    };
+
+    [Theory]
+    [MemberData(nameof(IncompleteVerbs))]
+    public void RecordGetQuery_RefuseMissingOrUnknownArguments_AtParseTime(string[] argv)
+    {
+        CliArgs.TryParse(["decisions", .. argv], out var parsed);
+
+        parsed!.Errors.ShouldNotBeEmpty(string.Join(' ', argv));
+    }
+
+    [Fact]
+    public void RecordGetQuery_ParseTheirDocumentedFlags()
+    {
+        string[][] valid =
+        [
+            ["record", "--project-id", Project, "--task-id", "t", "--input", "d.json", "--session-id", "s", "--request-id", "r"],
+            ["get", "d1", "--project-id", Project, "--history", "--format", "markdown"],
+            ["query", "--project-id", Project, "--query", "bank", "--category", "architecture"]
+        ];
+        foreach (var argv in valid)
+        {
+            CliArgs.TryParse(["decisions", .. argv], out var parsed);
+
+            parsed!.Errors.ShouldBeEmpty(string.Join(' ', argv));
+        }
+    }
+
     private static DecisionTaskSelector? Selector(string[] selection)
     {
         CliArgs.TryParse(["decisions", "export", "--project-id", Project, .. selection], out var parsed);

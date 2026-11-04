@@ -52,6 +52,9 @@ proxy; full servers come only from `serve`).
 | `project id get --name <name>` | Prints the one id registered under an exact, case-sensitive name, with no prefix. Exits 18 when none matches and 19 when several do, listing each id on stderr with stdout empty |
 | `project id check <id>` | Prints `known <id>` (the id it resolves to) and exits 0, or prints `unknown <id>` / `retired <id>` and exits 18. Accepts any non-blank id, guid or raw text |
 | `decisions task register --project-id <id> --task-id <task> --title <text> [--source-ref <uri>] [--session-id <id>] [--request-id <id>]` | Registers a decision task through the server, like `register_decision_task`; see [decisions](#decisions) below |
+| `decisions record --project-id <id> --task-id <task> --input <path> [--session-id <id>] [--request-id <id>]` | Records one decision from a JSON file under a registered task, like `record_decision` |
+| `decisions get <decision> --project-id <id> [--history] [--format json\|markdown]` | Prints one decision, its current version or every version, like `get_decision` |
+| `decisions query --project-id <id> [--query <text>] [--category <category>]` | Prints current decision summaries matching literal text and a category, like `query_decisions` |
 | `decisions export --project-id <id> [--tasks <n> \| --all \| --task-id <task>...] [--format json\|markdown] [--output <path>] [--force]` | Writes the complete selected decision snapshot, uncapped, as lossless JSON or Markdown |
 | `decisions preview --project-id <id> [--tasks <n> \| --all \| --task-id <task>...] [--format text\|json] [--max-decisions <n>] [--max-edges <n>] [--max-chars <n>]` | Prints a compact, budgeted summary of the selected tasks' decisions |
 | `serve [options]` | Runs the HTTP MCP endpoint in the foreground; see [serve](#serve) below. `serve observability` prints a ready-to-run monitoring command for the running server |
@@ -107,6 +110,21 @@ with its counts as JSON.
 `task register` prints the server's result as JSON (`projectId`, `projectRevision`, `value`,
 `replayed`). Without `--session-id` and `--request-id` it generates them and prints them to stderr
 before sending; sending the same pair again replays the first result instead of registering twice.
+
+`record` reads `--input`, a JSON file holding one object with the record fields: `title`,
+`category`, `scenario`, `outcome` and `reasoning`, and optionally `status` (default `proposed`),
+`confidence`, `maker`, `alternatives`, `consequences`, `sources`, `validFrom` and `validUntil`.
+The file must not name `taskId`, `sessionId` or `requestId`, and its field names must be unique;
+otherwise nothing is sent (exit 10). An unreadable file exits 80. The task comes from `--task-id`
+and must already be registered. Retry ids work as for `task register`, and the result prints the
+same way, with the new version as `value`.
+
+`get` prints the server's result as JSON, the current version unless `--history` asks for every
+version. `--format markdown` renders the same decision for people, escaped as in `export`.
+
+`query` prints the server's result as JSON: matching current decisions, `totalMatched`, `hasMore`,
+`nextAfterId` and the `method` used. `--query` is literal search text, not search syntax. With
+neither `--query` nor `--category` it lists the project's decisions by id.
 
 Refusals map to exit codes: an unregistered or retired project exits 18, an invalid value 10,
 any other refusal (a conflict, a missing record, a read-only project) 17.

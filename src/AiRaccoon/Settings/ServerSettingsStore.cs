@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Net;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
@@ -81,6 +82,18 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     /// <inheritdoc />
     public Task<JsonDocument> PreviewAsync(string projectId, DecisionPreviewOptions options, CancellationToken cancellationToken = default) =>
         _decisions.PreviewAsync(projectId, options, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<JsonDocument> RecordAsync(string projectId, JsonObject body, CancellationToken cancellationToken = default) =>
+        _decisions.RecordAsync(projectId, body, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<JsonDocument> GetAsync(string projectId, string decisionId, bool includeHistory, CancellationToken cancellationToken = default) =>
+        _decisions.GetAsync(projectId, decisionId, includeHistory, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default) =>
+        _decisions.QueryAsync(projectId, query, cancellationToken);
 
     public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
     {

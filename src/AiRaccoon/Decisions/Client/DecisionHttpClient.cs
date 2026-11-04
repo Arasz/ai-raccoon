@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AiRaccoon.Core.Decisions;
 using AiRaccoon.Settings;
 using CommunityToolkit.Diagnostics;
@@ -27,15 +28,29 @@ internal sealed class DecisionHttpClient : IDecisionClient
     }
 
     public Task<JsonDocument> RegisterTaskAsync(string projectId, RegisterTaskRequest request, CancellationToken cancellationToken = default) =>
-        SendAsync(projectId, "tasks", request, _requestDeadline, cancellationToken);
+        SendAsync(projectId, "tasks", JsonContent.Create(request), _requestDeadline, cancellationToken);
 
     public Task<JsonDocument> ExportAsync(string projectId, DecisionTaskSelector? selector, CancellationToken cancellationToken = default) =>
-        SendAsync(projectId, "export", new SelectionRequest(selector), null, cancellationToken);
+        SendAsync(projectId, "export", JsonContent.Create(new SelectionRequest(selector)), null, cancellationToken);
 
     public Task<JsonDocument> PreviewAsync(string projectId, DecisionPreviewOptions options, CancellationToken cancellationToken = default) =>
-        SendAsync(projectId, "preview", options, _requestDeadline, cancellationToken);
+        SendAsync(projectId, "preview", JsonContent.Create(options), _requestDeadline, cancellationToken);
 
-    private async Task<JsonDocument> SendAsync<T>(string projectId, string operation, T body, TimeSpan? deadline,
+    public Task<JsonDocument> RecordAsync(string projectId, JsonObject body, CancellationToken cancellationToken = default) =>
+        SendAsync(projectId, "records", JsonContent.Create(body), _requestDeadline, cancellationToken);
+
+    public Task<JsonDocument> GetAsync(string projectId, string decisionId, bool includeHistory, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(decisionId);
+        return SendAsync(projectId, $"records/{Uri.EscapeDataString(decisionId)}?includeHistory={(includeHistory ? "true" : "false")}", null,
+            _requestDeadline, cancellationToken);
+    }
+
+    public Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default) =>
+        SendAsync(projectId, "query", JsonContent.Create(query), _requestDeadline, cancellationToken);
+
+    /// <summary>POSTs <paramref name="body" /> to the operation, or GETs it when there is no body.</summary>
+    private async Task<JsonDocument> SendAsync(string projectId, string operation, HttpContent? body, TimeSpan? deadline,
         CancellationToken cancellationToken)
     {
         Guard.IsNotNullOrWhiteSpace(projectId);
@@ -45,9 +60,10 @@ internal sealed class DecisionHttpClient : IDecisionClient
             bounded.CancelAfter(limit);
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"decisions/projects/{Uri.EscapeDataString(projectId)}/{operation}")
+        using var request = new HttpRequestMessage(body is null ? HttpMethod.Get : HttpMethod.Post,
+            $"decisions/projects/{Uri.EscapeDataString(projectId)}/{operation}")
         {
-            Content = JsonContent.Create(body)
+            Content = body
         };
         HttpResponseMessage response;
         try

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AiRaccoon.Core.Decisions;
 
 namespace AiRaccoon.Decisions.Client;
@@ -15,6 +16,13 @@ internal interface IDecisionClient
     Task<JsonDocument> ExportAsync(string projectId, DecisionTaskSelector? selector, CancellationToken cancellationToken = default);
 
     Task<JsonDocument> PreviewAsync(string projectId, DecisionPreviewOptions options, CancellationToken cancellationToken = default);
+
+    /// <summary>Records a decision from <paramref name="body" />, the record request as the server binds it.</summary>
+    Task<JsonDocument> RecordAsync(string projectId, JsonObject body, CancellationToken cancellationToken = default);
+
+    Task<JsonDocument> GetAsync(string projectId, string decisionId, bool includeHistory, CancellationToken cancellationToken = default);
+
+    Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default);
 }
 
 /// <summary>The server refused a decision request; <see cref="Kind" /> is the refusal kind it reported.</summary>
@@ -33,6 +41,12 @@ internal sealed class DirectGraphDecisionClient : IDecisionClient
     public Task<JsonDocument> ExportAsync(string projectId, DecisionTaskSelector? selector, CancellationToken cancellationToken = default) => throw Refused();
 
     public Task<JsonDocument> PreviewAsync(string projectId, DecisionPreviewOptions options, CancellationToken cancellationToken = default) => throw Refused();
+
+    public Task<JsonDocument> RecordAsync(string projectId, JsonObject body, CancellationToken cancellationToken = default) => throw Refused();
+
+    public Task<JsonDocument> GetAsync(string projectId, string decisionId, bool includeHistory, CancellationToken cancellationToken = default) => throw Refused();
+
+    public Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default) => throw Refused();
 
     private static NotSupportedException Refused() =>
         new("ai-raccoon: decisions are read and written only through the server; this command writes the bank directly");
