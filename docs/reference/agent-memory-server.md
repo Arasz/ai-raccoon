@@ -53,7 +53,7 @@ path and chunk hash also causes a refusal; use a different source path or resolv
 row's owner. The prior document/fingerprint survives and normal watch retries apply. See
 [ADR-0137](../adr/0137-shared-target-for-document-watches.md) for ownership and migration details.
 
-## Tools (30)
+## Tools (43)
 
 Every tool takes `projectId` (camelCase — all parameters are camelCase), and it is
 **optional on every tool**: an omitted or blank id defaults to the registered project
@@ -74,7 +74,14 @@ are supplied (the sandbox has priority, so a workspace write never lands project
 read tool (`get_quality_report`), 1 sync tool, 1 performance tool (`get_engine_statistics`),
 and `get_entry` reads the code corpus too, 2 project tools (`get_project_id`, which returns
 the id registered under an exact name, and `save_project_id_token`, ADR-0089, which mints and
-registers a new project id; call `get_project_id` first).
+registers a new project id; call `get_project_id` first), and 13 decision tools (ADR-0142):
+`register_decision_task`, `record_decision`, `amend_decision`, `transition_decision`,
+`supersede_decision`, `link_decisions`, `unlink_decisions`, `get_decision`, `query_decisions`,
+`find_decision_precedents`, `get_decision_graph`, `export_decisions` and `preview_decisions`.
+The decision tools are the exception to the optional `projectId`: they require it (`projectId!`)
+and never resolve one from the working directory. Each maps 1:1 onto a `/decisions/projects/{projectId}`
+HTTP route, answers with `structuredContent` plus the same JSON as text, and refuses with the same
+kind as that route.
 `memory_configure` and `memory_set_structure_alpha` were removed by the CLI-config
 refactor: configuration is no longer an MCP tool — the CLI verbs are the single
 config channel (see [Command-line options](#command-line-options)).
@@ -111,6 +118,19 @@ config channel (see [Command-line options](#command-line-options)).
 | `get_engine_statistics`           | `projectId`, `windowMinutes?=180`, `bucketMinutes?=1`                                                                                                       | `{generatedAt, window, bucket, bucketCount, series: [{tool, count, p50, p95, p99, min, max, buckets: [{start, count, average}]}]}` |
 | `get_project_id`               | `name`                                                                                                                                                      | `{projectId}`                                                                                      |
 | `save_project_id_token`         | `name?`                                                                                                                                                     | `{projectId, instructions}`                                                                        |
+| `register_decision_task`       | `projectId!`, `taskId`, `sessionId`, `requestId`, `title`, `sourceRef?`, `actor?` | `{projectId, projectRevision, value: {taskId, title, registeredOrder, registeredAt, sourceRef}, replayed}` |
+| `record_decision`              | `projectId!`, `taskId`, `sessionId`, `requestId`, `title`, `category`, `scenario`, `outcome`, `reasoning`, `status=proposed`, `confidence?`, `maker?`, `alternatives?`, `consequences?`, `sources?`, `validFrom?`, `validUntil?`, `actor?` | the new decision version (version 1) |
+| `amend_decision`               | `projectId!`, `decisionId`, `taskId`, `sessionId`, `requestId`, `expectedVersion`, `changeReason`, `content`, `actor?` | the new decision version |
+| `transition_decision`          | `projectId!`, `decisionId`, `taskId`, `sessionId`, `requestId`, `expectedVersion`, `targetStatus` (`accepted`, `rejected`, `deprecated`), `changeReason`, `actor?` | the new decision version |
+| `supersede_decision`           | `projectId!`, `taskId`, `sessionId`, `requestId`, `replacementId`, `replacedId`, `expectedReplacementVersion`, `expectedReplacedVersion`, `reason`, `actor?` | `{replacement, replaced, edge}` |
+| `link_decisions`               | `projectId!`, `taskId`, `sessionId`, `requestId`, `sourceId`, `targetId`, `kind` (`depends_on`, `supports`, `contradicts`), `reason`, `expectedProjectRevision`, `actor?` | the new edge |
+| `unlink_decisions`             | `projectId!`, `edgeId`, `taskId`, `sessionId`, `requestId`, `reason`, `expectedProjectRevision`, `actor?` | the removed edge, kept in history |
+| `get_decision`                 | `projectId!`, `decisionId`, `version?`, `includeHistory=false` | `{record, versions, selectedVersion}` |
+| `query_decisions`              | `projectId!`, `query?`, `category?`, `statuses?`, `selector?`, `limit=20`, `afterId?` | `{decisions, totalMatched, hasMore, nextAfterId, method}` |
+| `find_decision_precedents`     | `projectId!`, `scenario`, `category?`, `limit=5`, `includeInactive=false` | `{decisions, totalMatched, hasMore, method}` |
+| `get_decision_graph`           | `projectId!`, `decisionId`, `direction=upstream`, `depth=2`, `maxNodes=100`, `includeContext=false` | `{nodes, edges, truncated, reasons, omittedNodes, omittedEdges}` |
+| `export_decisions`             | `projectId!`, `selector?` (`last`, `all` or `taskIds`; newest task when omitted) | the complete snapshot; over 1 MiB refused with `decision-export-too-large` |
+| `preview_decisions`            | `projectId!`, `selector?`, `maxDecisions=20`, `maxEdges=30`, `maxChars=12000` | `{text, total, shown, omitted, abbreviatedFields}` |
 
 ### Notes on the less obvious tools
 
@@ -1214,6 +1234,12 @@ source of truth; a test cross-checks this table against it.
 | `embedding-install-replaced` | The bundled embedding model/vocab could not be resolved because the install this server process started from (`AppContext.BaseDirectory`) no longer exists on disk — replaced or removed out from under a still-running server (e.g. `dotnet tool update` moving the outgoing version into `.store/.stage` and deleting it; already-mapped assemblies keep the process serving MCP calls even though its own install root is gone). A plain `InvalidOperationException` from the same lookup still means the asset is genuinely missing next to a live install and stays unmapped — only this replaced-install case is refused. As of 1.52.1 (ADR-0116) a restart is no longer a manual step: `InstallWatchdog` notices the same missing directory within 20 seconds and shuts the server down on its own, so the next MCP call's proxy forward starts the new install | `embedding-install-replaced: Bundled embedding model 'model_fp16.onnx' could not be resolved: the install this server started from ('<dir>') no longer exists, likely replaced by a tool update (e.g. 'dotnet tool update'). Restart the MCP server (or its host) to pick up the new install.` |
 | `code-engine-unloadable` | A code engine IS configured (`embedding.codeModel`) but its manifest or model/tokenizer files fail to load at search time (missing files, a dimension mismatch, a corrupt asset) — distinct from "no engine configured" (which degrades to FTS5-only with a section warning, no refusal). Affects queries including `entryType=code` only; selections without Code are unaffected, since the memory and code engines are independent settings rows | `code-engine-unloadable: The configured code engine at '<dir>' could not be loaded: <detail> Run 'ai-raccoon model code set local <dir>' to reconfigure it, or clear it with 'ai-raccoon settings model code reset'.` |
 | `unknown-tool` | The call named a tool this server does not have. A name the 2.0.0 rename took away is answered with the name to call instead (ADR-0140); any other name gets the general message. The SDK's own answer to such a call is a JSON-RPC `-32602` with no hint, which the caller cannot act on — the MCP protocol says a tool error belongs in the result, where a model can read it and call again | `unknown-tool: 'memory_search' was renamed to 'query' in 2.0.0 — call 'query' instead.` |
+| `decision-not-found` | A decision tool named a task, decision or edge this project does not hold (another project's id looks the same: not found). HTTP 404 | `decision-not-found: Decision was not found in this project.` |
+| `decision-conflict` | A decision write's `expectedVersion` or `expectedProjectRevision` is stale; the message carries the current value. HTTP 409 | `decision-conflict: <detail> (currentVersion=2)` |
+| `decision-request-conflict` | A decision write reused a `requestId` for a different command. HTTP 409 | `decision-request-conflict: This requestId already identifies a different command. Use a new requestId.` |
+| `decision-invalid-transition` | The decision status change, amend or supersession is not allowed from the current state. HTTP 409 | `decision-invalid-transition: Cannot transition from Proposed to Deprecated.` |
+| `decision-invalid-link` | The edge would link a decision to itself, duplicate a live edge or close a `depends_on` cycle. HTTP 409 | `decision-invalid-link: <detail>` |
+| `decision-export-too-large` | `export_decisions` over MCP would return more than 1 MiB; nothing is returned. HTTP export is not capped | `decision-export-too-large: The export is <n> bytes, over the 1048576-byte MCP limit, so nothing was returned. Run 'ai-raccoon decisions export --project-id <id>' with the same selector to stream it in full.` |
 
 Anything `ToolRefusals` does not recognize — a remote embedding provider called without
 a key, or any other unmapped exception — is a genuine failure, not a refusal, and its message

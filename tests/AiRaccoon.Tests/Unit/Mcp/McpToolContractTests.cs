@@ -2,6 +2,7 @@ using System.Text.Json;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Setup;
+using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using ModelContextProtocol.Server;
@@ -24,7 +25,8 @@ public sealed class McpToolContractTests : IAsyncLifetime
     ///     declaration order. A renamed parameter, a changed type, or a tightened/loosened
     ///     required list all show up as a one-line diff.
     /// </summary>
-    // projectId is optional on every tool (cwd-default resolution). Snapshot token mapping:
+    // projectId is optional on every memory tool (cwd-default resolution); the decision tools
+    // require it (`string!`) because they never infer a project. Snapshot token mapping:
     // `string?` = the CS1737 form — a NON-nullable `string projectId` carrying
     // [Optional][DefaultParameterValue("")] because a required parameter follows it; `string|null?`
     // = the nullable form (`string? projectId = null`), used where every following parameter is
@@ -32,12 +34,17 @@ public sealed class McpToolContractTests : IAsyncLifetime
     private const string ExpectedContract = """
                                             add_memory(projectId:string?, content:string!, workspaceId:string|null?, agentId:string|null?, context:string|null?, sourceFile:string|null?, section:string|null?)
                                             add_watch(projectId:string?, path:string!)
+                                            amend_decision(projectId:string!, decisionId:string!, taskId:string!, sessionId:string!, requestId:string!, expectedVersion:integer!, changeReason:string!, content:object!, actor:string|null?)
                                             close_workspace(projectId:string?, workspaceId:string!, keep:array!)
                                             delete_context(projectId:string?, context:string!)
                                             delete_entry(projectId:string?, hash:string!)
                                             delete_memory_from_ranking(projectId:string|null?, hash:string|null?)
                                             discard_workspace(projectId:string?, workspaceId:string!)
                                             embed_deferred_entries(projectId:string|null?, limit:integer|null?)
+                                            export_decisions(projectId:string!, selector:object|null?)
+                                            find_decision_precedents(projectId:string!, scenario:string!, category:string|null?, limit:integer?, includeInactive:boolean?)
+                                            get_decision(projectId:string!, decisionId:string!, version:integer|null?, includeHistory:boolean?)
+                                            get_decision_graph(projectId:string!, decisionId:string!, direction:string?, depth:integer?, maxNodes:integer?, includeContext:boolean?)
                                             get_engine_statistics(projectId:string|null?, windowMinutes:integer|null?, bucketMinutes:integer|null?)
                                             get_entry(projectId:string?, hash:string!, entryType:string!)
                                             get_index(projectId:string|null?)
@@ -50,16 +57,24 @@ public sealed class McpToolContractTests : IAsyncLifetime
                                             ingest_directory(projectId:string?, path:string!, context:string|null?)
                                             ingest_file(projectId:string?, path:string!, context:string|null?)
                                             initialize_workspace(projectId:string|null?, agentId:string|null?, name:string|null?)
+                                            link_decisions(projectId:string!, taskId:string!, sessionId:string!, requestId:string!, sourceId:string!, targetId:string!, kind:string!, reason:string!, expectedProjectRevision:integer!, actor:string|null?)
+                                            preview_decisions(projectId:string!, selector:object|null?, maxDecisions:integer?, maxEdges:integer?, maxChars:integer?)
                                             query(projectId:string?, query:string!, sessionId:string!, scope:string?, workspaceId:string|null?, limit:integer?, minRelativeScore:number?, rrfK:integer|null?, ftsWeight:integer|null?, vectorWeight:integer|null?, sourceLambda:number|null?, consolidationThreshold:number|null?, docScoreFormula:string|null?, candidateWindow:string|null?, contextLabel:string|null?, entryType:string?, codeLimit:integer|null?, codeMinRelativeScore:number|null?)
+                                            query_decisions(projectId:string!, query:string|null?, category:string|null?, statuses:array|null?, selector:object|null?, limit:integer?, afterId:string|null?)
+                                            record_decision(projectId:string!, taskId:string!, sessionId:string!, requestId:string!, title:string!, category:string!, scenario:string!, outcome:string!, reasoning:string!, status:string?, confidence:number|null?, maker:string|null?, alternatives:array|null?, consequences:array|null?, sources:array|null?, validFrom:string|null?, validUntil:string|null?, actor:string|null?)
+                                            register_decision_task(projectId:string!, taskId:string!, sessionId:string!, requestId:string!, title:string!, sourceRef:string|null?, actor:string|null?)
                                             remove_watch(projectId:string?, path:string!)
                                             save_project_id_token(name:string|null?)
                                             set_memory_ttl(projectId:string?, hash:string!, ttlDays:integer|null?)
                                             set_memory_usage_record(projectId:string?, correlationId:string!, filePath:string!, servedRank:integer|null?)
                                             set_query_result_grade(projectId:string?, correlationId:string!, grade:integer!, note:string|null?)
                                             share_memory(projectId:string?, hash:string!)
+                                            supersede_decision(projectId:string!, taskId:string!, sessionId:string!, requestId:string!, replacementId:string!, replacedId:string!, expectedReplacementVersion:integer!, expectedReplacedVersion:integer!, reason:string!, actor:string|null?)
                                             sync_to_cloud(projectId:string|null?)
+                                            transition_decision(projectId:string!, decisionId:string!, taskId:string!, sessionId:string!, requestId:string!, expectedVersion:integer!, targetStatus:string!, changeReason:string!, actor:string|null?)
                                             trigger_memory_cleanup(projectId:string|null?, dryRun:boolean?)
                                             trigger_memory_sharing(projectIds:array!, mode:string?, limit:integer|null?, includeTtlRows:boolean?, autoPromote:boolean?, confirm:boolean?)
+                                            unlink_decisions(projectId:string!, edgeId:string!, taskId:string!, sessionId:string!, requestId:string!, reason:string!, expectedProjectRevision:integer!, actor:string|null?)
                                             """;
 
     private readonly string _dataRoot = TestData.CreateTempRoot("mcp-contract-tests");
@@ -106,19 +121,25 @@ public sealed class McpToolContractTests : IAsyncLifetime
     }
 
     /// <summary>
-    ///     No tool opts into structured content, so the SDK declares no outputSchema and the result
-    ///     travels as untyped text. If a tool ever opts in, this fails and the envelope's shape
-    ///     becomes a published contract that needs its own snapshot.
+    ///     Only the decision tools opt into structured content, so only they declare an
+    ///     outputSchema; the memory tools keep their untyped text envelope. Each decision schema
+    ///     publishes the envelope shape: data carrying projectId, projectRevision, value and replayed.
     /// </summary>
     [Fact]
-    public void NoTool_DeclaresAnOutputSchema()
+    public void OnlyTheDecisionTools_DeclareAnOutputSchema()
     {
-        var declaring = Tools()
-            .Where(t => t.ProtocolTool.OutputSchema is not null)
-            .Select(t => t.ProtocolTool.Name)
-            .ToList();
+        var declaring = Tools().Where(t => t.ProtocolTool.OutputSchema is not null).ToList();
 
-        declaring.ShouldBeEmpty(string.Join(", ", declaring));
+        declaring.Select(t => t.ProtocolTool.Name).ShouldBe(
+            DecisionOperations.All.Select(o => o.Tool).Order(StringComparer.Ordinal));
+        foreach (var tool in declaring)
+        {
+            var data = tool.ProtocolTool.OutputSchema!.Value.GetProperty("properties").GetProperty("data").GetProperty("properties");
+            foreach (var field in new[] { "projectId", "projectRevision", "value", "replayed" })
+            {
+                data.TryGetProperty(field, out _).ShouldBeTrue($"{tool.ProtocolTool.Name} output schema lacks data.{field}");
+            }
+        }
     }
 
     private List<McpServerTool> Tools()

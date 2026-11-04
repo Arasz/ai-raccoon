@@ -15,6 +15,9 @@ internal static class DecisionEndpoint
     {
         internal void MapDecisions()
         {
+            // A body the framework cannot bind is refused before the handler with an empty 400;
+            // status-code pages turn it into problem details that KindBindingFailures then kinds.
+            app.UseWhen(context => context.Request.Path.StartsWithSegments("/decisions"), branch => branch.UseStatusCodePages());
             app.MapPost(Root + "/tasks", (string projectId, RegisterTaskRequest r, IToolGate gate, IDecisionService service, CancellationToken ct) =>
                 Run(projectId, DecisionTools.TnRegisterDecisionTask, AccessRequirement.Write, gate, ct, p => r.SendAsync(service, p, ct)));
             app.MapPost(Root + "/records", (string projectId, RecordRequest r, IToolGate gate, IDecisionService service, CancellationToken ct) =>
