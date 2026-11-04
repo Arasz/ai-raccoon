@@ -69,3 +69,34 @@ An adversarial review of the pull request confirmed five findings. Each fix belo
 The census now counts decision graph rows per id as an attachment, so a graph owner is never retire-eligible. The repair still refuses to fold or drop a graph owner. After all five fixes, the project-id repair classes, every decision class and the repo-wide source gates (`NoHandRolledCryptoTests`, `NoConfigureAwaitTests`, `RetrySurfaceGateTests`, `LoggerMessageEventIdTests`, `ProjectIdAliasDefaultCollectionGateTests`) passed 492/492.
 
 The `INSERT ... SELECT` backfill and `decision_fts` rebuild remain in `DecisionSchema.Ddl`. They run once per schema digest change and no longer run a second time from the ladder.
+
+## Adapters acceptance
+
+The 13 decision operations now have one HTTP route and one MCP tool each (`DecisionTools`, `DecisionEndpoint`). Both adapters build the same request records (`src/AiRaccoon/Decisions/DecisionRequests.cs`), call the same service, require the explicit project id through the same check and refuse through one mapping (`DecisionRefusals`). The MCP refusal filter uses that mapping for decision tools, so a call refuses with the same kind over HTTP and MCP. Decision tools declare `ToolScope.Project`, require `projectId`, return `structuredContent` with the same JSON as text, and set all four annotations explicitly.
+
+| Check | What it proves | Mutation | Red | Green |
+|---|---|---|---|---|
+| `DecisionApiTests.HttpRoutes_MapEveryOperationOnce`, `OperationTable_MatchesTheDecisionToolClass` | One HTTP route and one tool per api.md row | n/a (table equality) | n/a | 20/20 |
+| `DecisionApiTests.ToolsList_DeclaresEveryAnnotationExplicitly` (raw `tools/list` JSON) | All four hints present with the expected value, `projectId` required, an output schema | drop `Destructive = false` from `export_decisions` | 1/20 | 20/20 |
+| same + `Success_ReturnsTheEnvelopeAsStructuredContentAndText`, `McpToolContractTests.OnlyTheDecisionTools_DeclareAnOutputSchema` | Structured content and the text equivalent | drop `UseStructuredContent` from `register_decision_task` | 2/20, 1/3 | 20/20, 3/3 |
+| `DecisionApi_AnnotationsAndGuardParity` (13 rows) | Unregistered id, padded id, blank id and read-only mode refuse with the same kind on both adapters; only writes get `access-denied` | MCP writes require `Read` | 7/20 | 20/20 |
+| same | | HTTP writes require `Read` | 7/20 | 20/20 |
+| same | | HTTP skips the gate | 13/20 | 20/20 |
+| `DecisionEndpointTests.WriteRoute_RefusesAReadOnlyProject` (7 rows) | HTTP write routes need write access | HTTP writes require `Read` | 7/23 | 23/23 |
+| `DecisionEndpointTests.Route_RefusesAnUnregisteredProject` (13 rows) | The gate runs before the service on every route | HTTP skips the gate | 14/23 (with the rows below) | 23/23 |
+| `DecisionEndpointTests.NonCanonicalId_ReachesTheServiceCanonical` | A braced upper-case id is stored and returned under the canonical id | HTTP passes the raw id to the service | 1/23 | 23/23 |
+| `DecisionApiTests.NonCanonicalId_ReachesTheServiceCanonical` | Same over MCP | MCP passes the raw id to the service | 1/20 | 20/20 |
+| `DecisionApiTests.DomainRefusals_HaveTheSameKindOnBothAdapters` | not-found 404, conflict 409, invalid transition 409, invalid argument and unknown enum 400, same kinds over MCP | MCP filter skips `DecisionRefusals` | 4/20 | 20/20 |
+| `DecisionApiTests.Export_OverTheMcpCap_IsRefusedOverMcpAndServedOverHttp` | MCP refuses a 1.2 MB export with `decision-export-too-large` and the CLI command, no partial content; HTTP serves it whole | remove `EnsureWithinMcpLimit` | 1/20 | 20/20 |
+| `UnregisteredIdRefusalTests` | Decision tools join the derived unregistered-id theory | n/a | n/a | 42/42 |
+
+Review follow-up, same commit range:
+
+| Check | Mutation | Red | Green |
+|---|---|---|---|
+| `DecisionServiceTests.Graph_preserves_causal_direction_and_explicit_depth_and_node_bounds` now asserts `Truncated`, reasons `[depth]` and null omitted counts at depth 0 | delete `reasons.Add("depth")` | 1/23 | 23/23 |
+| `DecisionServiceTests.Graph_cuts_edges_past_the_internal_cap_and_counts_the_rest` crosses `GraphEdgeLimit` (2000, internal, no API input) with 2001 seeded edges | delete `reasons.Add("edges")` | 1/23 | 23/23 |
+| same | return every edge (no cut) | 1/23 | 23/23 |
+| same | report 0 omitted edges | 1/23 | 23/23 |
+
+Tool-surface gates updated with the new tools: `McpToolContractTests` (input snapshot, output-schema rule), `ScopeCheckTests`, `McpToolCompositionTests`, `ToolInventoryTests` (docs/reference/agent-memory-server.md table and count) and `ToolRefusalsTests` (error-shapes table now lists the six decision kinds). After the last commit the decision classes, the tool-surface classes and the repo-wide source gates (`NoHandRolledCryptoTests`, `NoConfigureAwaitTests`, `RetrySurfaceGateTests`, `LoggerMessageEventIdTests`) passed. `DecisionProjectRepairJobTests` ran with the granite model data present locally.

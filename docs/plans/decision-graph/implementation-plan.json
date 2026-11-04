@@ -156,8 +156,10 @@
               "id": "adapters-contract",
               "statement": "Every operation has one HTTP and MCP mapping, required inputs, generated project scope, explicit annotations and equivalent read/write/propose refusals.",
               "check": "DecisionApi_AnnotationsAndGuardParity; real tools/list JSON contract tests; oversized export refusal test",
-              "status": "unchecked",
-              "evidence": []
+              "status": "passed",
+              "evidence": [
+                "DecisionApiTests 20/20 (DecisionApi_AnnotationsAndGuardParity x13, ToolsList_DeclaresEveryAnnotationExplicitly over raw tools/list JSON, Export_OverTheMcpCap_IsRefusedOverMcpAndServedOverHttp) and DecisionEndpointTests 23/23; each went red under its mutation (9 adapter mutations, see implementation-evidence.md Adapters acceptance) and green after restore."
+              ]
             }
           ],
           "files": [
@@ -168,7 +170,14 @@
             "tests/AiRaccoon.Tests/Integration/Decisions/**"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "complete",
+          "completed_at": "2026-11-04T00:00:00Z",
+          "completion": {
+            "forced": false,
+            "evidence": [
+              {"kind": "test", "summary": "DecisionApiTests 20/20, DecisionEndpointTests 23/23, DecisionServiceTests 23/23, tool-surface contract classes and source gates green; 13 targeted mutations each turned their named check red.", "ref": "docs/plans/decision-graph/implementation-evidence.md", "recorded_at": "2026-11-04T00:00:00Z"}
+            ]
+          }
         },
         "cli": {
           "id": "cli",
