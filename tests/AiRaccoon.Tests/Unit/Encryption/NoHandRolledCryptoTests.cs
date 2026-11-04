@@ -27,6 +27,9 @@ public sealed class NoHandRolledCryptoTests
         // ADR-0118 CoreML cache key: SHA-256 over the graph and weights content hashes, so a changed
         // graph or weights file lands in a fresh compiled-model directory. Content addressing only.
         "AiRaccoon.Infrastructure/Embedding/NeuralEngine/CoreMlCache.cs",
+        // Decision replay receipts: SHA-256 over the serialized write payload so a reused request id
+        // with different content is refused. Content addressing only.
+        "AiRaccoon.Infrastructure/Decisions/DecisionService.cs",
         "AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs",
         "AiRaccoon.Infrastructure/Sqlite/SnippetFallback.cs",
         "AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.cs",
