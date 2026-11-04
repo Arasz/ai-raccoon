@@ -106,6 +106,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
         var tables = await connection.QueryAsync<string>(new CommandDefinition(
             "SELECT name FROM sqlite_master WHERE type='table' AND name IN @names",
             new { names = Decisions.DecisionSchema.ProjectTableNames.ToArray() }, cancellationToken: cancellationToken));
+        var owners = new List<Decisions.DecisionGraphOwner>();
         foreach (var project in projects)
         {
             var occupied = new List<string>();
@@ -122,8 +123,13 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
 
             if (occupied.Count > 0)
             {
-                throw new Decisions.DecisionGraphRepairException(project, occupied);
+                owners.Add(new Decisions.DecisionGraphOwner(project, occupied));
             }
+        }
+
+        if (owners.Count > 0)
+        {
+            throw new Decisions.DecisionGraphRepairException(owners);
         }
     }
 

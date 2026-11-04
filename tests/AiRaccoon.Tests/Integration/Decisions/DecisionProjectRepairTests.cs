@@ -44,8 +44,9 @@ public sealed class DecisionProjectRepairTests : IDisposable
         var error = await Should.ThrowAsync<DecisionGraphRepairException>(() => Repair().ApplyAsync(connection,
             new ProjectIdsFoldPlan([new ProjectIdFold("loser", "winner")], [], [], []), ct));
 
-        error.ProjectId.ShouldBe("loser");
-        error.Tables.Order(StringComparer.Ordinal).ShouldBe(DecisionGraphFixture.GraphTables);
+        var owner = error.Owners.ShouldHaveSingleItem();
+        owner.ProjectId.ShouldBe("loser");
+        owner.Tables.Order(StringComparer.Ordinal).ShouldBe(DecisionGraphFixture.GraphTables);
         (await DecisionGraphFixture.TotalChangesAsync(connection)).ShouldBe(changes, "refusal precedes every statement that writes");
         (await DecisionGraphFixture.DumpBankAsync(connection)).ShouldBe(bank);
     }
@@ -71,8 +72,9 @@ public sealed class DecisionProjectRepairTests : IDisposable
         var conflict = await Should.ThrowAsync<DecisionGraphRepairException>(() => Repair().ApplyAsync(connection,
             new ProjectIdsFoldPlan([new ProjectIdFold("graph-free", "winner"), new ProjectIdFold("occupied", "winner")], [], [], []), ct));
 
-        conflict.ProjectId.ShouldBe("occupied");
-        conflict.Tables.Order(StringComparer.Ordinal).ShouldBe(["decision_projects", "decision_tasks"]);
+        var owner = conflict.Owners.ShouldHaveSingleItem();
+        owner.ProjectId.ShouldBe("occupied");
+        owner.Tables.Order(StringComparer.Ordinal).ShouldBe(["decision_projects", "decision_tasks"]);
         conflict.Message.ShouldContain("'occupied'");
         (await DecisionGraphFixture.TotalChangesAsync(connection)).ShouldBe(changes, "the graph-free fold waits for the whole plan");
         (await DecisionGraphFixture.DumpBankAsync(connection)).ShouldBe(bank);
@@ -83,6 +85,30 @@ public sealed class DecisionProjectRepairTests : IDisposable
         (await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM projects WHERE id='graph-free'")).ShouldBe(0);
         (await DecisionGraphFixture.DumpGraphAsync(connection, "winner")).ShouldBe(winnerGraph);
         (await DecisionGraphFixture.DumpGraphAsync(connection, "graph-free")).ShouldBe(await DecisionGraphFixture.DumpGraphAsync(connection, "nobody"));
+    }
+
+    [RetryFact]
+    public async Task DecisionRepair_ReportsEveryOccupiedLoserWithItsTables()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var factory = Factory();
+        await using var connection = await factory.OpenBankAsync(ct);
+        await connection.ExecuteAsync("""
+            INSERT INTO projects(id,name,created_at) VALUES('first','First',1),('second','Second',1),('winner','Winner',1);
+            INSERT INTO decision_projects(project_id,revision) VALUES('first',1),('second',1);
+            INSERT INTO decision_tasks(project_id,task_id,title,registered_order,registered_at) VALUES('second','t','T',1,'2026-11-04');
+            """);
+        var bank = await DecisionGraphFixture.DumpBankAsync(connection);
+
+        var error = await Should.ThrowAsync<DecisionGraphRepairException>(() => Repair().ApplyAsync(connection,
+            new ProjectIdsFoldPlan([new ProjectIdFold("first", "winner")], ["second"], [], []), ct));
+
+        error.Owners.Select(owner => owner.ProjectId).ShouldBe(["first", "second"]);
+        error.Owners[0].Tables.ShouldBe(["decision_projects"]);
+        error.Owners[1].Tables.Order(StringComparer.Ordinal).ShouldBe(["decision_projects", "decision_tasks"]);
+        error.Message.ShouldContain("'first'");
+        error.Message.ShouldContain("'second'");
+        (await DecisionGraphFixture.DumpBankAsync(connection)).ShouldBe(bank);
     }
 
     [RetryTheory]
@@ -110,8 +136,9 @@ public sealed class DecisionProjectRepairTests : IDisposable
 
         var error = await Should.ThrowAsync<DecisionGraphRepairException>(() => Repair().ApplyAsync(connection, plan, ct));
 
-        error.ProjectId.ShouldBe("loser");
-        error.Tables.Order(StringComparer.Ordinal).ShouldBe(DecisionGraphFixture.GraphTables);
+        var owner = error.Owners.ShouldHaveSingleItem();
+        owner.ProjectId.ShouldBe("loser");
+        owner.Tables.Order(StringComparer.Ordinal).ShouldBe(DecisionGraphFixture.GraphTables);
         (await DecisionGraphFixture.TotalChangesAsync(connection)).ShouldBe(changes);
         (await DecisionGraphFixture.DumpBankAsync(connection)).ShouldBe(bank);
     }
