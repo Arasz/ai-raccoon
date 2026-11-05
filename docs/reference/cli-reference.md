@@ -55,7 +55,7 @@ proxy; full servers come only from `serve`).
 | `decisions record --project-id <id> --task-id <task> --input <path> [--session-id <id>] [--request-id <id>]` | Records one decision from a JSON file under a registered task, like `record_decision` |
 | `decisions get <decision> --project-id <id> [--history] [--format json\|markdown]` | Prints one decision, its current version or every version, like `get_decision` |
 | `decisions query --project-id <id> [--query <text>] [--category <category>]` | Prints current decision summaries matching literal text and a category, like `query_decisions` |
-| `decisions export --project-id <id> [--tasks <n> \| --all \| --task-id <task>...] [--format json\|markdown] [--output <path>] [--force]` | Writes the complete selected decision snapshot, uncapped, as lossless JSON or Markdown |
+| `decisions export --project-id <id> [--tasks <n> \| --all \| --task-id <task>...] [--format json\|markdown] [--output <path>] [--force]` | Writes the complete selected decision snapshot, uncapped, as lossless JSON or as Markdown for reading |
 | `decisions preview --project-id <id> [--tasks <n> \| --all \| --task-id <task>...] [--format text\|json] [--max-decisions <n>] [--max-edges <n>] [--max-chars <n>]` | Prints a compact, budgeted summary of the selected tasks' decisions |
 | `serve [options]` | Runs the HTTP MCP endpoint in the foreground; see [serve](#serve) below. `serve observability` prints a ready-to-run monitoring command for the running server |
 | `doctor` | Shows bank schema/version, code engine state and embedding settings, without changing the bank |
@@ -86,8 +86,9 @@ A selected task with no decisions still counts as selected.
 1 MiB and points here. JSON is the default and lossless format: the project id and revision,
 then the server's export fields (`schemaVersion`, `selector`, `selectedTaskIds`, `tasks`,
 `decisions` with every version, `edges` including removed ones, `boundaryNodes`,
-`referencedTasks`, `importRecords`, `counts`). Markdown renders the same snapshot for people,
-with full rationale and history. Decision text is escaped there, so neither a Markdown viewer nor
+`referencedTasks`, `importRecords`, `counts`). Markdown is a reading format, not a lossless
+one: it renders the same snapshot for people, with full rationale and history, but drops each
+edge's `sessionId`, `removedAt`, `removalActor` and `removalSessionId`. Decision text is escaped there, so neither a Markdown viewer nor
 a terminal interprets it, and source URIs are shown but never linked or fetched. The output is
 plaintext even when the bank is encrypted.
 
