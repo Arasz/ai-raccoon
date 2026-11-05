@@ -78,13 +78,17 @@ internal static class CliFailureErrorCode
             _ => ErrorCode.Usage.RequestRejected
         };
 
-    /// <summary>A refused decision call: an unusable project id, a value the service rejected, or a conflict or missing record.</summary>
+    /// <summary>
+    ///     A refused decision call: an unusable project id, a value the service rejected, a conflict or missing record, or a
+    ///     404 with no kind, which only a server without decision routes answers.
+    /// </summary>
     private static int ForDecisionRefusal(string kind) =>
         kind switch
         {
             "project-not-registered" or "project-retired" or "project-not-found" => ErrorCode.Usage.ProjectUnknown,
             "model-migration-in-progress" => ErrorCode.Server.MigrationRefused,
             "invalid-argument" => ErrorCode.Usage.InvalidValue,
+            "http-404" => ErrorCode.Server.EndpointMissing,
             _ => ErrorCode.Usage.RequestRejected
         };
 
