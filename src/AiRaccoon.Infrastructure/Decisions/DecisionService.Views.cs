@@ -108,14 +108,16 @@ public sealed partial class DecisionService
 
             var live = snapshot.Edges.Where(edge => edge.RemovedRevision is null
                 && (request.IncludeContext || edge.Kind is DecisionEdgeKind.DependsOn or DecisionEdgeKind.Supersedes)).ToArray();
+            var touching = Touching(live);
             var visited = new HashSet<string>(StringComparer.Ordinal) { request.DecisionId };
             var pending = new Queue<(string Id, int Depth)>();
             pending.Enqueue((request.DecisionId, 0));
             var reasons = new HashSet<string>(StringComparer.Ordinal);
             while (pending.TryDequeue(out var node))
             {
-                foreach (var edge in live)
+                foreach (var index in touching.GetValueOrDefault(node.Id, []))
                 {
+                    var edge = live[index];
                     string? next = null;
                     if ((request.Direction is DecisionDirection.Upstream or DecisionDirection.Both || edge.Kind == DecisionEdgeKind.Contradicts) && edge.SourceId == node.Id)
                     {
@@ -159,6 +161,32 @@ public sealed partial class DecisionService
                     reasons.Count > 0, reasons.Order(StringComparer.Ordinal).ToArray(), unknown ? null : 0,
                     unknown ? null : Math.Max(0, contained.Length - GraphEdgeLimit)));
         }, cancellationToken);
+    }
+
+    /// <summary>The positions in <paramref name="edges" /> of each decision's edges, in ascending order, so a walk visits them in live-edge order.</summary>
+    private static Dictionary<string, List<int>> Touching(IReadOnlyList<DecisionEdge> edges)
+    {
+        var touching = new Dictionary<string, List<int>>(StringComparer.Ordinal);
+        for (var index = 0; index < edges.Count; index++)
+        {
+            Add(edges[index].SourceId, index);
+            if (edges[index].TargetId != edges[index].SourceId)
+            {
+                Add(edges[index].TargetId, index);
+            }
+        }
+
+        return touching;
+
+        void Add(string decisionId, int index)
+        {
+            if (!touching.TryGetValue(decisionId, out var positions))
+            {
+                touching[decisionId] = positions = [];
+            }
+
+            positions.Add(index);
+        }
     }
 
     private sealed record Snapshot(long Revision, IReadOnlyList<DecisionTask> Tasks, IReadOnlyList<DecisionRecord> Records,
