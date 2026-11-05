@@ -138,7 +138,7 @@
                 "kind": "test",
                 "summary": "DecisionServiceTests 21/21 and RetrySurfaceGateTests 2/2; 12 targeted production mutations each turned their named check red, restored build green.",
                 "ref": "docs/plans/decision-graph/implementation-evidence.md",
-                "recorded_at": "2026-11-04T00:00:00Z"
+                "recorded_at": "2026-11-04T11:33:25Z"
               }
             ]
           }
@@ -179,7 +179,7 @@
                 "kind": "test",
                 "summary": "DecisionApiTests 20/20, DecisionEndpointTests 23/23, DecisionServiceTests 23/23, tool-surface contract classes and source gates green; 13 targeted mutations each turned their named check red.",
                 "ref": "docs/plans/decision-graph/implementation-evidence.md",
-                "recorded_at": "2026-11-04T00:00:00Z"
+                "recorded_at": "2026-11-04T15:41:54Z"
               }
             ]
           }
