@@ -47,9 +47,8 @@ internal sealed class DecisionCommands
         var (sessionId, requestId) = await RetryIdsAsync(parseResult, streams, "registration");
         var request = new RegisterTaskRequest(parseResult.GetValue<string>("--task-id")!, sessionId, requestId,
             parseResult.GetValue<string>("--title")!, parseResult.GetValue<string?>("--source-ref"));
-        using var response = await _client.RegisterTaskAsync(ProjectId(parseResult), request, cancellationToken);
-        await WriteJsonAsync(streams.Output, json => Data(response).WriteTo(json), cancellationToken);
-        return ErrorCode.Ok.Success;
+        return await SendWriteAsync(streams, "registration", sessionId, requestId,
+            () => _client.RegisterTaskAsync(ProjectId(parseResult), request, cancellationToken), cancellationToken);
     }
 
     public async Task<int> RecordAsync(ParseResult parseResult, StandardStreams streams, CancellationToken cancellationToken)
@@ -78,9 +77,28 @@ internal sealed class DecisionCommands
         body["taskId"] = parseResult.GetValue<string>("--task-id");
         body["sessionId"] = sessionId;
         body["requestId"] = requestId;
-        using var response = await _client.RecordAsync(ProjectId(parseResult), body, cancellationToken);
-        await WriteJsonAsync(streams.Output, json => Data(response).WriteTo(json), cancellationToken);
-        return ErrorCode.Ok.Success;
+        return await SendWriteAsync(streams, "record", sessionId, requestId,
+            () => _client.RecordAsync(ProjectId(parseResult), body, cancellationToken), cancellationToken);
+    }
+
+    /// <summary>
+    ///     Sends a write and prints its answer. Ctrl-C from the send on may land after the server committed it, so it
+    ///     reports the outcome as unknown with the ids to replay, not the shared "changed nothing".
+    /// </summary>
+    private static async Task<int> SendWriteAsync(StandardStreams streams, string what, string sessionId, string requestId,
+        Func<Task<JsonDocument>> send, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await send();
+            await WriteJsonAsync(streams.Output, json => Data(response).WriteTo(json), cancellationToken);
+            return ErrorCode.Ok.Success;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await streams.WriteErrorLineAsync($"ai-raccoon: cancelled after the {what} was sent; {DecisionHttpClient.Replay(sessionId, requestId)}");
+            return ErrorCode.Ok.SIGC;
+        }
     }
 
     public async Task<int> GetAsync(ParseResult parseResult, StandardStreams streams, CancellationToken cancellationToken)
