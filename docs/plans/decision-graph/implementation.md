@@ -1,6 +1,6 @@
 # Decision graph implementation plan
 
-Status: implementing in PR #923. Model, storage/schema v23, service, adapters, CLI and the graph-aware repair, deletion, backup and rekey checks of the migration step are complete. Semantica import is deferred to #924. Release remains pending. See implementation-evidence.md for executed checks.
+Status: shipped in 2.4.0 by PR #923. Every step is complete: model, storage/schema v23, service, adapters, CLI, the graph-aware repair, deletion, backup and rekey checks of the migration step, and the release step's cross-surface restart and access-mode test, docs and rollback. Semantica import is deferred to #924, and the agent framework's switch to the native tools is a separate PR after acceptance. See implementation-evidence.md for executed checks.
 
 ## Deliverables and traceability
 

@@ -46,6 +46,7 @@ The full walkthrough, including indexing your code, is [Get started with AiRacco
 
 ## What's new
 
+- Agents record project decisions with versions, status and typed links, and `ai-raccoon decisions export|preview` reads them back by task (2.4.0). [Release notes](docs/changelog/2.4.0-native-decision-graph.md)
 - The log names where ONNX Runtime placed each model's nodes, per execution provider, instead of a generic warning (2.3.0). [Release notes](docs/changelog/2.3.0-onnx-node-placement-log.md)
 - Query hits name their entry kind, so a hit's `entryKind` passes straight into `get_entry` (2.2.0). [Release notes](docs/changelog/2.2.0-entry-kind-on-query-hits.md)
 - **Choose Memory, File, or Code in a query (2.1.0).** `query entryType=memory` searches agent notes and transcripts; `file` selects mirrored documents and `code` selects source. Omit the parameter to search everything. `get_entry` now requires one type, and TTL changes apply only to Memory. [Upgrade notes](docs/changelog/2.1.0-typed-search-memory-ttl.md)
