@@ -1,6 +1,6 @@
 # Native project decision graph
 
-Reviewed design for AiRaccoon to own decision registration and graph retrieval. Implementation is in progress in PR #923. The domain model and encrypted SQLite store/schema v23 are implemented and independently reviewed. The service is in progress; public adapters, CLI, import and release remain pending.
+Reviewed design for AiRaccoon to own decision registration and graph retrieval. Model, storage (schema v23), service, adapters, CLI and migration are complete in PR #923, Semantica import is deferred to #924, and the release step (2.4.0) is in progress until its CI passes.
 
 Read in order:
 

@@ -210,3 +210,22 @@ The independent review-tests pass at 252eff6a found that `ProjectIdsRepairJob.Ru
 `Census_pins_a_registered_project_that_owns_only_decisions_instead_of_retiring_it` is renamed `Census_keeps_a_registered_project_that_owns_only_decisions_instead_of_retiring_it`: its body asserts the project is not retired, not that it is pinned.
 
 An id held back only through its registered name (the alias key is the name, the pinned id is the guid) is not filtered, because the gate is asked for the guid, which the alias does not cover.
+
+## Release acceptance
+
+`DecisionIntegrationTests.DecisionIntegration_RestartAndAccessModes` runs one theory row per access mode (`ro`, `rw`, `full`). It works on a real web host serving HTTP and MCP. It registers a task over MCP, records one decision over HTTP and one over MCP, links them over MCP, then registers a second task and records into it through the CLI. Next it sets the mode, takes a full export, stops the host and starts a second host on the same data root. On that host, the full export must equal the pre-restart one (revision included). `get_decision`, `query_decisions` and `get_decision_graph` must return the same data over HTTP and MCP, and also over the CLI for get and query. CLI `export` and `preview --format json` with no selector, `--tasks 2` and `--all` must match the backend's export and preview. Last, one task registration is sent over each of HTTP, MCP and the CLI. In `ro` all three are refused (`access-denied`, `access-denied`, exit 17) and the revision is unchanged. In `rw` and `full` all three succeed and the revision moves by 3.
+
+The test found a real defect on its first run: `link_decisions` over MCP refused `kind=depends_on` (`invalid-argument: The JSON value could not be converted to DecisionEdgeKind`). The SDK's enum converter outranked the decision enums' snake_case converter attributes. `DecisionTools` now registers with serializer options that put the decision converters first (87ca9662).
+
+| Mutation | Rebuilt | Result |
+| --- | --- | --- |
+| MCP `register_decision_task` requires `AccessRequirement.Read` instead of `Write` (`DecisionTools.cs`) | yes, 0 errors | 1/3 red (`ro`: MCP write was accepted) |
+| HTTP `get_decision` requires `Write` instead of `Read` (`DecisionEndpoint.cs`) | yes | 0/3 before the three-adapter read check (f5ff4729), 1/3 red after it (`ro`: HTTP read refused as `access-denied`) |
+| Every reopen of a current bank deletes `decision_edges` (`MemorySchema.EnsureAsync`) | yes | 3/3 red (export differs across the restart) |
+| `DELETE FROM decision_edges` appended to the decision DDL | yes | 0/3: the DDL runs only on a digest mismatch, which does not happen on a same-binary restart; recorded as not a restart mutation |
+
+Each mutation was reverted and the solution rebuilt before the next; the class was 3/3 green after each restore.
+
+Docs: [how-to](../../how-to/record-project-decisions.md) (registration, recording, linking, CLI export and preview, access modes, limits, Semantica, upgrade and rollback), ADR-0142 status and "What shipped in 2.4.0", ADR index row, how-to index, `VERSION` 2.4.0, [changelog](../../changelog/2.4.0-native-decision-graph.md), changelog index and the README What's new line. Rollback restores the 2.3.0 binary together with a data-root copy taken before upgrade: `MemorySchema.CurrentVersion` is 23, and 2.3.0 (`CurrentVersion` 22) refuses the bank under ADR-0019's forward-version guard.
+
+Final local run after the last change: the solution built with 0 warnings, and 32 classes passed 360/360. These were every `Decision*` class, `DecisionCliTests`, `DecisionEndpointTests`, `DecisionCommandTreeTests`, `ProjectIdsRepairJobTests`, `ProjectIdAliasMapTests`, the source gates (`NoHandRolledCryptoTests`, `NoConfigureAwaitTests`, `LoggerMessageEventIdTests`, `RetrySurfaceGateTests`, `LayeringRulesTests`, `ProjectIdAliasDefaultCollectionGateTests`), the docs gates (`AdrIndexTests`, `MergeConflictMarkerTests`, `FirstRunMemoryEngineTests`, `ObservabilityCountersCommandDocsTests`, `HowToExitTableTests`), `VersionContractTests`, `McpToolContractTests` and `ToolInventoryTests`. CI on the release head was still running when this was written.

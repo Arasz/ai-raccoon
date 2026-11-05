@@ -1,6 +1,6 @@
 # Decision graph data model
 
-Status: reviewed contract. The domain model and SQLite schema/store are implemented in draft PR #923; service and public surfaces remain in progress or pending. Read after [research](research.md), before the [API](api.md).
+Status: reviewed contract. Model, storage (schema v23), service, adapters, CLI and migration are complete in PR #923, Semantica import is deferred to #924, and the release step (2.4.0) is in progress until its CI passes. Read after [research](research.md), before the [API](api.md).
 
 ## Ownership and identity
 
