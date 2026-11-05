@@ -13,7 +13,8 @@ namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
 ///     `decisions task register | record | get | query | export | preview` over the server's decision routes. Machine output
-///     goes to stdout, diagnostics to stderr; an export is printed or published only once it is complete.
+///     goes to stdout, diagnostics to stderr. An export is read in full before it is written; stdout is then written as it
+///     renders and can hold partial output if writing fails, while --output publishes the file only once it is complete.
 /// </summary>
 internal sealed class DecisionCommands
 {
@@ -285,7 +286,10 @@ internal sealed class DecisionCommands
         }
     }
 
-    /// <summary>Renders into an owner-only file beside <paramref name="destination" /> and renames it into place only once complete.</summary>
+    /// <summary>
+    ///     Renders into a file beside <paramref name="destination" /> (owner-only on POSIX; Windows applies the directory's
+    ///     inherited permissions) and renames it into place only once complete.
+    /// </summary>
     internal static async Task PublishAsync(string destination, bool force, Func<TextWriter, Task> render, CancellationToken cancellationToken)
     {
         var directory = Path.GetDirectoryName(destination)!;

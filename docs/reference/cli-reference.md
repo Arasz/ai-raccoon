@@ -93,9 +93,11 @@ a terminal interprets it, and source URIs are shown but never linked or fetched.
 plaintext even when the bank is encrypted.
 
 Without `--output` the export goes to stdout, and only after the whole answer was read; a
-connection that ends early prints nothing and exits nonzero, so check the exit status. With
-`--output` the CLI writes an owner-only file (`0600` on POSIX) next to the destination and renames
-it into place only when it is complete. An interrupted export leaves an existing destination
+connection that ends early prints nothing and exits nonzero. Printing itself streams, so a failure
+while writing (a closed pipe, Ctrl-C) can leave partial output on stdout: check the exit status.
+With `--output` the CLI writes a file next to the destination and renames it into place only when
+it is complete, so the publish is atomic. On POSIX that file is owner-only (`0600`); on Windows it
+takes the permissions the destination directory gives new files. An interrupted export leaves an existing destination
 untouched and removes its staging file. An existing destination is refused (exit 10) unless
 `--force` is given.
 
