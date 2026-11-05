@@ -328,9 +328,15 @@ public class SettingsCommandTreeTests
                 watch: new WatchCommands(new FakeWatchStore()),
                 extract: new ExtractCommands(new EmptyOrphanQueueStore()),
                 noiseEntries: new NoiseEntriesCommands(NoOpNoiseEntryStore.Instance),
-                projectIds: new ProjectIdCommands(Substitute.For<IProjectDirectory>()));
+                projectIds: new ProjectIdCommands(Substitute.For<IProjectDirectory>()),
+                decisions: new DecisionCommands(new FakeDecisionClient()));
 
-            await CliRun.RunAsync([.. path.Split(' '), .. RequiredArguments.GetValueOrDefault(path, [])], commands);
+            var (exit, _, err) = await CliRun.RunAsync([.. path.Split(' '), .. RequiredArguments.GetValueOrDefault(path, [])], commands);
+
+            if (path.StartsWith("decisions ", StringComparison.Ordinal))
+            {
+                exit.ShouldNotBe(ErrorCode.Internal.Unexpected, $"'{path}' did not run its handler to a named outcome: {err}");
+            }
 
             store.Settings.ShouldBeEmpty($"'{path}' wrote configuration outside settings");
             store.Configured.ShouldBeNull($"'{path}' reconfigured the embedder outside settings");
