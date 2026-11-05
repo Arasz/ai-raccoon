@@ -121,6 +121,27 @@ public sealed class DecisionApiTests : IAsyncLifetime
         }
     }
 
+    /// <summary>An argument the operation does not declare is refused on both adapters instead of being dropped.</summary>
+    [RetryTheory]
+    [MemberData(nameof(DecisionOperations.Tools), MemberType = typeof(DecisionOperations))]
+    public async Task UnknownArgument_IsRefusedOnBothAdapters(string tool)
+    {
+        var template = DecisionOperations.Named(tool);
+        var operation = template with { Args = new Dictionary<string, object?>(template.Args) { ["maekr"] = "someone" } };
+
+        var mcp = await _host.McpAsync(_mcp, tool, operation.McpArgs(_project), Ct);
+
+        mcp.Kind.ShouldBe("invalid-argument", mcp.Body);
+        mcp.Body.ShouldContain("maekr");
+        if (operation.Method == "POST")
+        {
+            var http = await _host.HttpAsync(operation, _project, Ct);
+            http.Status.ShouldBe(400, http.Body);
+            http.Kind.ShouldBe("invalid-argument", http.Body);
+            http.Body.ShouldContain("maekr");
+        }
+    }
+
     /// <summary>The service sees the gate's canonical id through MCP too.</summary>
     [RetryFact]
     public async Task NonCanonicalId_ReachesTheServiceCanonical()

@@ -1,9 +1,11 @@
 using System.ComponentModel;
+using System.Reflection;
 using System.Text.Json;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Decisions;
 using AiRaccoon.Decisions;
 using ModelContextProtocol;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 namespace AiRaccoon.Tools;
@@ -52,6 +54,36 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         .Select(method => method.GetCustomAttributes(typeof(McpServerToolAttribute), false).OfType<McpServerToolAttribute>().SingleOrDefault()?.Name)
         .OfType<string>()
         .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>Each decision tool's argument names, read from its method's parameters.</summary>
+    internal static IReadOnlyDictionary<string, IReadOnlySet<string>> Arguments { get; } = typeof(DecisionTools).GetMethods()
+        .Select(method => (Method: method, method.GetCustomAttribute<McpServerToolAttribute>(false)?.Name))
+        .Where(tool => tool.Name is not null)
+        .ToDictionary(
+            tool => tool.Name!,
+            tool => (IReadOnlySet<string>)tool.Method.GetParameters()
+                .Where(parameter => parameter.ParameterType != typeof(CancellationToken))
+                .Select(parameter => parameter.Name!)
+                .ToHashSet(StringComparer.Ordinal),
+            StringComparer.Ordinal);
+
+    /// <summary>
+    ///     The CallToolFilter that refuses a decision tool call naming an argument the tool does not take, as the
+    ///     HTTP routes refuse an unknown body field, instead of letting the SDK drop it.
+    /// </summary>
+    internal static McpRequestHandler<CallToolRequestParams, CallToolResult> UnknownArgumentFilter(
+        McpRequestHandler<CallToolRequestParams, CallToolResult> next) =>
+        (request, cancellationToken) =>
+        {
+            if (request.Params is { Arguments: { } arguments } call
+                && Arguments.TryGetValue(call.Name, out var declared)
+                && arguments.Keys.FirstOrDefault(name => !declared.Contains(name)) is { } unknown)
+            {
+                throw new ArgumentException($"{call.Name} does not take '{unknown}'; its arguments are {string.Join(", ", declared)}.");
+            }
+
+            return next(request, cancellationToken);
+        };
 
     [McpServerTool(Name = TnRegisterDecisionTask, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]

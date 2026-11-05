@@ -52,7 +52,7 @@ proxy; full servers come only from `serve`).
 | `project id get --name <name>` | Prints the one id registered under an exact, case-sensitive name, with no prefix. Exits 18 when none matches and 19 when several do, listing each id on stderr with stdout empty |
 | `project id check <id>` | Prints `known <id>` (the id it resolves to) and exits 0, or prints `unknown <id>` / `retired <id>` and exits 18. Accepts any non-blank id, guid or raw text |
 | `decisions task register --project-id <id> --task-id <task> --title <text> [--source-ref <uri>] [--session-id <id>] [--request-id <id>]` | Registers a decision task through the server, like `register_decision_task`; see [decisions](#decisions) below |
-| `decisions record --project-id <id> --task-id <task> --input <path> [--session-id <id>] [--request-id <id>]` | Records one decision from a JSON file under a registered task, like `record_decision` |
+| `decisions record --project-id <id> --task-id <task> --input <path> [--session-id <id>] [--request-id <id>]` | Records one decision from a JSON file under a registered task, like `record_decision`. A field `record_decision` does not take is refused (exit 10), not dropped |
 | `decisions get <decision> --project-id <id> [--history] [--format json\|markdown]` | Prints one decision, its current version or every version, like `get_decision` |
 | `decisions query --project-id <id> [--query <text>] [--category <category>]` | Prints current decision summaries matching literal text and a category, like `query_decisions` |
 | `decisions export --project-id <id> [--tasks <n> \| --all \| --task-id <task>...] [--format json\|markdown] [--output <path>] [--force]` | Writes the complete selected decision snapshot, uncapped, as lossless JSON or as Markdown for reading |
