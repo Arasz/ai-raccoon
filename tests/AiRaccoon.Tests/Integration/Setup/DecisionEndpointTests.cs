@@ -25,6 +25,10 @@ public sealed class DecisionEndpointTests : IAsyncLifetime
 
     public async ValueTask DisposeAsync() => await _host.DisposeAsync();
 
+    /// <summary>The running host reads AIRACCOON_DB_PASSPHRASE, so it holds the env gate until it stops (docs/adr/0066).</summary>
+    [RetryFact]
+    public void RunningHost_HoldsTheEnvGate() => TestData.EnvVarGate.CurrentCount.ShouldBe(0);
+
     [RetryFact]
     public async Task RecordAndGet_UseTheSameProjectAndExposeConflictsAndValidation()
     {
