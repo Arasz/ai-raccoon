@@ -39,6 +39,7 @@
         <Content Include="Unit\Retrieval\assets\manifest.json" CopyToOutputDirectory="PreserveNewest"/>
         <Content Include="Resources/docs-memory.db" CopyToOutputDirectory="PreserveNewest"/>
         <Content Include="Resources/gate-query-vectors.json" CopyToOutputDirectory="PreserveNewest"/>
+        <Content Include="Resources/Semantica/*.json" CopyToOutputDirectory="PreserveNewest"/>
     </ItemGroup>
 
     <ItemGroup>
