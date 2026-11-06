@@ -2,7 +2,7 @@
 
 Date: 2026-10-07
 
-Status: Accepted
+Status: Accepted. [ADR-0143](0143-watcher-overflow-is-one-debounced-rescan.md) replaces the overflow handling described here and makes the size a setting; 64 KB stays the default.
 
 ## Context
 

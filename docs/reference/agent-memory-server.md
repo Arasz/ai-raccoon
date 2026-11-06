@@ -414,6 +414,13 @@ config channel (see [Command-line options](#command-line-options)).
   digest that failed, a watch stopped after five retries). Catch-up runs on restart, once every 5
   minutes for every watch that has not stopped, and right away when a watch's first digest
   succeeds after a failure ([ADR-0121](../adr/0121-restart-catch-up-compares-each-file-with-its-own-fingerprint.md)).
+- **Buffer overflows:** a burst that fills a watcher's event buffer drops events. The overflows of
+  one watch collapse into one warning (event 299, with the count) and one changed-files scan after
+  a fixed 2-second window. If that watch is scanning, the rescan waits for the scan to end; a stopped
+  watch gets none. The buffer size is the global setting `watch.buffer-size.global`, in bytes: 65536 by
+  default, clamped to 4096-65536, read when a watcher starts, and used only on Windows. No
+  `settings watch` command writes it; it goes through the settings endpoint
+  ([ADR-0143](../adr/0143-watcher-overflow-is-one-debounced-rescan.md)).
 - **`ai-raccoon.ignore`:** an optional gitignore-subset exclude file at the root of a watched
   directory (or a `ingest_directory` call's root) — `<root>/ai-raccoon.ignore`, one file
   per root, never discovered in subdirectories; a `ingest_directory` root without its own
