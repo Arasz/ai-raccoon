@@ -46,6 +46,7 @@ The full walkthrough, including indexing your code, is [Get started with AiRacco
 
 ## What's new
 
+- A watcher buffer overflow logs one warning and rescans within seconds, and `watch.buffer-size.global` sets the buffer size (2.5.0). [Release notes](docs/changelog/2.5.0-watcher-overflow-rescan.md)
 - Agents record project decisions with versions, status and typed links, and `ai-raccoon decisions export|preview` reads them back by task (2.4.0). [Release notes](docs/changelog/2.4.0-native-decision-graph.md)
 - The log names where ONNX Runtime placed each model's nodes, per execution provider, instead of a generic warning (2.3.0). [Release notes](docs/changelog/2.3.0-onnx-node-placement-log.md)
 - Query hits name their entry kind, so a hit's `entryKind` passes straight into `get_entry` (2.2.0). [Release notes](docs/changelog/2.2.0-entry-kind-on-query-hits.md)
