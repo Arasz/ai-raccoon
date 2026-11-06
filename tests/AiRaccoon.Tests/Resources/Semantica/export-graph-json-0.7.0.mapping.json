@@ -1,0 +1,82 @@
+{
+  "sourceNamespace": "semantica-main",
+  "legacyTaskId": "semantica-legacy",
+  "edgeKinds": {
+    "depends_on": "depends_on",
+    "supports": "supports",
+    "contradicts": "contradicts"
+  },
+  "records": {
+    "db05c33e-6e9e-458c-b6be-d9f3be2c51eb": {
+      "externalId": "db05c33e-6e9e-458c-b6be-d9f3be2c51eb",
+      "status": "accepted"
+    },
+    "category_storage": {
+      "externalId": "category_storage"
+    },
+    "maker_mcp_client": {
+      "externalId": "maker_mcp_client"
+    },
+    "120d7c0a-22c3-4b20-b6d5-b1994452d380": {
+      "externalId": "120d7c0a-22c3-4b20-b6d5-b1994452d380",
+      "status": "accepted"
+    },
+    "category_transport": {
+      "externalId": "category_transport"
+    },
+    "33da32fb-4d6e-49e0-9dc2-00172691389a": {
+      "externalId": "33da32fb-4d6e-49e0-9dc2-00172691389a",
+      "status": "rejected",
+      "taskId": "storage-task"
+    },
+    "c1d5977e-64f5-4ef8-b067-93bc7fe896f6": {
+      "externalId": "c1d5977e-64f5-4ef8-b067-93bc7fe896f6",
+      "status": "proposed"
+    },
+    "category_release": {
+      "externalId": "category_release"
+    },
+    "person-1": {
+      "externalId": "person-1"
+    },
+    "e513693a-1279-5a30-86ae-bf8e3c391803": {
+      "externalId": "e513693a-1279-5a30-86ae-bf8e3c391803"
+    },
+    "8e58cba1-9e84-516c-955a-0f6a014413a8": {
+      "externalId": "8e58cba1-9e84-516c-955a-0f6a014413a8"
+    },
+    "b87073b2-c959-5030-a7c8-88ee39a02b8f": {
+      "externalId": "b87073b2-c959-5030-a7c8-88ee39a02b8f"
+    },
+    "9ef56fdf-75d6-5bba-a816-b833bdd11593": {
+      "externalId": "9ef56fdf-75d6-5bba-a816-b833bdd11593"
+    },
+    "1a052ad3-b6ef-5822-b731-ac123505c74f": {
+      "externalId": "1a052ad3-b6ef-5822-b731-ac123505c74f"
+    },
+    "5d6ae8ed-9742-5f30-8625-68245257fd8b": {
+      "externalId": "5d6ae8ed-9742-5f30-8625-68245257fd8b"
+    },
+    "7588fd89-781d-5de4-bcb4-5c5809534a0f": {
+      "externalId": "7588fd89-781d-5de4-bcb4-5c5809534a0f"
+    },
+    "16b0bdec-6be0-5789-8455-7fe4945eab38": {
+      "externalId": "16b0bdec-6be0-5789-8455-7fe4945eab38"
+    },
+    "c5755547-d909-50d3-86dd-600728885407": {
+      "externalId": "c5755547-d909-50d3-86dd-600728885407"
+    },
+    "662e7561-c0dc-5cc0-80ff-c8aef91ef8ec": {
+      "externalId": "662e7561-c0dc-5cc0-80ff-c8aef91ef8ec"
+    },
+    "f263a35f-5b6f-5747-86d9-34a7d3637b45": {
+      "externalId": "f263a35f-5b6f-5747-86d9-34a7d3637b45"
+    },
+    "bb8831a1-e0fa-55c8-a585-f17a28eb988d": {
+      "externalId": "bb8831a1-e0fa-55c8-a585-f17a28eb988d"
+    },
+    "25487265-22b1-5bef-a6f0-b6b78b701cee": {
+      "externalId": "25487265-22b1-5bef-a6f0-b6b78b701cee"
+    }
+  }
+}

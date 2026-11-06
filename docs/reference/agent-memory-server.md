@@ -1247,6 +1247,8 @@ source of truth; a test cross-checks this table against it.
 | `decision-invalid-transition` | The decision status change, amend or supersession is not allowed from the current state. HTTP 409 | `decision-invalid-transition: Cannot transition from Proposed to Deprecated.` |
 | `decision-invalid-link` | The edge would link a decision to itself or close a `depends_on` or `supersedes` cycle. HTTP 409 | `decision-invalid-link: <detail>` |
 | `decision-export-too-large` | `export_decisions` over MCP would return more than 1 MiB; nothing is returned. HTTP export is not capped | `decision-export-too-large: The export is <n> bytes, over the 1048576-byte MCP limit, so nothing was returned. Run 'ai-raccoon decisions export --project-id <id>' with the same selector to stream it in full.` |
+| `decision-import-too-large` | A Semantica import file is over 10 MiB, or the request body hit the server limit. HTTP 413. Not an MCP tool refusal | `decision-import-too-large: <detail>` |
+| `decision-import-blocked` | Import apply refused because the preview reports blockers. Run the preview and fix the mapping. HTTP 409. Not an MCP tool refusal | `decision-import-blocked: <n> blockers; run the preview.` |
 
 Anything `ToolRefusals` does not recognize — a remote embedding provider called without
 a key, or any other unmapped exception — is a genuine failure, not a refusal, and its message
