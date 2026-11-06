@@ -9,6 +9,8 @@ public static class DecisionErrorKinds
     public const string InvalidTransition = "decision-invalid-transition";
     public const string InvalidLink = "decision-invalid-link";
     public const string ExportTooLarge = "decision-export-too-large";
+    public const string ImportTooLarge = "decision-import-too-large";
+    public const string ImportBlocked = "decision-import-blocked";
 
     /// <summary>Every kind above, read from the constants so the list cannot drift from them.</summary>
     public static IReadOnlyList<string> All { get; } =

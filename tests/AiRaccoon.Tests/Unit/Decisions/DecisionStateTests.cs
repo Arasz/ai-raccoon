@@ -64,4 +64,13 @@ public sealed class DecisionStateTests
         Should.Throw<ArgumentException>(() => new DecisionState((DecisionStatus)99));
         Should.Throw<InvalidOperationException>(() => new DecisionState(DecisionStatus.Accepted).TransitionTo((DecisionStatus)99));
     }
+
+    [Theory]
+    [InlineData(DecisionStatus.Proposed, true)]
+    [InlineData(DecisionStatus.Accepted, true)]
+    [InlineData(DecisionStatus.Rejected, true)]
+    [InlineData(DecisionStatus.Deprecated, true)]
+    [InlineData(DecisionStatus.Superseded, false)]
+    public void Importable_AllowsOnlyMappableStatuses(DecisionStatus status, bool expected) =>
+        DecisionState.Importable(status).ShouldBe(expected);
 }
