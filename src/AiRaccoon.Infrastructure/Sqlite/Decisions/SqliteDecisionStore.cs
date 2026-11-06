@@ -99,14 +99,11 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
 
         public async Task<IReadOnlyList<DecisionSearchHit>> SearchAsync(string query, CancellationToken cancellationToken)
         {
-            DecisionText.Required(query, 2000, nameof(query));
-            var terms = Regex.Matches(query, @"[\p{L}\p{N}_]+").Select(match => match.Value).ToArray();
-            if (terms.Length == 0)
+            if (Match(query) is not { } match)
             {
                 return [];
             }
 
-            var match = MatchTerms(terms, 0, terms.Length);
             return (await Rows("""
                 SELECT s.decision_id,bm25(decision_fts) AS raw_rank FROM decision_fts
                 JOIN decision_search s ON s.id=decision_fts.rowid
@@ -114,6 +111,67 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
                 ORDER BY raw_rank,s.decision_id
                 """, new { match }, cancellationToken))
                 .Select(row => new DecisionSearchHit(Text(row, "decision_id"), Convert.ToDouble(row["raw_rank"], CultureInfo.InvariantCulture))).ToArray();
+        }
+
+        public async Task<DecisionCurrentPage> FindCurrentAsync(DecisionCurrentFilter filter, CancellationToken cancellationToken)
+        {
+            Guard.IsNotNull(filter);
+            Guard.IsGreaterThan(filter.Take, 0, nameof(filter.Take));
+            string? match = null;
+            if (filter.Search is not null && (match = Match(filter.Search)) is null)
+            {
+                return new DecisionCurrentPage([], 0);
+            }
+
+            var hits = match is null
+                ? string.Empty
+                : """
+                  WITH hits AS MATERIALIZED (SELECT s.decision_id,bm25(decision_fts) AS raw_rank FROM decision_fts
+                      JOIN decision_search s ON s.id=decision_fts.rowid WHERE decision_fts MATCH @match AND s.project_id=@projectId)
+                  """;
+            var from = "FROM decision_versions v JOIN decisions d ON d.project_id=v.project_id AND d.decision_id=v.decision_id AND d.current_version=v.version"
+                       + (match is null ? string.Empty : " JOIN hits h ON h.decision_id=v.decision_id");
+            var where = new List<string> { "v.project_id=@projectId" };
+            if (filter.TaskIds is not null)
+            {
+                where.Add("""
+                    v.decision_id IN (
+                        SELECT decision_id FROM decisions WHERE project_id=@projectId AND origin_task_id IN (SELECT value FROM json_each(@taskIds))
+                        UNION SELECT decision_id FROM decision_versions WHERE project_id=@projectId AND task_id IN (SELECT value FROM json_each(@taskIds))
+                        UNION SELECT source_id FROM decision_edges WHERE project_id=@projectId
+                            AND (task_id IN (SELECT value FROM json_each(@taskIds)) OR removal_task_id IN (SELECT value FROM json_each(@taskIds))))
+                    """);
+            }
+
+            if (filter.Category is not null)
+            {
+                where.Add("v.category=@category");
+            }
+
+            if (filter.Statuses is not null)
+            {
+                where.Add("v.status IN (SELECT value FROM json_each(@statuses))");
+            }
+
+            if (filter.ActiveAt is not null)
+            {
+                where.Add("(v.valid_from IS NULL OR v.valid_from<=@activeAt) AND (v.valid_until IS NULL OR v.valid_until>@activeAt)");
+            }
+
+            var args = new
+            {
+                match, category = filter.Category, afterId = filter.AfterId, take = filter.Take, activeAt = Iso(filter.ActiveAt),
+                taskIds = filter.TaskIds is null ? null : JsonSerializer.Serialize(filter.TaskIds),
+                statuses = filter.Statuses is null ? null : JsonSerializer.Serialize(filter.Statuses.Select(status => status.ToString()))
+            };
+            var condition = string.Join(" AND ", where);
+            var total = await connection.ExecuteScalarAsync<int>(Command($"{hits} SELECT COUNT(*) {from} WHERE {condition}", args, cancellationToken));
+            var after = filter.AfterId is null ? string.Empty : " AND v.decision_id>@afterId";
+            var order = filter.ByRank ? "h.raw_rank,v.decision_id" : "v.decision_id";
+            var rank = match is null ? string.Empty : ",h.raw_rank";
+            var rows = await Rows($"{hits} SELECT v.*{rank} {from} WHERE {condition}{after} ORDER BY {order} LIMIT @take", args, cancellationToken);
+            return new DecisionCurrentPage(rows.Select(row => new DecisionCurrentHit(Version(row),
+                match is null ? null : Convert.ToDouble(row["raw_rank"], CultureInfo.InvariantCulture))).ToArray(), total);
         }
 
         public async Task<IReadOnlyList<DecisionEdge>> EdgesAsync(CancellationToken cancellationToken) =>
@@ -200,6 +258,14 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
             Optional(row, "removed_revision") is null ? null : Number(row, "removed_revision"), OptionalTime(row, "removed_at"), Optional(row, "removal_task_id"), Optional(row, "removal_reason"), Optional(row, "removal_actor"), Optional(row, "removal_session_id"));
         private static string Text(IDictionary<string, object> row, string key) => Convert.ToString(row[key], CultureInfo.InvariantCulture)!;
         private static string? Optional(IDictionary<string, object> row, string key) => row[key] is null or DBNull ? null : Text(row, key);
+        /// <summary>The FTS match expression ANDing every word of <paramref name="query" />, or null when it has none.</summary>
+        private static string? Match(string query)
+        {
+            DecisionText.Required(query, 2000, nameof(query));
+            var terms = Regex.Matches(query, @"[\p{L}\p{N}_]+").Select(match => match.Value).ToArray();
+            return terms.Length == 0 ? null : MatchTerms(terms, 0, terms.Length);
+        }
+
         private static string MatchTerms(string[] terms, int start, int count)
         {
             if (count == 1)

@@ -270,6 +270,7 @@ public sealed partial class DecisionServiceTests
         public Task<IReadOnlyList<DecisionVersion>> CurrentVersionsAsync(CancellationToken cancellationToken) => inner.CurrentVersionsAsync(cancellationToken);
         public Task<IReadOnlyList<DecisionVersion>> AllVersionsAsync(CancellationToken cancellationToken) => inner.AllVersionsAsync(cancellationToken);
         public Task<IReadOnlyList<DecisionSearchHit>> SearchAsync(string query, CancellationToken cancellationToken) => inner.SearchAsync(query, cancellationToken);
+        public Task<DecisionCurrentPage> FindCurrentAsync(DecisionCurrentFilter filter, CancellationToken cancellationToken) => inner.FindCurrentAsync(filter, cancellationToken);
         public Task<IReadOnlyList<DecisionEdge>> EdgesAsync(CancellationToken cancellationToken) => inner.EdgesAsync(cancellationToken);
         public Task<DecisionReceipt?> ReceiptAsync(string requestId, CancellationToken cancellationToken) => inner.ReceiptAsync(requestId, cancellationToken);
         public Task<IReadOnlyList<DecisionImport>> ImportsAsync(CancellationToken cancellationToken) => inner.ImportsAsync(cancellationToken);

@@ -51,19 +51,14 @@ public sealed partial class DecisionService
         var selector = request.Selector ?? new DecisionTaskSelector(all: true);
         return Store.ReadAsync(projectId, async (reader, ct) =>
         {
-            var snapshot = await LoadAsync(reader, !selector.All, false, ct);
-            var selected = SelectedIds(snapshot, SelectTasks(snapshot.Tasks, selector));
-            var ranks = request.Query is null ? null : (await reader.SearchAsync(request.Query, ct)).ToDictionary(hit => hit.DecisionId, hit => hit.Rank, StringComparer.Ordinal);
-            var matches = snapshot.Current.Values.Where(version => selected.Contains(version.DecisionId)
-                && (request.Category is null || version.Content.Category == request.Category)
-                && (statuses is null || statuses.Contains(version.Status))
-                && (ranks is null || ranks.ContainsKey(version.DecisionId))).OrderBy(version => version.DecisionId, StringComparer.Ordinal).ToArray();
-            var page = matches.Where(version => request.AfterId is null || StringComparer.Ordinal.Compare(version.DecisionId, request.AfterId) > 0)
-                .Take(request.Limit + 1).ToArray();
-            var hasMore = page.Length > request.Limit;
-            var shown = page.Take(request.Limit).Select(version => Match(version, ranks?.GetValueOrDefault(version.DecisionId))).ToArray();
-            return new DecisionResult<DecisionQueryResult>(projectId, snapshot.Revision,
-                new DecisionQueryResult(shown, matches.Length, hasMore, hasMore ? shown[^1].Decision.DecisionId : null, ranks is null ? "exact" : "fts"));
+            var revision = await reader.RevisionAsync(ct);
+            var taskIds = selector.All ? null : SelectTasks(await reader.TasksAsync(ct), selector).Select(task => task.TaskId).ToArray();
+            var found = await reader.FindCurrentAsync(
+                new DecisionCurrentFilter(request.Query, taskIds, request.Category, statuses, AfterId: request.AfterId, Take: request.Limit + 1), ct);
+            var hasMore = found.Page.Count > request.Limit;
+            var shown = found.Page.Take(request.Limit).Select(hit => Match(hit.Version, hit.Rank)).ToArray();
+            return new DecisionResult<DecisionQueryResult>(projectId, revision,
+                new DecisionQueryResult(shown, found.Total, hasMore, hasMore ? shown[^1].Decision.DecisionId : null, request.Query is null ? "exact" : "fts"));
         }, cancellationToken);
     }
 
