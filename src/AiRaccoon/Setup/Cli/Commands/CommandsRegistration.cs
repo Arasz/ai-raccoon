@@ -1,3 +1,4 @@
+using AiRaccoon.Decisions.Client;
 using AiRaccoon.Settings;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Encryption;
@@ -20,6 +21,8 @@ public static class CommandsRegistration
             serviceCollection.AddSingleton<WatchRegistrationCommands>();
             // The `encryption` graph never binds the server store (CliWriteOptOuts); BindCliToServer overrides this everywhere else.
             serviceCollection.AddSingleton<IWatchControl, DirectGraphWatchControl>();
+            serviceCollection.AddSingleton<IDecisionClient, DirectGraphDecisionClient>();
+            serviceCollection.AddSingleton<DecisionCommands>();
             serviceCollection.AddSingleton<EncryptionCommands>();
             serviceCollection.AddSingleton<ExtractCommands>();
             serviceCollection.AddSingleton<MaintenanceCommands>();

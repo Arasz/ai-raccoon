@@ -19,18 +19,31 @@ public sealed class ScopeCheckTests
     private static readonly string[] ProjectScope =
     [
         "add_memory",
+        "amend_decision",
         "close_workspace",
         "delete_context",
         "delete_entry",
         "delete_memory_from_ranking",
         "discard_workspace",
+        "export_decisions",
+        "find_decision_precedents",
+        "get_decision",
+        "get_decision_graph",
         "get_memories_sharing_ranking",
         "get_workspace_status",
         "initialize_workspace",
+        "link_decisions",
+        "preview_decisions",
+        "query_decisions",
+        "record_decision",
+        "register_decision_task",
         "set_memory_ttl",
         "share_memory",
+        "supersede_decision",
+        "transition_decision",
         "trigger_memory_cleanup",
         "trigger_memory_sharing",
+        "unlink_decisions"
     ];
 
     /// <summary>Any target: the tools the reserved target accepts — reads, ingestion, watches, telemetry.</summary>

@@ -18,6 +18,18 @@ public sealed class ProjectIdAliasMapTests
         ["qa-noise-project", "manual-sweep"]);
 
     [Fact]
+    public void Without_RemovesTheNamedAliasesAndDrops_AndKeepsTheRest()
+    {
+        var held = FixtureMap().Without(["job-search-ai-assistant", "manual-sweep"]);
+
+        held.Aliases.ShouldBe([new ProjectIdAliasEntry("AI-RACCOON", "ai-raccoon")]);
+        held.Dropped.ShouldBe(["qa-noise-project"]);
+        held.Canonicals.ShouldBe(FixtureMap().Canonicals, ignoreOrder: true);
+        held.Fold("job-search-ai-assistant").ShouldBe("job-search-ai-assistant");
+        held.IsDropped("manual-sweep").ShouldBeFalse();
+    }
+
+    [Fact]
     public void Default_IsEmpty_ByDesign()
     {
         ProjectIdAliasMap.Default.IsEmpty.ShouldBeTrue();

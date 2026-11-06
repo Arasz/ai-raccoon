@@ -34,7 +34,8 @@ public partial class SyncService(
     /// so a table added here only needs adding once.</summary>
     internal static readonly string[] MachineLocalTables =
     [
-        "workspaces", "promotion_queue", "promotion_queue_prune_requests", "repair_requests"
+        "workspaces", "promotion_queue", "promotion_queue_prune_requests", "repair_requests",
+        ..Sqlite.Decisions.DecisionSchema.TableNames.Reverse()
     ];
 
     /// <summary>

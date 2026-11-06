@@ -42,6 +42,9 @@ public sealed class ProjectIdsFoldPlan(
     /// <summary>Attributed ids owning no foldable surface at all: nothing to move, still reported.</summary>
     public const string PinnedNoMoveableContent = "pinned-no-moveable-content";
 
+    /// <summary>Ids owning native decision graph rows: graph merging and deletion are not supported.</summary>
+    public const string PinnedDecisionGraph = "pinned-decision-graph";
+
     public IReadOnlyList<ProjectIdFold> Folds { get; } = folds;
 
     public IReadOnlyList<string> Dropped { get; } = dropped;
@@ -75,7 +78,11 @@ public sealed class ProjectIdsFoldPlan(
 
             if (map.IsDropped(row.ProjectId))
             {
-                if (OwnsDeletableContent(row) || row.Registered)
+                if (OwnsDecisionGraph(row))
+                {
+                    pinned.Add(PinDecisionGraph(row));
+                }
+                else if (OwnsDeletableContent(row) || row.Registered)
                 {
                     dropped.Add(row.ProjectId);
                 }
@@ -87,6 +94,12 @@ public sealed class ProjectIdsFoldPlan(
             {
                 if (string.Equals(winner, row.ProjectId, StringComparison.Ordinal))
                 {
+                    continue;
+                }
+
+                if (OwnsDecisionGraph(row))
+                {
+                    pinned.Add(PinDecisionGraph(row));
                     continue;
                 }
 
@@ -121,6 +134,12 @@ public sealed class ProjectIdsFoldPlan(
                 && map.TryResolve(row.RegisteredName, out var named)
                 && !string.Equals(named, row.ProjectId, StringComparison.Ordinal))
             {
+                if (OwnsDecisionGraph(row))
+                {
+                    pinned.Add(PinDecisionGraph(row));
+                    continue;
+                }
+
                 // D3: same workspace block on the name-attributed path (review #614).
                 if (HasOpenWorkspaces(row))
                 {
@@ -256,6 +275,14 @@ public sealed class ProjectIdsFoldPlan(
             $"owns only telemetry ({row.MetricsRows} metrics + {row.NoiseRows} noise" +
             (row.QualityRows > 0 ? $" + {row.QualityRows} search-quality" : string.Empty) + " rows) — " +
             "regenerable derived data the repair never moves");
+
+    private static bool OwnsDecisionGraph(ProjectIdCensusRow row) => row.DecisionRows > 0;
+
+    /// <summary>Decision-graph pin: the repair neither merges nor deletes a native decision graph.</summary>
+    private static ProjectIdPin PinDecisionGraph(ProjectIdCensusRow row) =>
+        new(row.ProjectId, PinnedDecisionGraph,
+            $"owns {row.DecisionRows} decision graph row(s) — native graph merging and deletion are not supported, " +
+            "so the id stays where it is until a graph repair exists");
 
     /// <summary>
     ///     True when the row owns live workspace scratch that never moves across projects (D3 block).

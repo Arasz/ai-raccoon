@@ -1,10 +1,14 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Net;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Projects;
+using AiRaccoon.Core.Decisions;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Decisions;
+using AiRaccoon.Decisions.Client;
 using AiRaccoon.Hosting.Node;
 using CommunityToolkit.Diagnostics;
 
@@ -38,16 +42,18 @@ internal sealed class SettingsServerErrorException(string message) : Exception(m
 ///         <c>settings maintenance list</c>, <c>noise entries</c> and <c>watch registered</c> all
 ///         reach the same way, over the same connection — one class, one credential, one transport
 ///         for every control-plane resource. <see cref="IProjectDirectory" /> serves <c>project id</c>;
-///         <see cref="IWatchControl" /> serves <c>watch add</c>, <c>watch remove</c> and <c>watch status</c>.
+///         <see cref="IWatchControl" /> serves <c>watch add</c>, <c>watch remove</c> and <c>watch status</c>;
+///         <see cref="IDecisionClient" /> serves <c>decisions</c>.
 ///     </para>
 /// </summary>
 internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore, ICodeEngineStore, IRepairStore,
-    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore, IProjectDirectory, IWatchControl
+    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore, IProjectDirectory, IWatchControl, IDecisionClient
 {
     /// <summary>Every 409 body reaches a user's terminal; the read stops at this many characters.</summary>
     private const int RefusalBodyMaxLength = 4096;
 
     private readonly HttpClient _client;
+    private readonly DecisionHttpClient _decisions;
     private readonly TimeSpan _requestDeadline;
 
     /// <summary>
@@ -62,7 +68,32 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         _requestDeadline = requestDeadline;
         _client.DefaultRequestHeaders.Remove(McpTokenGate.HeaderName);
         _client.DefaultRequestHeaders.Add(McpTokenGate.HeaderName, token);
+        _decisions = new DecisionHttpClient(client, requestDeadline);
     }
+
+    /// <inheritdoc />
+    public Task<JsonDocument> RegisterTaskAsync(string projectId, RegisterTaskRequest request, CancellationToken cancellationToken = default) =>
+        _decisions.RegisterTaskAsync(projectId, request, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<JsonDocument> ExportAsync(string projectId, DecisionTaskSelector? selector, CancellationToken cancellationToken = default) =>
+        _decisions.ExportAsync(projectId, selector, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<JsonDocument> PreviewAsync(string projectId, DecisionPreviewOptions options, CancellationToken cancellationToken = default) =>
+        _decisions.PreviewAsync(projectId, options, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<JsonDocument> RecordAsync(string projectId, JsonObject body, CancellationToken cancellationToken = default) =>
+        _decisions.RecordAsync(projectId, body, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<JsonDocument> GetAsync(string projectId, string decisionId, bool includeHistory, CancellationToken cancellationToken = default) =>
+        _decisions.GetAsync(projectId, decisionId, includeHistory, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default) =>
+        _decisions.QueryAsync(projectId, query, cancellationToken);
 
     public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
     {

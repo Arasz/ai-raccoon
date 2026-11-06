@@ -31,7 +31,7 @@ public sealed class McpToolCompositionTests : IDisposable
     public void CompositionRoot_ConstructsEveryToolClass()
     {
         var toolClasses = ToolClasses();
-        toolClasses.Count.ShouldBe(11, $"found: {string.Join(", ", toolClasses.Select(t => t.Name))}");
+        toolClasses.Count.ShouldBe(12, $"found: {string.Join(", ", toolClasses.Select(t => t.Name))}");
 
         using var provider = BuildCompositionRoot();
 

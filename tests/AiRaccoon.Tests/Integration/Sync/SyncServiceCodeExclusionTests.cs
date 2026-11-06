@@ -1,4 +1,9 @@
 using AiRaccoon.Core.Sync;
+using AiRaccoon.Core.Decisions;
+using AiRaccoon.Core.Projects;
+using AiRaccoon.Infrastructure.Options;
+using AiRaccoon.Infrastructure.Sqlite.Decisions;
+using Dapper;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
@@ -121,8 +126,10 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         return names;
     }
 
-    private static void AssertNoCodeTables(List<string> tables)
+    private static void AssertNoCodeOrDecisionTables(List<string> tables)
     {
+        tables.Any(table => table.StartsWith("decision", StringComparison.Ordinal)).ShouldBeFalse(
+            "native decision graph tables must remain local on every push path");
         tables.ShouldNotContain("code_entries", "the code corpus must never leave the machine via sync (§3.7).");
         tables.ShouldNotContain("code_fts");
         tables.ShouldNotContain("vec_code");
@@ -141,6 +148,55 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         {
             tables.ShouldNotContain(table, $"{table} must never leave the machine via sync.");
         }
+    }
+
+    [RetryFact]
+    public async Task Sync_PopulatedDecisionGraph_WithForeignKeysEnabled_DropsChildrenBeforeParents()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var options = new InfrastructureOptions { DataRoot = _dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
+        await using (var connection = await CreateAndOpenAsync(BankPath, ct))
+        {
+            await connection.ExecuteAsync("INSERT INTO projects(id,name,created_at) VALUES('acme','Acme',1)");
+        }
+
+        var store = new SqliteDecisionStore(new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options)), new SharedProjectScope());
+        await store.WriteAsync("acme", async (writer, token) =>
+        {
+            var now = new DateTimeOffset(2026, 10, 26, 12, 0, 0, TimeSpan.Zero);
+            await writer.SetRevisionAsync(1, token);
+            await writer.AddTaskAsync(new DecisionTask("task", "Task", 1, now, null), token);
+            foreach (var id in new[] { "one", "two" })
+            {
+                await writer.AddRecordAsync(new DecisionRecord(id, "task", 1, now), token);
+                await writer.AddVersionAsync(new DecisionVersion(id, 1, "task", 1,
+                    new DecisionContent(id, "architecture", "scenario", "outcome", "reason"),
+                    DecisionStatus.Accepted, now, "actor", "session", null), token);
+            }
+
+            await writer.AddEdgeAsync(new DecisionEdge("edge", "one", "two", DecisionEdgeKind.DependsOn,
+                "dependency", "task", 1, now, "actor", "session"), token);
+            await writer.AddReceiptAsync("request", new DecisionReceipt("hash", "{}", 1), token);
+            await writer.AddImportAsync(new DecisionImport("legacy", "external", "one", "task", "digest", "{}", "{}"), token);
+            return true;
+        }, ct);
+        var cloud = new FakeCloudStore();
+        async Task<SqliteConnection> ForeignKeySnapshot(string path, CancellationToken token)
+        {
+            var connection = await OpenSnapshot()(path, token);
+            await connection.ExecuteAsync("PRAGMA foreign_keys=ON");
+            (await connection.ExecuteScalarAsync<int>("PRAGMA foreign_keys")).ShouldBe(1);
+            return connection;
+        }
+
+        var service = new SyncService(cloud, token => CreateAndOpenAsync(BankPath, token), ForeignKeySnapshot, OpenReadOnly(),
+            TimeProvider.System, NullLogger<SyncService>.Instance);
+        await service.MemorySyncAsync("acme", "decision-graph", ct);
+        var pulled = await cloud.PullAsync("decision-graph", ct);
+        pulled.ShouldNotBeNull();
+        var pulledPath = Path.Combine(_dataRoot, "pulled-decisions.db");
+        await File.WriteAllBytesAsync(pulledPath, pulled.Data, ct);
+        AssertNoCodeOrDecisionTables(await TableNamesAsync(pulledPath, ct));
     }
 
     // --- Push path 1: local snapshot (SyncService.cs ~:74) -------------------------------------
@@ -163,7 +219,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         var pulledPath = Path.Combine(_dataRoot, "pulled-local.db");
         await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
 
-        AssertNoCodeTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+        AssertNoCodeOrDecisionTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
     }
 
     [RetryFact]
@@ -208,7 +264,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
 
         var tables = await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken);
-        AssertNoCodeTables(tables);
+        AssertNoCodeOrDecisionTables(tables);
         AssertNoMachineLocalTables(tables);
 
         // Independent of SyncService.MachineLocalTables (which drives the strip itself, so
@@ -244,7 +300,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         var pulledPath = Path.Combine(_dataRoot, "pulled-populated-vec-code.db");
         await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
 
-        AssertNoCodeTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+        AssertNoCodeOrDecisionTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
     }
 
     // --- Push path 2: merged snapshot (SyncService.cs ~:105) -----------------------------------
@@ -272,7 +328,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         var pulledPath = Path.Combine(_dataRoot, "pulled-merged.db");
         await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
 
-        AssertNoCodeTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+        AssertNoCodeOrDecisionTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
     }
 
     // --- Push path 3: retry-merged snapshot (SyncService.cs ~:161) -----------------------------
@@ -303,7 +359,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
         var pulledPath = Path.Combine(_dataRoot, "pulled-retry.db");
         await File.WriteAllBytesAsync(pulledPath, pulled.Data, TestContext.Current.CancellationToken);
 
-        AssertNoCodeTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
+        AssertNoCodeOrDecisionTables(await TableNamesAsync(pulledPath, TestContext.Current.CancellationToken));
     }
 
     // --- Pull side: merge never names code tables, so a pull must not touch the local corpus ---
@@ -552,7 +608,7 @@ public sealed class SyncServiceCodeExclusionTests : IDisposable
             }
         }
 
-        AssertNoCodeTables(tables);
+        AssertNoCodeOrDecisionTables(tables);
     }
 
     // --- P2: telemetry (search_quality/metrics) never syncs (ADR-0098) -------------------------

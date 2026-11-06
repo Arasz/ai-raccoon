@@ -54,6 +54,14 @@ public sealed class UnregisteredIdRefusalTests(UnregisteredIdRefusalTests.Server
         ["discard_workspace"] = new() { ["workspaceId"] = "ws-1" }
     };
 
+    static UnregisteredIdRefusalTests()
+    {
+        foreach (var operation in DecisionOperations.All)
+        {
+            MinimalArgs[operation.Tool] = new Dictionary<string, object?>(operation.Args);
+        }
+    }
+
     private static IReadOnlyList<string> ProjectIdTools() =>
     [
         .. RegisteredTools.Methods()

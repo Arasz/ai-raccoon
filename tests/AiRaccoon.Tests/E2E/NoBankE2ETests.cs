@@ -35,7 +35,10 @@ public sealed class NoBankE2ETests : IAsyncLifetime
     [
         ["project", "id", "check", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"],
         ["project", "id", "get", "--name", "x"],
-        ["project", "id", "register", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"]
+        ["project", "id", "register", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"],
+        ["decisions", "query", "--project-id", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"],
+        ["decisions", "preview", "--project-id", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"],
+        ["decisions", "task", "register", "--project-id", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70", "--task-id", "t", "--title", "t"]
     ];
 
     private readonly string _parent = TestData.CreateTempRoot("no-bank-typo");

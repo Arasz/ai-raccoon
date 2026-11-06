@@ -34,6 +34,18 @@ public sealed class CommandFailureExitCodeTests
         err.ShouldContain("boom");
     }
 
+    /// <summary>A 404 the server gave no kind for means it has no decision routes; a named refusal keeps its own code.</summary>
+    [Theory]
+    [InlineData("http-404", 404, ErrorCode.Server.EndpointMissing)]
+    [InlineData("decision-not-found", 404, ErrorCode.Usage.RequestRejected)]
+    [InlineData("project-not-registered", 404, ErrorCode.Usage.ProjectUnknown)]
+    [InlineData("http-409", 409, ErrorCode.Usage.RequestRejected)]
+    [InlineData("decision-conflict", 409, ErrorCode.Usage.RequestRejected)]
+    public void ADecisionRefusal_ExitsWithTheCaseItsKindNames(string kind, int status, int expected)
+    {
+        CliFailureErrorCode.For(new AiRaccoon.Decisions.Client.DecisionRefusedException(kind, status, "refused")).ShouldBe(expected);
+    }
+
     /// <summary>A cancellation the caller never asked for is a timeout (an HttpClient timeout surfaces this way).</summary>
     [Fact]
     public async Task ACancellationTheCallerDidNotAskFor_ExitsTimeout()

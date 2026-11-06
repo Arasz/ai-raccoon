@@ -1,6 +1,6 @@
 # Decision agent API and CLI
 
-Status: proposed, following the [data model](data-model.md). Names and flags below describe future behavior.
+Status: reviewed contract, following the [data model](data-model.md). Model, storage (schema v23), service, adapters, CLI and migration are complete in PR #923, Semantica import is deferred to #924, and the release step shipped as 2.4.0. Import names below describe future behavior.
 
 ## Common contract
 
@@ -67,6 +67,8 @@ Shown 1 selected decision, 1 boundary node, 1 edge; omitted 0 decisions, 0 edges
 ```
 
 ## Migration and ownership handover
+
+> **Deferred to [#924](https://github.com/Arasz/ai-raccoon/issues/924).** `import-semantica` is not built in PR #923: no real Semantica exporter fixture exists yet, and this design requires one per supported shape. The CLI line above and the two paragraphs below are the design for that issue, not shipped behaviour.
 
 `import-semantica` is a one-time compatibility adapter over an authenticated backend import endpoint `POST P/imports/semantica/preview` and `POST P/imports/semantica/apply`, with a shared store/service, not direct CLI SQLite access. There is no generic import or NER/entity tool. Default is read-only dry run with mapping and validation report; --apply needs explicit request ID, source digest and the preview's project revision. CLI sends file bytes, never a backend-local path. Accept UTF-8 JSON up to 10 MiB and reject duplicate keys, overlong fields and unsupported schema versions. Two supported shapes must come from real exporter fixtures: normalized nodes/edges/decisions/metadata and current export_graph JSON envelope. Do not claim other Semantica formats supported until fixture-backed.
 

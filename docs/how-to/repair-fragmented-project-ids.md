@@ -113,6 +113,11 @@ An open workspace holds live scratch, so it holds an id back: the id is pinned
 The pin reason names the open workspaces and the live scratch rows, so a
 `pinned-open-workspaces` line always counts workspaces that are still open.
 
+A project that owns native decision graph rows is held back too: an alias
+loser or a dropped id with graph rows is pinned `pinned-decision-graph`, and
+the rest of the plan still runs. The repair neither merges two graphs nor
+deletes one ([ADR-0142](../adr/0142-native-project-decision-graph.md)).
+
 ## See also
 
 - [ADR-0099: the public binary ships an empty project-id alias map](../adr/0099-empty-default-alias-map.md)

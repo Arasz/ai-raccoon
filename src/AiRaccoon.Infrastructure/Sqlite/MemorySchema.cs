@@ -73,12 +73,12 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV18Async" /> (rowless watch fingerprints dropped once),
     ///     <see cref="MigrateToV19Async" /> (ADR-0133, `ctx` is the vec0 partition key again),
     ///     <see cref="MigrateToV20Async" /> (the entry kind, denormalised onto the row),
-    ///     <see cref="MigrateToV21Async" /> (ADR-0141, the kind is a second vec0 partition key). Not every schema change needs a ladder
+    ///     <see cref="MigrateToV21Async" /> (ADR-0141, the kind is a second vec0 partition key); v23 (the decision tables) has no step of its own, because the digest-gated Ddl creates them. Not every schema change needs a ladder
     ///     step: a trigger body replacement that is safely re-runnable on every open belongs in the
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 22;
+    internal const int CurrentVersion = 23;
 
     private const int DefaultEmbeddingDimension = 384;
 
@@ -175,6 +175,7 @@ internal static class MemorySchema
     // both AND NEVER NEITHER (F34) — `scope IS NOT NULL` in the workspace-less arm is load-bearing:
     // without it, a NULL/NULL row makes the whole CHECK evaluate NULL, which SQLite passes.
     private static readonly string Ddl = $"""
+                                          {Decisions.DecisionSchema.Ddl}
                                           CREATE TABLE IF NOT EXISTS workspaces (
                                               id TEXT PRIMARY KEY,
                                               project_id TEXT NOT NULL,

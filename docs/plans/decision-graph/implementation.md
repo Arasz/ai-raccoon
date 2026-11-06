@@ -1,6 +1,6 @@
 # Decision graph implementation plan
 
-Status: proposed; runtime steps are pending. Scope ends at reviewed planning in this change.
+Status: Model, storage (schema v23), service, adapters, CLI and migration are complete in PR #923, Semantica import is deferred to #924, and the release step shipped as 2.4.0. The agent framework's switch to the native tools is a separate PR after acceptance. See implementation-evidence.md for executed checks.
 
 ## Deliverables and traceability
 
@@ -16,7 +16,7 @@ Status: proposed; runtime steps are pending. Scope ends at reviewed planning in 
 | Semantica handover | api.md migration | migration, release |
 | Scope, aliases, lifecycle, sync | data-model.md integration boundaries | storage, service, migration |
 
-The full implementation DAG is recorded in task-graph under `air-native-project-decision-graph-implementation`. Its machine document is exported beside this file as `implementation-plan.json`; do not treat prose or checked planning milestones as completed runtime work. All steps start pending. The task-tracker planning unit is `air-own-project-decision-graph-planning`.
+The full implementation DAG is recorded in task-graph under `air-native-project-decision-graph-implementation`. Its machine document is exported beside this file as `implementation-plan.json`; do not treat prose or checked planning milestones as completed runtime work. The graph is the current execution state; the exported snapshot is refreshed after recorded milestones. The task-tracker planning unit is `air-own-project-decision-graph-planning`.
 
 ## Execution order and ownership
 
@@ -58,7 +58,7 @@ Each row names an observable failure and a mutation that must turn its test red.
 | DecisionApi_AnnotationsAndGuardParity | CLI bypasses policy; discovery hides flags | Remove HTTP gate or explicit false annotation |
 | DecisionCli_DefaultNAllMatchBackend | Flags select decisions instead of tasks | Apply N after flattening decisions |
 | DecisionCli_InterruptedFileIsNotPublished | Failed stream overwrites valid export | Write destination before completion |
-| DecisionImport_DryRunReplayAndUnknownData | Migration destroys legacy metadata | Write during dry run or drop unsupported raw record |
+| DecisionImport_DryRunReplayAndUnknownData (deferred to #924) | Migration destroys legacy metadata | Write during dry run or drop unsupported raw record |
 | DecisionRepair_FoldAndConflictReport | Repair folds a nonempty retired graph or changes winner graph | Bypass occupied-loser graph preflight or use INSERT OR REPLACE |
 | DecisionIntegration_RestartAndAccessModes | Works only within one process/full mode | Use a process-local repository instead of persistent store, or bypass committed-write access guard |
 

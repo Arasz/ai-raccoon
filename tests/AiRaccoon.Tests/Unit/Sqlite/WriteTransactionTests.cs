@@ -73,6 +73,37 @@ public sealed class WriteTransactionTests
         connection.ShouldNotBeInTransaction();
     }
 
+    [Fact]
+    public async Task Nested_success_remains_inside_the_outer_rollback()
+    {
+        await using var connection = await OpenAsync();
+        await Should.ThrowAsync<InvalidOperationException>(() => connection.InWriteTransactionAsync(async () =>
+        {
+            await connection.InWriteTransactionAsync(() => connection.ExecuteAsync("INSERT INTO t(v) VALUES (1)"), CancellationToken.None);
+            throw new InvalidOperationException("outer failed");
+        }, CancellationToken.None));
+        (await CountAsync(connection)).ShouldBe(0);
+        connection.ShouldNotBeInTransaction();
+    }
+
+    [Fact]
+    public async Task Nested_failure_rolls_back_only_its_savepoint_when_outer_handles_it()
+    {
+        await using var connection = await OpenAsync();
+        await connection.InWriteTransactionAsync(async () =>
+        {
+            await connection.ExecuteAsync("INSERT INTO t(v) VALUES (1)");
+            await Should.ThrowAsync<InvalidOperationException>(() => connection.InWriteTransactionAsync(async () =>
+            {
+                await connection.ExecuteAsync("INSERT INTO t(v) VALUES (2)");
+                throw new InvalidOperationException("inner failed");
+            }, CancellationToken.None));
+            (await CountAsync(connection)).ShouldBe(1);
+        }, CancellationToken.None);
+        (await CountAsync(connection)).ShouldBe(1);
+        connection.ShouldNotBeInTransaction();
+    }
+
     private static async Task<SqliteConnection> OpenAsync()
     {
         var connection = new SqliteConnection("Data Source=:memory:");

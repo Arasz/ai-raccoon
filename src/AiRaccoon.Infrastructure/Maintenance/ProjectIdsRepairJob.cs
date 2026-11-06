@@ -99,8 +99,13 @@ public sealed partial class ProjectIdsRepairJob(
         var chunkRowsFixed = chunks.RowsRepositioned + chunks.RowsSetToUnknown + chunks.RowsRetotalled;
         createdWork = createdWork || chunkRowsFixed > 0;
         // Package D (D4 storage): persist the applied one-shot map on success — append-only,
-        // alias-PK first-writer-wins, rows immutable thereafter (see ProjectIdAliases).
-        await ProjectIdAliases.PersistAppliedAsync(connection, map,
+        // alias-PK first-writer-wins, rows immutable thereafter (see ProjectIdAliases). Ids held
+        // back for owning a decision graph keep their own identity: persisting their alias or drop
+        // would fold or retire them at the gate while their graph rows stay under the old id.
+        var applied = map.Without(plan.Pinned
+            .Where(pin => pin.Bucket == ProjectIdsFoldPlan.PinnedDecisionGraph)
+            .Select(pin => pin.ProjectId));
+        await ProjectIdAliases.PersistAppliedAsync(connection, applied,
                 timeProvider.GetUtcNow().ToUnixTimeSeconds(), cancellationToken);
         // Package E1 (reload on map change): the same process's choke-point cache must see the
         // just-applied map — otherwise the post-apply probe (D6 iv) hits a stale Default and a

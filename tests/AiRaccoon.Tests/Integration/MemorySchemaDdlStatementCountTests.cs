@@ -44,7 +44,7 @@ public sealed class MemorySchemaDdlStatementCountTests
     ///     and no longer runs in the digest-gated Ddl block.
     /// </summary>
     [RetryFact]
-    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheFiftyNineStatementDdlBlock()
+    public async Task EnsureAsync_WhenTheDigestIsStale_RunsTheDdlBlock()
     {
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
@@ -78,7 +78,8 @@ public sealed class MemorySchemaDdlStatementCountTests
         // +3 the ADR-0141 entry-kind ensure (sqlite_master probe + pragma_table_info probe traced
         // twice), because the typed vec trigger bodies name the kind column, so it has to exist
         // before the Ddl installs them.
-        CountDdl(statements).ShouldBe(74, Report(statements));
+        // Native decision tables, indexes, and search triggers add 34 measured statements.
+        CountDdl(statements).ShouldBe(108, Report(statements));
     }
 
     private static async Task<List<string>> TraceAsync(SqliteConnection connection)

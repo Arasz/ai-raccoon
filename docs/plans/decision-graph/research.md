@@ -1,10 +1,10 @@
 # Native decision graph: research record
 
-Date: 2026-10-26. Scope: design and implementation planning only.
+Date: 2026-10-26. This research supported planning PR #922, now merged. Implementation PR #923 has completed the model and SQLite storage/schema v23; service work is in progress. Public adapters, CLI, import and release remain pending. The evidence below records the original design investigation.
 
 ## Request and completion criteria
 
-AiRaccoon takes over Semantica's primary decision registration and graph responsibilities. Produce the data model first, then agent tools and CLI contracts, add an ADR, obtain independent review of both, and publish an implementation DAG with acceptance gates. The author does all research and planning; only review is delegated. Completion means reviewed design artifacts and a recorded implementation plan, not shipped runtime behavior.
+AiRaccoon takes over Semantica's primary decision registration and graph responsibilities. Produce the data model first, then agent tools and CLI contracts, add an ADR, obtain independent review of both, and publish an implementation DAG with acceptance gates. The author does all research and planning; only review is delegated. Completion of the original planning unit meant reviewed design artifacts and a recorded implementation plan. The active runtime unit follows implementation.md and implementation-evidence.md.
 
 ## Evidence checked
 

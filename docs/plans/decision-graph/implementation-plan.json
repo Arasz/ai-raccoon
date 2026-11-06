@@ -1,6 +1,6 @@
 {
   "task_id": "air-native-project-decision-graph-implementation",
-  "revision": 1,
+  "revision": 10,
   "content_hash": "0aa6b45cd7f191e1dc43b4f0cdca7aa7c5ecaea662efaf9a080da04b31361962",
   "schema_url": "https://github.com/Arasz/ai-badger/schemas/task-plan.schema.json",
   "document": {
@@ -29,7 +29,7 @@
               "id": "model-contract",
               "statement": "Illegal transitions, dependency cycles and invalid selectors are refused; Core stays independent of persistence/HTTP.",
               "check": "DecisionLifecycle_RejectsTerminalAmendment; DecisionEdges_RejectsDependencyCycle; selector mutual exclusion tests",
-              "status": "unchecked",
+              "status": "passed",
               "evidence": []
             }
           ],
@@ -38,7 +38,26 @@
             "tests/AiRaccoon.Tests/Unit/Decisions/**"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "complete",
+          "started_at": "2026-10-26T13:47:46Z",
+          "completed_at": "2026-10-26T13:57:11Z",
+          "completion": {
+            "forced": false,
+            "evidence": [
+              {
+                "kind": "test",
+                "summary": "58 domain tests pass. Legal transition, terminal amendment, invalid selector, cycle and confidence reds observed; independent reviewer reproduced final 58/58 and killed evidence-bound/immutability mutations.",
+                "ref": "docs/plans/decision-graph/implementation-evidence.md",
+                "recorded_at": "2026-10-26T13:57:11Z"
+              },
+              {
+                "kind": "review",
+                "summary": "Independent model/test review: zero blockers and zero open major findings after actual mutations and restored green suite.",
+                "ref": "09fbcb81",
+                "recorded_at": "2026-10-26T13:57:11Z"
+              }
+            ]
+          }
         },
         "storage": {
           "id": "storage",
@@ -53,7 +72,7 @@
               "id": "storage-contract",
               "statement": "Existing memory survives fresh/legacy migration; cross-project references refuse; history/replay survive restart; failed writes roll back; graph never uploads.",
               "check": "DecisionStore_CrossProjectEndpointNotFound; DecisionStore_ReopenPreservesHistory; DecisionStore_ReplayBeforeExpectedVersion; DecisionStore_AtomicSupersession; DecisionStore_MigrationReplayPreservesMemory; DecisionSync_StripsGraphOnEveryPushPath",
-              "status": "unchecked",
+              "status": "passed",
               "evidence": []
             }
           ],
@@ -64,7 +83,26 @@
             "tests/AiRaccoon.Tests/Integration/Decisions/**"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "complete",
+          "started_at": "2026-10-26T13:57:11Z",
+          "completed_at": "2026-10-26T20:03:09Z",
+          "completion": {
+            "forced": false,
+            "evidence": [
+              {
+                "kind": "test",
+                "summary": "Storage9/9; existing schema consumers12/12 and sync15/15. Fresh/legacy schema, encrypted rekey, snapshot consistency, rollback, project FK isolation and audit provenance verified.",
+                "ref": "docs/plans/decision-graph/implementation-evidence.md",
+                "recorded_at": "2026-10-26T20:03:09Z"
+              },
+              {
+                "kind": "review",
+                "summary": "Independent review zero blockers/majors; project-predicate, snapshot, removal-task and rollback mutations killed; restored storage+sync24/24. Service-level replay-before-version and supersession tested in next step.",
+                "ref": "6fb628bd",
+                "recorded_at": "2026-10-26T20:03:09Z"
+              }
+            ]
+          }
         },
         "service": {
           "id": "service",
@@ -79,8 +117,10 @@
               "id": "service-contract",
               "statement": "Latest/N/all include empty tasks and revision/edge touches; export closes endpoints and retains selected history; preview limits are honest; traversal bounds terminate.",
               "check": "DecisionSelection_LastUsesRegistrationOrder; DecisionSelection_EmptyNewestTaskRemains; DecisionSelection_RevisionAndEdgeTouchCount; DecisionExport_BoundaryClosureAndHistory; DecisionExport_ConcurrentWriterSingleSnapshot; DecisionPreview_CountsAndUnicodeBudget; DecisionEdgeRemoval_TaskProvenanceSurvivesRestart; DecisionPreview_ManyEmptyTasks",
-              "status": "unchecked",
-              "evidence": []
+              "status": "passed",
+              "evidence": [
+                "All 8 named checks in tests/AiRaccoon.Tests/Integration/Decisions/DecisionServiceTests.Acceptance.cs pass (DecisionServiceTests 21/21); each went red under its implementation.md mutation (12 mutations, see implementation-evidence.md Service acceptance) and green after restore at 9af6a213."
+              ]
             }
           ],
           "files": [
@@ -88,7 +128,20 @@
             "tests/AiRaccoon.Tests/Unit/Decisions/**"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "complete",
+          "started_at": "2026-10-26T20:03:10Z",
+          "completed_at": "2026-11-04T11:33:25Z",
+          "completion": {
+            "forced": false,
+            "evidence": [
+              {
+                "kind": "test",
+                "summary": "DecisionServiceTests 21/21 and RetrySurfaceGateTests 2/2; 12 targeted production mutations each turned their named check red, restored build green.",
+                "ref": "docs/plans/decision-graph/implementation-evidence.md",
+                "recorded_at": "2026-11-04T11:33:25Z"
+              }
+            ]
+          }
         },
         "adapters": {
           "id": "adapters",
@@ -103,8 +156,10 @@
               "id": "adapters-contract",
               "statement": "Every operation has one HTTP and MCP mapping, required inputs, generated project scope, explicit annotations and equivalent read/write/propose refusals.",
               "check": "DecisionApi_AnnotationsAndGuardParity; real tools/list JSON contract tests; oversized export refusal test",
-              "status": "unchecked",
-              "evidence": []
+              "status": "passed",
+              "evidence": [
+                "DecisionApiTests 20/20 (DecisionApi_AnnotationsAndGuardParity x13, ToolsList_DeclaresEveryAnnotationExplicitly over raw tools/list JSON, Export_OverTheMcpCap_IsRefusedOverMcpAndServedOverHttp) and DecisionEndpointTests 23/23; each went red under its mutation (9 adapter mutations, see implementation-evidence.md Adapters acceptance) and green after restore."
+              ]
             }
           ],
           "files": [
@@ -115,7 +170,19 @@
             "tests/AiRaccoon.Tests/Integration/Decisions/**"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "complete",
+          "completed_at": "2026-11-04T15:41:54Z",
+          "completion": {
+            "forced": false,
+            "evidence": [
+              {
+                "kind": "test",
+                "summary": "DecisionApiTests 20/20, DecisionEndpointTests 23/23, DecisionServiceTests 23/23, tool-surface contract classes and source gates green; 13 targeted mutations each turned their named check red.",
+                "ref": "docs/plans/decision-graph/implementation-evidence.md",
+                "recorded_at": "2026-11-04T15:41:54Z"
+              }
+            ]
+          }
         },
         "cli": {
           "id": "cli",
@@ -130,8 +197,10 @@
               "id": "cli-contract",
               "statement": "CLI default/N/all/explicit selection matches backend; empty/latest/concurrent cases are deterministic; interrupted files are not published and nonzero exit is returned.",
               "check": "DecisionCli_DefaultNAllMatchBackend; DecisionCli_InterruptedFileIsNotPublished; terminal-control/Unicode preview fixtures",
-              "status": "unchecked",
-              "evidence": []
+              "status": "passed",
+              "evidence": [
+                "DecisionCliTests 16/16 against a real token-guarded server (selector parity rows for default/--tasks 2/--all/--task-id x2 compared field by field with the backend's own /export; empty project; latest-after-register with four concurrent exports identical; interrupted file and stdout; --force/owner-only publish; Markdown escaping; preview control/bidi sanitization, Unicode budget and JSON counts) and DecisionCommandTreeTests 8/8; each named check went red under its mutation (8 CLI mutations, see implementation-evidence.md CLI acceptance) and green after restore. Decision, CLI and source-gate classes 768/768."
+              ]
             }
           ],
           "files": [
@@ -140,12 +209,13 @@
             "tests/AiRaccoon.Tests/Integration/Cli/**"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "complete",
+          "completed_at": "2026-11-04T16:00:26Z"
         },
         "migration": {
           "id": "migration",
-          "goal": "Provide explicit Semantica import and graph-aware repair refusal/deletion",
-          "instructions": "Own import preview/apply service, HTTP/CLI wiring, source fixtures and project repair/deletion integration. Dry run first; require mapping, source digest and revision for apply. Preserve unknown raw payload and task mapping, refuse unresolved causal endpoints, replay namespace/external IDs without overwrite. Project repair must refuse before any mutation whenever a retired project has graph rows, including two nonempty graphs; graph-free losers can fold without changing winner graph. Do not merge graph order/revision/replay namespaces. Delete owned graph FK-safely; backup/rekey retain graph. Reject implicit accepted statuses and direct file-to-SQL writes. Report fixture counts, preflight refusal/rollback and rekey/restart evidence.",
+          "goal": "Provide graph-aware repair and deletion refusal and backup/rekey coverage; Semantica import deferred to #924",
+          "instructions": "Semantica import (preview/apply service, HTTP/CLI wiring, source fixtures, dry run, raw payload preservation, replay) is deferred to #924: no real exporter fixture exists. Own project repair/deletion integration. Project repair must refuse before any mutation whenever a retired project has graph rows, including two nonempty graphs; graph-free losers can fold without changing winner graph. Do not merge graph order/revision/replay namespaces. Refuse deletion of a project that owns a graph, leaving the whole graph intact (v1 has no project deletion); backup/rekey retain graph. Report fixture counts, preflight refusal/rollback and rekey/restart evidence.",
           "effort": "high",
           "depends_on": [
             "cli"
@@ -153,10 +223,12 @@
           "acceptance_criteria": [
             {
               "id": "migration-contract",
-              "statement": "Dry run writes nothing; apply atomic/replay-safe; raw source preserved; occupied retired graphs block repair without changes; deletion and rekey handle complete graph.",
-              "check": "DecisionImport_DryRunReplayAndUnknownData; DecisionRepair_TwoGraphsRefused; DecisionRepair_FoldAndConflictReport; encrypted backup/rekey and deletion fixtures",
-              "status": "unchecked",
-              "evidence": []
+              "statement": "Occupied retired graphs block repair without changes; graph-free losers fold without changing the winner graph; deletion of a graph owner is refused with the whole graph intact, and backup and rekey keep the complete graph. Import (dry run, atomic replay-safe apply, raw source preservation) is deferred to #924.",
+              "check": "DecisionRepair_TwoGraphsRefused; DecisionRepair_FoldAndConflictReport; DecisionDelete_GraphOwnerIsRefusedWithItsWholeGraphIntact; DecisionBank_EncryptedBackupAndRekeyKeepTheWholeGraph",
+              "status": "passed",
+              "evidence": [
+                "DecisionProjectRepairTests 7/7 and DecisionBankLifecycleTests 2/2 over a fixture filling all eight graph tables; refusals leave total_changes() and a whole-bank dump unchanged; each named check went red under its production mutation (6 mutations, see implementation-evidence.md Migration acceptance) and green after restore. Decision, ProjectId/repair/census and source-gate classes 693/693."
+              ]
             }
           ],
           "files": [
@@ -167,7 +239,8 @@
             "tests/AiRaccoon.Tests/Integration/Decisions/**"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "complete",
+          "completed_at": "2026-11-04T20:44:54Z"
         },
         "release": {
           "id": "release",
@@ -182,8 +255,15 @@
               "id": "release-contract",
               "statement": "Cross-surface behavior persists after restart, access modes agree, test quality is independently reviewed, release is traceable, and handover/rollback are documented.",
               "check": "DecisionIntegration_RestartAndAccessModes; combined MCP/HTTP/CLI scenario; independent review-tests; CI and documentation gates",
-              "status": "unchecked",
-              "evidence": []
+              "status": "passed",
+              "evidence": [
+                "MET DecisionIntegration_RestartAndAccessModes: 3/3 (ro, rw, full) on a real host restarted over the same bank; HTTP/MCP/CLI reads, CLI default/--tasks 2/--all export and preview match the backend; ro refuses writes on all three surfaces with no revision change. Red under 3 targeted mutations (MCP write gate, HTTP read gate, edges lost on reopen); see implementation-evidence.md Release acceptance. It found and fixed MCP depends_on refusal (87ca9662).",
+                "MET combined MCP/HTTP/CLI scenario: same test; 32 local classes 360/360 incl. source, docs/ADR, version and MCP contract gates.",
+                "MET independent review-tests: coordinator-run reviews covered model/service, adapters/CLI and migration/repair; the 252eff6a findings are fixed (622287b3, a0c43e75).",
+                "MET release traceable: VERSION 2.4.0, docs/changelog/2.4.0-native-decision-graph.md, changelog index, README What's new (1b718a1a).",
+                "MET handover/rollback documented: docs/how-to/record-project-decisions.md, ADR-0142 Accepted with What shipped; Semantica import deferred to #924; framework switch is a separate PR.",
+                "MET CI on db382eab, the last code commit (later commits change docs only): green on build-fast, build-slow, build-bdd, build-nightly-gates (run-nightly-gates label), scripts-harness and review; claude[bot] approved db382eab."
+              ]
             }
           ],
           "files": [
@@ -192,12 +272,13 @@
             "VERSION"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "complete",
+          "completed_at": "2026-11-06T12:19:57Z"
         }
       }
     },
-    "revision": 1,
+    "revision": 10,
     "created_at": "2026-10-26T13:35:05Z",
-    "updated_at": "2026-10-26T13:36:43.262307+00:00"
+    "updated_at": "2026-11-06T12:19:57Z"
   }
 }

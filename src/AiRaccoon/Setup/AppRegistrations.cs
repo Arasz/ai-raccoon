@@ -1,6 +1,9 @@
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
+using AiRaccoon.Core.Decisions;
+using AiRaccoon.Infrastructure.Decisions;
+using AiRaccoon.Infrastructure.Sqlite.Decisions;
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
@@ -52,6 +55,8 @@ public static partial class AppRegistrations
             services.AddSingleton(options);
             services.AddHttpClient();
             services.AddSingleton(TimeProvider.System);
+            services.AddRequiredSingleton<IDecisionStore, SqliteDecisionStore>();
+            services.AddRequiredSingleton<IDecisionService, DecisionService>();
             services.RegisterEncryptionServices(options);
             // The proof channel's client half (ADR-0106 D2): read-only, never mints. Registered here
             // because both the proxy graph and the CLI-command graph call RegisterCoreMemoryServices,

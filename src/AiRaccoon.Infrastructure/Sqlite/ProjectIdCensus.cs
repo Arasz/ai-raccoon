@@ -131,6 +131,15 @@ public static class ProjectIdCensus
         await CountByIdAsync(connection, "SELECT project_id AS Id, COUNT(*) AS N FROM noise_entries GROUP BY project_id",
             (row, n) => row.NoiseRows += n, cancellationToken);
 
+        var decisionTables = await connection.QueryAsync<string>(new CommandDefinition(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN @names",
+            new { names = Decisions.DecisionSchema.ProjectTableNames.ToArray() }, cancellationToken: cancellationToken));
+        foreach (var table in decisionTables)
+        {
+            await CountByIdAsync(connection, $"SELECT project_id AS Id, COUNT(*) AS N FROM {table} GROUP BY project_id",
+                (row, n) => row.DecisionRows += n, cancellationToken);
+        }
+
         var registered = await connection.QueryAsync<ProjectRow>(new CommandDefinition(
             "SELECT id AS Id, name AS Name FROM projects", cancellationToken: cancellationToken));
         foreach (var project in registered)
@@ -253,7 +262,8 @@ public static class ProjectIdCensus
             SettingsKeys.Order(StringComparer.Ordinal).ToList())
         {
             OpenWorkspaces = OpenWorkspaces,
-            OpenWorkspaceEntries = OpenWorkspaceEntries
+            OpenWorkspaceEntries = OpenWorkspaceEntries,
+            DecisionRows = DecisionRows
         };
 
         public long CodeEntries;
@@ -268,6 +278,7 @@ public static class ProjectIdCensus
         public long Watches;
         public long WatchFiles;
         public long DigestClaims;
+        public long DecisionRows;
         public long Tombstones;
         public long Workspaces;
         public long MetricsRows;

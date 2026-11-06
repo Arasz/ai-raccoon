@@ -2,7 +2,12 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Projects;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using AiRaccoon.Core.Decisions;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Decisions;
+using AiRaccoon.Decisions.Client;
 using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Settings;
@@ -15,7 +20,7 @@ namespace AiRaccoon.Settings;
 ///     instance; a failed acquire is not cached and is retried on the next call.
 /// </summary>
 internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationStore, ICodeEngineStore, IRepairStore,
-    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore, IProjectDirectory, IWatchControl
+    IPromotionQueuePruneStore, IMaintenanceStatsStore, INoiseSummaryStore, IWatchRegisteredStore, IProjectDirectory, IWatchControl, IDecisionClient
 {
     private readonly Func<CancellationToken, Task<ISettingsStore>> _acquire;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -110,6 +115,35 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     /// <inheritdoc />
     public async Task<IReadOnlyList<WatchStatus>> StatusAsync(string? projectId, CancellationToken cancellationToken = default) =>
         await AsWatchControl(await InnerAsync(cancellationToken)).StatusAsync(projectId, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<JsonDocument> RegisterTaskAsync(string projectId, RegisterTaskRequest request, CancellationToken cancellationToken = default) =>
+        await AsDecisionClient(await InnerAsync(cancellationToken)).RegisterTaskAsync(projectId, request, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<JsonDocument> ExportAsync(string projectId, DecisionTaskSelector? selector, CancellationToken cancellationToken = default) =>
+        await AsDecisionClient(await InnerAsync(cancellationToken)).ExportAsync(projectId, selector, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<JsonDocument> PreviewAsync(string projectId, DecisionPreviewOptions options, CancellationToken cancellationToken = default) =>
+        await AsDecisionClient(await InnerAsync(cancellationToken)).PreviewAsync(projectId, options, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<JsonDocument> RecordAsync(string projectId, JsonObject body, CancellationToken cancellationToken = default) =>
+        await AsDecisionClient(await InnerAsync(cancellationToken)).RecordAsync(projectId, body, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<JsonDocument> GetAsync(string projectId, string decisionId, bool includeHistory, CancellationToken cancellationToken = default) =>
+        await AsDecisionClient(await InnerAsync(cancellationToken)).GetAsync(projectId, decisionId, includeHistory, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default) =>
+        await AsDecisionClient(await InnerAsync(cancellationToken)).QueryAsync(projectId, query, cancellationToken);
+
+    /// <summary>Same reasoning as <see cref="AsMigrationStore" />, for the decision routes.</summary>
+    private static IDecisionClient AsDecisionClient(ISettingsStore store) =>
+        store as IDecisionClient ?? throw new NotSupportedException(
+            $"ai-raccoon: {store.GetType().Name} does not support decision requests");
 
     /// <summary>
     ///     Every store the acquire function can resolve to in production (<see cref="ServerSettingsStore" />)

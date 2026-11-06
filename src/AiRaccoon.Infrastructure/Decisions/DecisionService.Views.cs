@@ -1,0 +1,282 @@
+using AiRaccoon.Core.Decisions;
+using CommunityToolkit.Diagnostics;
+
+namespace AiRaccoon.Infrastructure.Decisions;
+
+public sealed partial class DecisionService
+{
+    /// <summary>The most edges one graph walk returns; the rest are reported as omitted.</summary>
+    internal const int GraphEdgeLimit = 2000;
+
+    public Task<DecisionResult<DecisionExport>> ExportAsync(string projectId, DecisionTaskSelector? selector = null,
+        CancellationToken cancellationToken = default) => Store.ReadAsync(projectId, async (reader, ct) =>
+    {
+        var snapshot = await LoadAsync(reader, true, true, ct);
+        return new DecisionResult<DecisionExport>(projectId, snapshot.Revision, Export(snapshot, selector ?? new DecisionTaskSelector(), Now));
+    }, cancellationToken);
+
+    public Task<DecisionResult<DecisionPreview>> PreviewAsync(string projectId, DecisionPreviewOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        var request = options ?? new DecisionPreviewOptions();
+        Guard.IsInRange(request.MaxDecisions, 1, 101, "maxDecisions");
+        Guard.IsInRange(request.MaxEdges, 0, 201, "maxEdges");
+        Guard.IsInRange(request.MaxChars, 1000, 50001, "maxChars");
+        return Store.ReadAsync(projectId, async (reader, ct) =>
+        {
+            // Preview shows current versions only, so it loads no history: membership by version comes from SQL.
+            var selector = request.Selector ?? new DecisionTaskSelector();
+            var snapshot = await LoadAsync(reader, false, false, ct);
+            var versioned = await reader.VersionedByAsync(SelectTasks(snapshot.Tasks, selector).Select(task => task.TaskId).ToArray(), ct);
+            var export = Export(snapshot, selector, Now, versioned);
+            return new DecisionResult<DecisionPreview>(projectId, snapshot.Revision, Compact(projectId, export, request));
+        }, cancellationToken);
+    }
+
+    public Task<DecisionResult<DecisionQueryResult>> QueryAsync(string projectId, DecisionQuery? query = null,
+        CancellationToken cancellationToken = default)
+    {
+        var request = query ?? new DecisionQuery();
+        Guard.IsInRange(request.Limit, 1, 101, "limit");
+        ValidateSearch(request.Query, request.Category);
+        if (request.AfterId is not null)
+        {
+            DecisionText.Identifier(request.AfterId, "afterId");
+        }
+
+        var statuses = request.Statuses?.ToArray();
+        if (statuses is not null)
+        {
+            Guard.IsInRange(statuses.Length, 1, 6, "statuses");
+            Guard.IsTrue(statuses.All(status => Enum.IsDefined(status)), "statuses");
+        }
+
+        var selector = request.Selector ?? new DecisionTaskSelector(all: true);
+        return Store.ReadAsync(projectId, async (reader, ct) =>
+        {
+            var revision = await reader.RevisionAsync(ct);
+            var taskIds = selector.All ? null : SelectTasks(await reader.TasksAsync(ct), selector).Select(task => task.TaskId).ToArray();
+            var found = await reader.FindCurrentAsync(
+                new DecisionCurrentFilter(request.Query, taskIds, request.Category, statuses, AfterId: request.AfterId, Take: request.Limit + 1), ct);
+            var hasMore = found.Page.Count > request.Limit;
+            var shown = found.Page.Take(request.Limit).Select(hit => Match(hit.Version, hit.Rank)).ToArray();
+            return new DecisionResult<DecisionQueryResult>(projectId, revision,
+                new DecisionQueryResult(shown, found.Total, hasMore, hasMore ? shown[^1].Decision.DecisionId : null, request.Query is null ? "exact" : "fts"));
+        }, cancellationToken);
+    }
+
+    public Task<DecisionResult<DecisionQueryResult>> PrecedentsAsync(string projectId, string scenario, string? category = null,
+        int limit = 5, bool includeInactive = false, CancellationToken cancellationToken = default)
+    {
+        ValidateSearch(scenario, category);
+        DecisionText.Required(scenario, 2000, nameof(scenario));
+        Guard.IsInRange(limit, 1, 21, nameof(limit));
+        return Store.ReadAsync(projectId, async (reader, ct) =>
+        {
+            var revision = await reader.RevisionAsync(ct);
+            var found = await reader.FindCurrentAsync(new DecisionCurrentFilter(scenario, Category: category,
+                Statuses: includeInactive ? null : [DecisionStatus.Accepted], ActiveAt: includeInactive ? null : Now, Take: limit, ByRank: true), ct);
+            return new DecisionResult<DecisionQueryResult>(projectId, revision,
+                new DecisionQueryResult(found.Page.Select(hit => Match(hit.Version, hit.Rank)).ToArray(), found.Total, found.Total > limit, null, "fts"));
+        }, cancellationToken);
+    }
+
+    public Task<DecisionResult<DecisionGraph>> GraphAsync(string projectId, DecisionGraphRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNull(request);
+        DecisionText.Identifier(request.DecisionId, "decisionId");
+        Guard.IsTrue(Enum.IsDefined(request.Direction), "direction");
+        Guard.IsInRange(request.Depth, 0, 11, "depth");
+        Guard.IsInRange(request.MaxNodes, 1, 501, "maxNodes");
+        return Store.ReadAsync(projectId, async (reader, ct) =>
+        {
+            var snapshot = await LoadAsync(reader, false, false, ct);
+            if (!snapshot.Current.ContainsKey(request.DecisionId))
+            {
+                throw NotFound("Decision");
+            }
+
+            var live = snapshot.Edges.Where(edge => edge.RemovedRevision is null
+                && (request.IncludeContext || edge.Kind is DecisionEdgeKind.DependsOn or DecisionEdgeKind.Supersedes)).ToArray();
+            var touching = Touching(live);
+            var visited = new HashSet<string>(StringComparer.Ordinal) { request.DecisionId };
+            var pending = new Queue<(string Id, int Depth)>();
+            pending.Enqueue((request.DecisionId, 0));
+            var reasons = new HashSet<string>(StringComparer.Ordinal);
+            while (pending.TryDequeue(out var node))
+            {
+                foreach (var index in touching.GetValueOrDefault(node.Id, []))
+                {
+                    var edge = live[index];
+                    string? next = null;
+                    if ((request.Direction is DecisionDirection.Upstream or DecisionDirection.Both || edge.Kind == DecisionEdgeKind.Contradicts) && edge.SourceId == node.Id)
+                    {
+                        next = edge.TargetId;
+                    }
+                    else if ((request.Direction is DecisionDirection.Downstream or DecisionDirection.Both || edge.Kind == DecisionEdgeKind.Contradicts) && edge.TargetId == node.Id)
+                    {
+                        next = edge.SourceId;
+                    }
+
+                    if (next is null || visited.Contains(next))
+                    {
+                        continue;
+                    }
+
+                    if (node.Depth >= request.Depth)
+                    {
+                        reasons.Add("depth");
+                    }
+                    else if (visited.Count >= request.MaxNodes)
+                    {
+                        reasons.Add("nodes");
+                    }
+                    else
+                    {
+                        visited.Add(next);
+                        pending.Enqueue((next, node.Depth + 1));
+                    }
+                }
+            }
+
+            var contained = live.Where(edge => visited.Contains(edge.SourceId) && visited.Contains(edge.TargetId)).ToArray();
+            if (contained.Length > GraphEdgeLimit)
+            {
+                reasons.Add("edges");
+            }
+
+            var unknown = reasons.Contains("depth") || reasons.Contains("nodes");
+            return new DecisionResult<DecisionGraph>(projectId, snapshot.Revision,
+                new DecisionGraph(visited.Order(StringComparer.Ordinal).Select(id => Node(snapshot.Current[id])).ToArray(), contained.Take(GraphEdgeLimit).ToArray(),
+                    reasons.Count > 0, reasons.Order(StringComparer.Ordinal).ToArray(), unknown ? null : 0,
+                    unknown ? null : Math.Max(0, contained.Length - GraphEdgeLimit)));
+        }, cancellationToken);
+    }
+
+    /// <summary>The positions in <paramref name="edges" /> of each decision's edges, in ascending order, so a walk visits them in live-edge order.</summary>
+    private static Dictionary<string, List<int>> Touching(IReadOnlyList<DecisionEdge> edges)
+    {
+        var touching = new Dictionary<string, List<int>>(StringComparer.Ordinal);
+        for (var index = 0; index < edges.Count; index++)
+        {
+            Add(edges[index].SourceId, index);
+            if (edges[index].TargetId != edges[index].SourceId)
+            {
+                Add(edges[index].TargetId, index);
+            }
+        }
+
+        return touching;
+
+        void Add(string decisionId, int index)
+        {
+            if (!touching.TryGetValue(decisionId, out var positions))
+            {
+                touching[decisionId] = positions = [];
+            }
+
+            positions.Add(index);
+        }
+    }
+
+    private sealed record Snapshot(long Revision, IReadOnlyList<DecisionTask> Tasks, IReadOnlyList<DecisionRecord> Records,
+        IReadOnlyDictionary<string, DecisionVersion> Current, IReadOnlyList<DecisionVersion> Versions,
+        IReadOnlyList<DecisionEdge> Edges, IReadOnlyList<DecisionImport> Imports);
+
+    private static async Task<Snapshot> LoadAsync(IDecisionReader reader, bool history, bool imports, CancellationToken ct)
+    {
+        var revision = await reader.RevisionAsync(ct);
+        var tasks = await reader.TasksAsync(ct);
+        var records = await reader.RecordsAsync(ct);
+        var current = await reader.CurrentVersionsAsync(ct);
+        var versions = history ? await reader.AllVersionsAsync(ct) : current;
+        var edges = await reader.EdgesAsync(ct);
+        var source = imports ? await reader.ImportsAsync(ct) : [];
+        return new Snapshot(revision, tasks, records, current.ToDictionary(version => version.DecisionId, StringComparer.Ordinal), versions, edges, source);
+    }
+
+    private static IReadOnlyList<DecisionTask> SelectTasks(IReadOnlyList<DecisionTask> tasks, DecisionTaskSelector selector)
+    {
+        if (selector.TaskIds is { } ids)
+        {
+            var known = tasks.Select(task => task.TaskId).ToHashSet(StringComparer.Ordinal);
+            if (ids.Any(id => !known.Contains(id)))
+            {
+                throw NotFound("Selected task");
+            }
+
+            var selected = ids.ToHashSet(StringComparer.Ordinal);
+            return tasks.Where(task => selected.Contains(task.TaskId)).ToArray();
+        }
+
+        return selector.All ? tasks : tasks.Take(selector.Last!.Value).ToArray();
+    }
+
+    /// <summary>
+    ///     The decisions the tasks touched. <paramref name="versioned" /> names those with a version under the tasks when the
+    ///     snapshot holds no history; without it the snapshot's versions are read.
+    /// </summary>
+    private static HashSet<string> SelectedIds(Snapshot snapshot, IReadOnlyList<DecisionTask> tasks, IReadOnlySet<string>? versioned)
+    {
+        var selected = tasks.Select(task => task.TaskId).ToHashSet(StringComparer.Ordinal);
+        var ids = snapshot.Records.Where(record => selected.Contains(record.OriginTaskId)).Select(record => record.DecisionId).ToHashSet(StringComparer.Ordinal);
+        ids.UnionWith(versioned ?? snapshot.Versions.Where(version => selected.Contains(version.TaskId)).Select(version => version.DecisionId));
+        ids.UnionWith(snapshot.Edges.Where(edge => selected.Contains(edge.TaskId) || edge.RemovalTaskId is { } removed && selected.Contains(removed)).Select(edge => edge.SourceId));
+        return ids;
+    }
+
+    private static DecisionExport Export(Snapshot snapshot, DecisionTaskSelector selector, DateTimeOffset now, IReadOnlySet<string>? versioned = null)
+    {
+        var tasks = SelectTasks(snapshot.Tasks, selector);
+        var taskIds = tasks.Select(task => task.TaskId).ToHashSet(StringComparer.Ordinal);
+        var selected = SelectedIds(snapshot, tasks, versioned);
+        var versions = snapshot.Versions.ToLookup(version => version.DecisionId, StringComparer.Ordinal);
+        var decisions = snapshot.Records.Where(record => selected.Contains(record.DecisionId)).Select(record =>
+        {
+            var history = versions[record.DecisionId].ToArray();
+            var touches = history.Where(version => taskIds.Contains(version.TaskId)).Select(version => new DecisionTouch(version.TaskId, "version", version.Version)).ToList();
+            foreach (var edge in snapshot.Edges.Where(edge => edge.SourceId == record.DecisionId))
+            {
+                if (taskIds.Contains(edge.TaskId))
+                {
+                    touches.Add(new DecisionTouch(edge.TaskId, "edge-created", EdgeId: edge.EdgeId));
+                }
+
+                if (edge.RemovalTaskId is { } removed && taskIds.Contains(removed))
+                {
+                    touches.Add(new DecisionTouch(removed, "edge-removed", EdgeId: edge.EdgeId));
+                }
+            }
+
+            return new ExportedDecision(record, history, touches);
+        }).ToArray();
+        var edges = snapshot.Edges.Where(edge => selected.Contains(edge.SourceId) || selected.Contains(edge.TargetId)).ToArray();
+        var boundaries = edges.SelectMany(edge => new[] { edge.SourceId, edge.TargetId }).Where(id => !selected.Contains(id)).Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal).Select(id => Node(snapshot.Current[id], true)).ToArray();
+        var source = snapshot.Imports.Where(import => taskIds.Contains(import.TaskId) || import.DecisionId is { } id && selected.Contains(id)).ToArray();
+        var referenced = decisions.SelectMany(decision => decision.Versions.Select(version => version.TaskId).Append(decision.Record.OriginTaskId))
+            .Concat(edges.Select(edge => edge.TaskId)).Concat(edges.Where(edge => edge.RemovalTaskId is not null).Select(edge => edge.RemovalTaskId!))
+            .Concat(source.Select(import => import.TaskId)).ToHashSet(StringComparer.Ordinal);
+        referenced.ExceptWith(taskIds);
+        return new DecisionExport(1, now, selector, tasks.Select(task => task.TaskId).ToArray(), tasks, decisions, edges, boundaries,
+            snapshot.Tasks.Where(task => referenced.Contains(task.TaskId)).ToArray(), source,
+            new DecisionExportCounts(tasks.Count, decisions.Length, decisions.Sum(decision => decision.Versions.Count), edges.Length, boundaries.Length, source.Length));
+    }
+
+    private static DecisionNode Node(DecisionVersion version, bool boundary = false) => new(version.DecisionId, version.Content.Title, version.Status, version.Version, boundary);
+    private static DecisionMatch Match(DecisionVersion version, double? rank) => new(Node(version), version.Content.Category,
+        Excerpt(version.Content.Outcome, 240), Excerpt(version.Content.Reasoning, 240), version.Content.Sources, rank);
+    private static void ValidateSearch(string? query, string? category)
+    {
+        if (query is not null)
+        {
+            DecisionText.Required(query, 2000, nameof(query));
+        }
+
+        if (category is not null)
+        {
+            DecisionText.Required(category, 100, nameof(category));
+        }
+    }
+}
