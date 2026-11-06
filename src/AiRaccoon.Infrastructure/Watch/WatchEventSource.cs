@@ -32,6 +32,12 @@ public sealed partial class WatchEventSource(
 
     private readonly Dictionary<WatchKey, FileSystemWatcher> _watchers = new();
 
+    /// <summary>
+    ///     Raised with the project id and normalized path when a watcher's buffer overflows and events
+    ///     were lost. Runs on the watcher's callback thread, so a handler must not block.
+    /// </summary>
+    public event Action<string, string>? Overflowed;
+
     public void Dispose() => StopAll();
 
     /// <summary>Creates + enables the watcher for (projectId, path); idempotent; failures become error events.</summary>
@@ -175,7 +181,17 @@ public sealed partial class WatchEventSource(
 
     internal void HandleRenamed(string projectId, string watchPath, RenamedEventArgs e) => Translate(projectId, watchPath, e.FullPath, WatchEventKind.Renamed, e.OldFullPath);
 
-    internal void HandleError(string projectId, string watchPath, ErrorEventArgs e) => ReportError(projectId, watchPath, e.GetException() ?? new IOException("FileSystemWatcher error"));
+    internal void HandleError(string projectId, string watchPath, ErrorEventArgs e)
+    {
+        var exception = e.GetException() ?? new IOException("FileSystemWatcher error");
+        if (exception is InternalBufferOverflowException)
+        {
+            ReportOverflow(projectId, watchPath);
+            return;
+        }
+
+        ReportError(projectId, watchPath, exception);
+    }
 
     private void Translate(string projectId, string watchPath, string fullPath, WatchEventKind kind, string? oldPath)
     {
@@ -222,6 +238,18 @@ public sealed partial class WatchEventSource(
         catch (Exception ex)
         {
             ReportError(projectId, watchPath, ex);
+        }
+    }
+
+    private void ReportOverflow(string projectId, string watchPath)
+    {
+        try
+        {
+            Overflowed?.Invoke(projectId, watchPath);
+        }
+        catch (Exception ex)
+        {
+            Log.ErrorCallbackFailed(logger, ex);
         }
     }
 

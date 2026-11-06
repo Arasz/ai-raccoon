@@ -23,6 +23,7 @@ public sealed partial class WatchHostedService : BackgroundService
     private readonly WatchEventSource _eventSource;
     private readonly ILogger<WatchHostedService> _logger;
     private readonly IMemoryStore _memory;
+    private readonly WatchOverflowDebounce _overflows = new(OverflowQuietPeriod, OverflowMaxWait);
     private readonly WatchPipeline _pipeline;
     private readonly HashSet<WatchKey> _registered = [];
     private readonly IWatchStore _store;
@@ -47,6 +48,7 @@ public sealed partial class WatchHostedService : BackgroundService
         // removal drops the key here instantly, so a remove-then-re-add never reads as continuously active.
         _pipeline.Unregistered += OnWatchUnregistered;
         _pipeline.Recovered += OnWatchRecovered;
+        _eventSource.Overflowed += OnWatchOverflowed;
     }
 
     public static TimeSpan PollInterval { get; } = TimeSpan.FromSeconds(1);
@@ -56,6 +58,15 @@ public sealed partial class WatchHostedService : BackgroundService
     ///     event never arrived heals without a restart. One pruned walk of the owner's roots costs about 0.1 CPU-s.
     /// </summary>
     public static TimeSpan HealInterval { get; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>How long a watch must go without an overflow before its burst gets a scan.</summary>
+    public static TimeSpan OverflowQuietPeriod { get; } = TimeSpan.FromSeconds(2);
+
+    /// <summary>The longest a burst waits for quiet, so a watch that keeps overflowing still gets scanned.</summary>
+    public static TimeSpan OverflowMaxWait { get; } = TimeSpan.FromSeconds(30);
+
+    private void OnWatchOverflowed(string projectId, string path) =>
+        _overflows.Record(new WatchKey(projectId, path), _timeProvider.GetUtcNow());
 
     private void OnWatchRecovered(string projectId, string path)
     {
@@ -192,6 +203,7 @@ public sealed partial class WatchHostedService : BackgroundService
             stale = [.. _registered.Where(k => !seen.Contains(k))];
         }
 
+        DrainOverflows(pass, cancellationToken);
         HealIfDue(pass, cancellationToken);
 
         foreach (var s in stale)
@@ -202,6 +214,38 @@ public sealed partial class WatchHostedService : BackgroundService
             // docs/plans/2026-08-07-watch-scan-runaway-fix.md) OnWatchUnregistered also handles.
             _pipeline.UnregisterWatch(s.ProjectId, s.Path);
             Log.StaleRegistrationUnregistered(_logger, s.ProjectId, s.Path);
+        }
+    }
+
+    /// <summary>
+    ///     Queues one changed-files scan per due overflow burst. A burst waits out a running scan, which
+    ///     may already have passed the lost change; one on an inactive or stopped watch is dropped.
+    /// </summary>
+    private void DrainOverflows(IOperationScope pass, CancellationToken cancellationToken)
+    {
+        foreach (var key in _overflows.Due(_timeProvider.GetUtcNow()))
+        {
+            bool active;
+            lock (_activeGate)
+            {
+                active = _active.Contains(key);
+            }
+
+            if (!active || _pipeline.IsStopped(key.ProjectId, key.Path))
+            {
+                _overflows.Take(key);
+                continue;
+            }
+
+            if (_catchUp.IsScanning(key.ProjectId, key.Path))
+            {
+                continue;
+            }
+
+            var overflows = _overflows.Take(key);
+            pass.NoteWork();
+            Log.OverflowScanQueued(_logger, key.ProjectId, key.Path, overflows);
+            _catchUp.EnqueueChangedFiles(key.ProjectId, key.Path, cancellationToken);
         }
     }
 
@@ -257,6 +301,10 @@ public sealed partial class WatchHostedService : BackgroundService
 
     private static partial class Log
     {
+        [LoggerMessage(EventId = 324, Level = LogLevel.Warning,
+            Message = "Watch for project {ProjectId} at {Path} overflowed {Overflows} time(s) and lost events; scanning it for changed files")]
+        public static partial void OverflowScanQueued(ILogger logger, string projectId, string path, int overflows);
+
         [LoggerMessage(EventId = 320, Level = LogLevel.Warning, Message = "Watch re-watch reconcile pass failed")]
         public static partial void ReconcileError(ILogger logger, Exception exception);
 

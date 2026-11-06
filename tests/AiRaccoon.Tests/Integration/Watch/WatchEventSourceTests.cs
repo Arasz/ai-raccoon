@@ -115,6 +115,32 @@ public sealed class WatchEventSourceTests
     }
 
     [RetryFact]
+    public void BufferOverflow_RaisesOverflowed_AndNotAnError()
+    {
+        using var dir = TempDir.New("source-overflow");
+        var errors = new List<WatchEventError>();
+        var overflowed = new List<(string ProjectId, string Path)>();
+        var source = NewSource([], errors);
+        source.Overflowed += (projectId, path) => overflowed.Add((projectId, path));
+
+        source.HandleError(Project, dir.Path, new ErrorEventArgs(new InternalBufferOverflowException()));
+
+        overflowed.ShouldHaveSingleItem().ShouldBe((Project, dir.Path));
+        errors.ShouldBeEmpty();
+    }
+
+    [RetryFact]
+    public void BufferOverflow_WhenTheHandlerThrows_DoesNotThrow()
+    {
+        using var dir = TempDir.New("source-overflow-throws");
+        var source = NewSource([], []);
+        source.Overflowed += (_, _) => throw new InvalidOperationException("boom");
+
+        Should.NotThrow(() =>
+            source.HandleError(Project, dir.Path, new ErrorEventArgs(new InternalBufferOverflowException())));
+    }
+
+    [RetryFact]
     public void Start_OnInvalidPath_DoesNotThrow_AndEmitsSyntheticErrorEvent()
     {
         var errors = new List<WatchEventError>();
