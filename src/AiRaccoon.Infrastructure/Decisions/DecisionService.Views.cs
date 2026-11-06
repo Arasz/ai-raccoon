@@ -70,18 +70,11 @@ public sealed partial class DecisionService
         Guard.IsInRange(limit, 1, 21, nameof(limit));
         return Store.ReadAsync(projectId, async (reader, ct) =>
         {
-            var snapshot = await LoadAsync(reader, false, false, ct);
-            var ranks = (await reader.SearchAsync(scenario, ct)).ToDictionary(hit => hit.DecisionId, hit => hit.Rank, StringComparer.Ordinal);
-            var now = Now;
-            var matches = snapshot.Current.Values.Where(version => ranks.ContainsKey(version.DecisionId)
-                && (category is null || version.Content.Category == category)
-                && (includeInactive || version.Status == DecisionStatus.Accepted
-                    && (!version.Content.ValidFrom.HasValue || version.Content.ValidFrom.Value <= now)
-                    && (!version.Content.ValidUntil.HasValue || version.Content.ValidUntil.Value > now)))
-                .OrderBy(version => ranks[version.DecisionId]).ThenBy(version => version.DecisionId, StringComparer.Ordinal).ToArray();
-            return new DecisionResult<DecisionQueryResult>(projectId, snapshot.Revision,
-                new DecisionQueryResult(matches.Take(limit).Select(version => Match(version, ranks[version.DecisionId])).ToArray(), matches.Length,
-                    matches.Length > limit, null, "fts"));
+            var revision = await reader.RevisionAsync(ct);
+            var found = await reader.FindCurrentAsync(new DecisionCurrentFilter(scenario, Category: category,
+                Statuses: includeInactive ? null : [DecisionStatus.Accepted], ActiveAt: includeInactive ? null : Now, Take: limit, ByRank: true), ct);
+            return new DecisionResult<DecisionQueryResult>(projectId, revision,
+                new DecisionQueryResult(found.Page.Select(hit => Match(hit.Version, hit.Rank)).ToArray(), found.Total, found.Total > limit, null, "fts"));
         }, cancellationToken);
     }
 
