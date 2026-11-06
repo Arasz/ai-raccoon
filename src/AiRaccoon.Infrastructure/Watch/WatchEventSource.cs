@@ -343,7 +343,7 @@ public sealed partial class WatchEventSource(
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 304, Level = LogLevel.Warning,
+        [LoggerMessage(EventId = 299, Level = LogLevel.Warning,
             Message = "Watch buffer overflowed {Count} times for {ProjectId} on {WatchPath}; events were dropped, scanning for changed files")]
         public static partial void BufferOverflowed(ILogger logger, int count, string projectId, string watchPath);
 

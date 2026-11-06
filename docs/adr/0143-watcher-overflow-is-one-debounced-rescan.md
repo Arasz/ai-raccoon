@@ -18,7 +18,7 @@ The buffer size was also a constant, so a machine that overflowed on every burst
 **Overflow is a rescan trigger, not a failure report.** `WatchEventSource.HandleError` treats `InternalBufferOverflowException` separately from every other watcher error:
 
 - The first overflow of a watch opens a window of `WatchEventSource.OverflowDebounce` (2 s). Overflows inside the window only add to its count.
-- When the window closes, the source logs one `Warning` (event 304, with the count) and raises `Overflowed(projectId, path)` once.
+- When the window closes, the source logs one `Warning` (event 299, with the count) and raises `Overflowed(projectId, path)` once.
 - `WatchHostedService` handles `Overflowed` by queueing a changed-files scan for that watch if it is active. The scan guard already joins a scan that is running.
 - The window is fixed from the first overflow, not extended by later ones, so a sustained storm still rescans every 2 s at most instead of never.
 - `Stop` and `StopAll` drop an open window.
@@ -46,4 +46,4 @@ The key is global only. The buffer is a per-watcher OS allocation, not a per-pro
 
 ## Verification
 
-`WatchEventSourceTests` — five overflows inside the window raise `Overflowed` once and report no error; the count is logged once as event 304; a later overflow opens a new window; separate watches rescan separately; `Stop` and `StopAll` cancel a pending rescan; `Start` honours a given buffer size. `WatchHostedServiceTests` — three overflows queue exactly one changed-files scan, which ingests the file the overflow dropped, and the setting reaches the started watcher. `WatchBufferTests` — default, parse failure and both clamps. With the overflow branch disabled, five of these tests fail.
+`WatchEventSourceTests` — five overflows inside the window raise `Overflowed` once and report no error; the count is logged once as event 299; a later overflow opens a new window; separate watches rescan separately; `Stop` and `StopAll` cancel a pending rescan; `Start` honours a given buffer size. `WatchHostedServiceTests` — three overflows queue exactly one changed-files scan, which ingests the file the overflow dropped, and the setting reaches the started watcher. `WatchBufferTests` — default, parse failure and both clamps. With the overflow branch disabled, five of these tests fail.

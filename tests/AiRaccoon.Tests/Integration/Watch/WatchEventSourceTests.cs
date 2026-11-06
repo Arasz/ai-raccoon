@@ -158,7 +158,7 @@ public sealed class WatchEventSourceTests
         clock.Advance(WatchEventSource.OverflowDebounce);
 
         var line = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
-        line.Id.Id.ShouldBe(304);
+        line.Id.Id.ShouldBe(299);
         line.Level.ShouldBe(LogLevel.Warning);
         line.Message.ShouldContain("4");
     }

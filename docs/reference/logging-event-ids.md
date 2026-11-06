@@ -9,10 +9,14 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **217** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **219** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
+
+(Remeasured 2026-11-06, ADR-0143: **219**. `WatchEventSource` takes 299, the free id just below its
+300-301: 302-303 belong to `WatchPipeline`, so a block grown upward would interleave with it. `WatchHostedService`
+grows from 320-323 to 320-324 for a buffer-size setting that could not be read. +2 over the 217 below.)
 
 (Remeasured 2026-10-23, task/air-ort-node-placement-log-summary: **217**. `OrtSessionLog` takes 450-452 in
 the gap after `CudaFallbackReporter`'s 449: one node-placement line per ONNX Runtime session, the line
@@ -171,10 +175,10 @@ One block per source file that owns a `Log` class or equivalent:
 | 100-103 | `src/AiRaccoon.Infrastructure/Sync/SyncService.cs` (101-103 added 2026-08-22: the remote-blob HMAC authenticity check, docs/work/2026-08-21-delta-review-fix-plan.md S2 — 101 skips the push-side tag for an unencrypted bank, 102 skips the pull-side check for the same reason, 103 warns on a legacy remote blob with no tag) |
 | 200-202 | `src/AiRaccoon.Infrastructure/Sync/S3CloudStore.cs` |
 | 203-205 | `src/AiRaccoon.Infrastructure/Sync/AzureBlobCloudStore.cs` |
-| 300, 301 | `src/AiRaccoon.Infrastructure/Watch/WatchEventSource.cs` |
+| 299-301 | `src/AiRaccoon.Infrastructure/Watch/WatchEventSource.cs` (299 added 2026-11-06, ADR-0143: one Warning per debounced buffer-overflow window, with its count) |
 | 302-303 | `src/AiRaccoon.Infrastructure/Watch/WatchPipeline.cs` (303 added 2026-10-18: `FileSkipped` at Debug, a digest skipped a file as unsupported-type, binary or unparseable) |
 | 310-312 | `src/AiRaccoon.Infrastructure/Watch/WatchCatchUp.cs` |
-| 320-323 | `src/AiRaccoon.Infrastructure/Watch/WatchHostedService.cs` |
+| 320-324 | `src/AiRaccoon.Infrastructure/Watch/WatchHostedService.cs` (324 added 2026-11-06, ADR-0143: the buffer-size setting could not be read, so the watcher starts with the default) |
 | 330 | `src/AiRaccoon/Setup/AppRegistrations.cs` |
 | 400 | *(retired 2026-08-22, WP11-B2)* — was `src/AiRaccoon.Infrastructure/Watch/WatchDigestExecutor.cs`'s best-effort-embed-failed warning; the digest no longer embeds inline (it signals the embed topic via `IEventPump<EmbedDrainRequest>.TryEnqueue`, which cannot throw), so the call site — and the `Log` class it lived in — is gone. Retired rather than reused, same convention as 416/512/516. |
 | 410-413 | `src/AiRaccoon.Infrastructure/Embedding/BundledModel.cs` |
