@@ -288,6 +288,25 @@ public sealed class WatchHostedServiceTests
     }
 
     /// <summary>
+    ///     A bank that cannot read the buffer setting must not strand the watch: the key is marked
+    ///     active before the watcher starts, so a throw there would skip it on every later pass.
+    /// </summary>
+    [RetryFact]
+    public async Task Reconcile_WhenTheBufferSettingCannotBeRead_StillStartsTheWatcherWithTheDefault()
+    {
+        using var dir = TempDir.New("hosted-buffer-unreadable");
+        var (stack, source, _, hosted) = NewStack();
+        stack.Enable();
+        stack.Memory.SettingReadErrors[WatchConfigKeys.BufferSizeGlobal] = new IOException("database is locked");
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        source.WatcherFor(Project, dir.Path)!.InternalBufferSize.ShouldBe(WatchBuffer.Default);
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    /// <summary>
     ///     A failed digest drops its event. The first success after it scans the watch at once, so
     ///     the dropped change is caught without waiting for the heal interval.
     /// </summary>

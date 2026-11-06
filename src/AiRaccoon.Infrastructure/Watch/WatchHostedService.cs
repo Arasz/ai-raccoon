@@ -191,8 +191,7 @@ public sealed partial class WatchHostedService : BackgroundService
             }
 
             pass.NoteWork();
-            bufferSize ??= WatchBuffer.Resolve(
-                await _memory.GetSettingAsync(WatchConfigKeys.BufferSizeGlobal, cancellationToken));
+            bufferSize ??= await ReadBufferSizeAsync(cancellationToken);
             _eventSource.Start(registration.ProjectId, registration.Path, bufferSize.Value);
             if (registration.LastChangeTs == 0)
             {
@@ -262,6 +261,20 @@ public sealed partial class WatchHostedService : BackgroundService
         }
     }
 
+    /// <summary>The configured buffer size, or the default when the bank cannot be read; a watch must start either way.</summary>
+    private async Task<int> ReadBufferSizeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return WatchBuffer.Resolve(await _memory.GetSettingAsync(WatchConfigKeys.BufferSizeGlobal, cancellationToken));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.BufferSettingUnreadable(_logger, ex);
+            return WatchBuffer.Default;
+        }
+    }
+
     private async Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken)
     {
         var values = new Dictionary<string, string?>(StringComparer.Ordinal);
@@ -285,6 +298,10 @@ public sealed partial class WatchHostedService : BackgroundService
         [LoggerMessage(EventId = 322, Level = LogLevel.Debug,
             Message = "Watch heal queued a changed-files scan for {Count} watches")]
         public static partial void HealScansQueued(ILogger logger, int count);
+
+        [LoggerMessage(EventId = 324, Level = LogLevel.Warning,
+            Message = "Watch buffer-size setting could not be read; starting the watcher with the default size")]
+        public static partial void BufferSettingUnreadable(ILogger logger, Exception exception);
 
         [LoggerMessage(EventId = 323, Level = LogLevel.Information,
             Message = "Watch for project {ProjectId} at {Path} digested again after a failure; scanning it for changed files")]
