@@ -79,9 +79,10 @@ ai-raccoon decisions export --project-id <project-id> --tasks 3 --output decisio
 ```
 
 The export is plaintext even for an encrypted bank. `--output` publishes the file only once it is
-complete. On macOS and Linux the file is owner-only (`0600`). On Windows it takes the permissions of
-the destination directory, so export into a directory only you can read, or check the file's
-permissions after the export.
+complete. On macOS and Linux the file mode is `0600`, but an ACL the file inherits from its directory
+can still let other users read it. On Windows the file takes the permissions of the destination
+directory. On every platform, export into a directory only you can read, or check the file's
+permissions and ACLs after the export.
 
 ## Access modes
 

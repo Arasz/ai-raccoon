@@ -1,6 +1,6 @@
 {
   "task_id": "air-native-project-decision-graph-implementation",
-  "revision": 9,
+  "revision": 10,
   "content_hash": "0aa6b45cd7f191e1dc43b4f0cdca7aa7c5ecaea662efaf9a080da04b31361962",
   "schema_url": "https://github.com/Arasz/ai-badger/schemas/task-plan.schema.json",
   "document": {
@@ -262,7 +262,7 @@
                 "MET independent review-tests: coordinator-run reviews covered model/service, adapters/CLI and migration/repair; the 252eff6a findings are fixed (622287b3, a0c43e75).",
                 "MET release traceable: VERSION 2.4.0, docs/changelog/2.4.0-native-decision-graph.md, changelog index, README What's new (1b718a1a).",
                 "MET handover/rollback documented: docs/how-to/record-project-decisions.md, ADR-0142 Accepted with What shipped; Semantica import deferred to #924; framework switch is a separate PR.",
-                "MET CI on the release head: db382eab green on build-fast, build-slow, build-bdd, build-nightly-gates (run-nightly-gates label), scripts-harness and review; claude[bot] approved db382eab."
+                "MET CI on db382eab, the last code commit (later commits change docs only): green on build-fast, build-slow, build-bdd, build-nightly-gates (run-nightly-gates label), scripts-harness and review; claude[bot] approved db382eab."
               ]
             }
           ],
@@ -277,7 +277,7 @@
         }
       }
     },
-    "revision": 9,
+    "revision": 10,
     "created_at": "2026-10-26T13:35:05Z",
     "updated_at": "2026-11-06T12:19:57Z"
   }
