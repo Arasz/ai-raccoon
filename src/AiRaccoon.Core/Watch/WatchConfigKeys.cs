@@ -10,6 +10,9 @@ public static class WatchConfigKeys
     public const string EnabledGlobal = "watch.enabled.global";
     public const string ConcurrencyGlobal = "watch.concurrency.global";
 
+    /// <summary>Machine-global only: the buffer is a per-watcher OS allocation, not a per-project choice. See <see cref="WatchBuffer" />.</summary>
+    public const string BufferSizeGlobal = "watch.buffer-size.global";
+
     /// <summary>The per-project key; the id segment folds at construction (air-merge P4 — see <see cref="AiRaccoon.Core.Ingestion.IngestScopeKeys" />).</summary>
     public static string EnabledProject(string projectId) =>
         $"watch.enabled.{Projects.ProjectIdAliasMap.Default.Fold(projectId)}";

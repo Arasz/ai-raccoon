@@ -18,6 +18,7 @@ public sealed partial class WatchHostedService : BackgroundService
     internal const string OperationName = "watch.reconcile";
 
     private readonly HashSet<WatchKey> _active = [];
+    private readonly HashSet<WatchKey> _heldRescans = [];
     private readonly Lock _activeGate = new();
     private readonly WatchCatchUp _catchUp;
     private readonly WatchEventSource _eventSource;
@@ -47,6 +48,7 @@ public sealed partial class WatchHostedService : BackgroundService
         // removal drops the key here instantly, so a remove-then-re-add never reads as continuously active.
         _pipeline.Unregistered += OnWatchUnregistered;
         _pipeline.Recovered += OnWatchRecovered;
+        _eventSource.Overflowed += OnWatchOverflowed;
     }
 
     public static TimeSpan PollInterval { get; } = TimeSpan.FromSeconds(1);
@@ -63,12 +65,79 @@ public sealed partial class WatchHostedService : BackgroundService
         _catchUp.EnqueueChangedFiles(projectId, path, _stopping);
     }
 
+    private void OnWatchOverflowed(string projectId, string path)
+    {
+        var key = new WatchKey(projectId, path);
+        if (!CanRescan(key))
+        {
+            return;
+        }
+
+        if (_catchUp.IsScanning(projectId, path))
+        {
+            lock (_activeGate)
+            {
+                _heldRescans.Add(key);
+            }
+
+            return;
+        }
+
+        _catchUp.EnqueueChangedFiles(projectId, path, _stopping);
+    }
+
+    private bool CanRescan(WatchKey key)
+    {
+        lock (_activeGate)
+        {
+            if (!_active.Contains(key))
+            {
+                return false;
+            }
+        }
+
+        return !_pipeline.IsStopped(key.ProjectId, key.Path);
+    }
+
+    /// <summary>
+    ///     Queues the rescans held behind a running scan, which may already have passed the lost change.
+    ///     One whose watch went inactive or stopped meanwhile is dropped.
+    /// </summary>
+    private void DrainHeldRescans(IOperationScope pass, CancellationToken cancellationToken)
+    {
+        WatchKey[] held;
+        lock (_activeGate)
+        {
+            held = [.. _heldRescans];
+        }
+
+        foreach (var key in held)
+        {
+            if (_catchUp.IsScanning(key.ProjectId, key.Path))
+            {
+                continue;
+            }
+
+            lock (_activeGate)
+            {
+                _heldRescans.Remove(key);
+            }
+
+            if (CanRescan(key))
+            {
+                pass.NoteWork();
+                _catchUp.EnqueueChangedFiles(key.ProjectId, key.Path, cancellationToken);
+            }
+        }
+    }
+
     private void OnWatchUnregistered(string projectId, string path)
     {
         lock (_activeGate)
         {
             _active.Remove(new WatchKey(projectId, path));
             _registered.Remove(new WatchKey(projectId, path));
+            _heldRescans.Remove(new WatchKey(projectId, path));
         }
     }
 
@@ -117,6 +186,7 @@ public sealed partial class WatchHostedService : BackgroundService
         {
             _active.Clear();
             _registered.Clear();
+            _heldRescans.Clear();
         }
 
         await base.StopAsync(cancellationToken);
@@ -136,6 +206,7 @@ public sealed partial class WatchHostedService : BackgroundService
         var registrations = await _store.ListWatchesAsync(cancellationToken);
         pass.Tag("registrations", registrations.Count.ToString());
         var seen = new HashSet<WatchKey>();
+        int? bufferSize = null;
         foreach (var registration in registrations)
         {
             var key = new WatchKey(registration.ProjectId, registration.Path);
@@ -175,7 +246,8 @@ public sealed partial class WatchHostedService : BackgroundService
             }
 
             pass.NoteWork();
-            _eventSource.Start(registration.ProjectId, registration.Path);
+            bufferSize ??= await ReadBufferSizeAsync(cancellationToken);
+            _eventSource.Start(registration.ProjectId, registration.Path, bufferSize.Value);
             if (registration.LastChangeTs == 0)
             {
                 _catchUp.EnqueueInitialScan(registration.ProjectId, registration.Path, cancellationToken);
@@ -192,6 +264,7 @@ public sealed partial class WatchHostedService : BackgroundService
             stale = [.. _registered.Where(k => !seen.Contains(k))];
         }
 
+        DrainHeldRescans(pass, cancellationToken);
         HealIfDue(pass, cancellationToken);
 
         foreach (var s in stale)
@@ -244,6 +317,20 @@ public sealed partial class WatchHostedService : BackgroundService
         }
     }
 
+    /// <summary>The configured buffer size, or the default when the bank cannot be read; a watch must start either way.</summary>
+    private async Task<int> ReadBufferSizeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            return WatchBuffer.Resolve(await _memory.GetSettingAsync(WatchConfigKeys.BufferSizeGlobal, cancellationToken));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.BufferSettingUnreadable(_logger, ex);
+            return WatchBuffer.Default;
+        }
+    }
+
     private async Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken)
     {
         var values = new Dictionary<string, string?>(StringComparer.Ordinal);
@@ -267,6 +354,10 @@ public sealed partial class WatchHostedService : BackgroundService
         [LoggerMessage(EventId = 322, Level = LogLevel.Debug,
             Message = "Watch heal queued a changed-files scan for {Count} watches")]
         public static partial void HealScansQueued(ILogger logger, int count);
+
+        [LoggerMessage(EventId = 324, Level = LogLevel.Warning,
+            Message = "Watch buffer-size setting could not be read; starting the watcher with the default size")]
+        public static partial void BufferSettingUnreadable(ILogger logger, Exception exception);
 
         [LoggerMessage(EventId = 323, Level = LogLevel.Information,
             Message = "Watch for project {ProjectId} at {Path} digested again after a failure; scanning it for changed files")]
