@@ -20,6 +20,20 @@ public static class DecisionText
         Guard.IsFalse(value.Any(IsHidden), parameter);
     }
 
+    /// <summary>True when <see cref="Identifier" /> would accept the value.</summary>
+    public static bool IsIdentifier(string value)
+    {
+        try
+        {
+            Identifier(value, nameof(value));
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
     private static bool IsHidden(char character) =>
         char.IsControl(character)
         || CharUnicodeInfo.GetUnicodeCategory(character) is UnicodeCategory.Format

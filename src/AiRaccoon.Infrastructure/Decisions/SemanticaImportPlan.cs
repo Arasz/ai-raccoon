@@ -509,18 +509,7 @@ public sealed record SemanticaImportPlan(IReadOnlyList<PlannedDecision> Decision
             return true;
         }
 
-        private static bool IsIdentifier(string value)
-        {
-            try
-            {
-                DecisionText.Identifier(value, nameof(value));
-                return true;
-            }
-            catch (ArgumentException)
-            {
-                return false;
-            }
-        }
+        private static bool IsIdentifier(string value) => DecisionText.IsIdentifier(value);
 
         private void Block(string code, string path, string message, string? recordId = null) => _blockers.Add(new DecisionImportIssue(code, path, message, recordId));
 

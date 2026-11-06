@@ -15,5 +15,7 @@ public interface IDecisionService
     Task<DecisionResult<DecisionPreview>> PreviewAsync(string projectId, DecisionPreviewOptions? options = null, CancellationToken cancellationToken = default);
     Task<DecisionResult<DecisionQueryResult>> QueryAsync(string projectId, DecisionQuery? query = null, CancellationToken cancellationToken = default);
     Task<DecisionResult<DecisionQueryResult>> PrecedentsAsync(string projectId, string scenario, string? category = null, int limit = 5, bool includeInactive = false, CancellationToken cancellationToken = default);
+    Task<DecisionResult<DecisionImportReport>> PreviewSemanticaImportAsync(string projectId, byte[] source, byte[] mapping, CancellationToken cancellationToken = default);
+    Task<DecisionResult<DecisionImportOutcome>> ApplySemanticaImportAsync(string projectId, DecisionImportCommand command, CancellationToken cancellationToken = default);
     Task<DecisionResult<DecisionGraph>> GraphAsync(string projectId, DecisionGraphRequest request, CancellationToken cancellationToken = default);
 }
