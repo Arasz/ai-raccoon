@@ -77,8 +77,11 @@ every task, and `--task-id` names tasks (repeatable). Over MCP pass `selector` w
 ai-raccoon decisions preview --project-id <project-id>
 ai-raccoon decisions export --project-id <project-id> --tasks 3 --output decisions.json
 ```
-The export is plaintext even for an encrypted bank. `--output` writes an owner-only file and
-publishes it only once it is complete.
+
+The export is plaintext even for an encrypted bank. `--output` publishes the file only once it is
+complete. On macOS and Linux the file is owner-only (`0600`). On Windows it takes the permissions of
+the destination directory, so export into a directory only you can read, or check the file's
+permissions after the export.
 
 ## Access modes
 
