@@ -11,6 +11,7 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [2.5.1 — a watcher overflow during a scan is no longer lost until the heal](2.5.1-overflow-rescan-waits-for-running-scan.md)
 - [2.5.0 — a watcher overflow logs once and rescans; the buffer size is a setting](2.5.0-watcher-overflow-rescan.md)
 - [2.4.0 — AiRaccoon keeps the project's decisions](2.4.0-native-decision-graph.md)
 - [2.3.0 — the log says where ONNX Runtime put each model's nodes](2.3.0-onnx-node-placement-log.md)
