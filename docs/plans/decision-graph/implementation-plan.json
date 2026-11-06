@@ -1,6 +1,6 @@
 {
   "task_id": "air-native-project-decision-graph-implementation",
-  "revision": 8,
+  "revision": 9,
   "content_hash": "0aa6b45cd7f191e1dc43b4f0cdca7aa7c5ecaea662efaf9a080da04b31361962",
   "schema_url": "https://github.com/Arasz/ai-badger/schemas/task-plan.schema.json",
   "document": {
@@ -255,14 +255,14 @@
               "id": "release-contract",
               "statement": "Cross-surface behavior persists after restart, access modes agree, test quality is independently reviewed, release is traceable, and handover/rollback are documented.",
               "check": "DecisionIntegration_RestartAndAccessModes; combined MCP/HTTP/CLI scenario; independent review-tests; CI and documentation gates",
-              "status": "unchecked",
+              "status": "passed",
               "evidence": [
                 "MET DecisionIntegration_RestartAndAccessModes: 3/3 (ro, rw, full) on a real host restarted over the same bank; HTTP/MCP/CLI reads, CLI default/--tasks 2/--all export and preview match the backend; ro refuses writes on all three surfaces with no revision change. Red under 3 targeted mutations (MCP write gate, HTTP read gate, edges lost on reopen); see implementation-evidence.md Release acceptance. It found and fixed MCP depends_on refusal (87ca9662).",
                 "MET combined MCP/HTTP/CLI scenario: same test; 32 local classes 360/360 incl. source, docs/ADR, version and MCP contract gates.",
                 "MET independent review-tests: coordinator-run reviews covered model/service, adapters/CLI and migration/repair; the 252eff6a findings are fixed (622287b3, a0c43e75).",
                 "MET release traceable: VERSION 2.4.0, docs/changelog/2.4.0-native-decision-graph.md, changelog index, README What's new (1b718a1a).",
                 "MET handover/rollback documented: docs/how-to/record-project-decisions.md, ADR-0142 Accepted with What shipped; Semantica import deferred to #924; framework switch is a separate PR.",
-                "OPEN CI on the release head: pending at time of writing, so status stays unchecked and the step stays pending."
+                "MET CI on the release head: db382eab green on build-fast, build-slow, build-bdd, build-nightly-gates (run-nightly-gates label), scripts-harness and review; claude[bot] approved db382eab."
               ]
             }
           ],
@@ -272,12 +272,13 @@
             "VERSION"
           ],
           "resources": [],
-          "status": "pending"
+          "status": "complete",
+          "completed_at": "2026-11-06T12:19:57Z"
         }
       }
     },
-    "revision": 8,
+    "revision": 9,
     "created_at": "2026-10-26T13:35:05Z",
-    "updated_at": "2026-11-06T12:00:00Z"
+    "updated_at": "2026-11-06T12:19:57Z"
   }
 }

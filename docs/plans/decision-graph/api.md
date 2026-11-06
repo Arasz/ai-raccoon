@@ -1,6 +1,6 @@
 # Decision agent API and CLI
 
-Status: reviewed contract, following the [data model](data-model.md). Model, storage (schema v23), service, adapters, CLI and migration are complete in PR #923, Semantica import is deferred to #924, and the release step (2.4.0) is in progress until its CI passes. Import names below describe future behavior.
+Status: reviewed contract, following the [data model](data-model.md). Model, storage (schema v23), service, adapters, CLI and migration are complete in PR #923, Semantica import is deferred to #924, and the release step shipped as 2.4.0. Import names below describe future behavior.
 
 ## Common contract
 
