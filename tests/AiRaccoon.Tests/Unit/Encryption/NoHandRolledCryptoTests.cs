@@ -30,6 +30,8 @@ public sealed class NoHandRolledCryptoTests
         // Decision replay receipts: SHA-256 over the serialized write payload so a reused request id
         // with different content is refused. Content addressing only.
         "AiRaccoon.Infrastructure/Decisions/DecisionService.cs",
+        // Semantica import previews: SHA-256 over exact source and mapping bytes, not key material.
+        "AiRaccoon.Infrastructure/Decisions/SemanticaImportPlan.cs",
         "AiRaccoon.Infrastructure/Sqlite/MemorySchema.cs",
         "AiRaccoon.Infrastructure/Sqlite/SnippetFallback.cs",
         "AiRaccoon.Infrastructure/Sqlite/Memory/SqliteMemoryStore.cs",

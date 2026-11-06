@@ -57,7 +57,7 @@ public sealed class SemanticaParsingTests
         { "inner data", Envelope($$"""{"entities":[],"entities":[],"relationships":[],"statistics":{{EmptyStatistics}}}""") },
         { "properties", Envelope(Inner("""[{"id":"a","type":"decision","properties":{"outcome":"x","outcome":"y"}}]""",
             statistics: """{"entity_count":1,"relationship_count":0}""")) },
-        { "escaped", Envelope($$"""{"entities":[],"entities":[],"relationships":[],"statistics":{{EmptyStatistics}}}""") },
+        { "escaped", Envelope($$"""{"entities":[],"entit\u0069es":[],"relationships":[],"statistics":{{EmptyStatistics}}}""") },
     };
 
     [Theory]
