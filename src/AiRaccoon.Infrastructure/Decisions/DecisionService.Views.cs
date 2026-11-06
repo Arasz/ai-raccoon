@@ -24,8 +24,11 @@ public sealed partial class DecisionService
         Guard.IsInRange(request.MaxChars, 1000, 50001, "maxChars");
         return Store.ReadAsync(projectId, async (reader, ct) =>
         {
-            var snapshot = await LoadAsync(reader, true, true, ct);
-            var export = Export(snapshot, request.Selector ?? new DecisionTaskSelector(), Now);
+            // Preview shows current versions only, so it loads no history: membership by version comes from SQL.
+            var selector = request.Selector ?? new DecisionTaskSelector();
+            var snapshot = await LoadAsync(reader, false, false, ct);
+            var versioned = await reader.VersionedByAsync(SelectTasks(snapshot.Tasks, selector).Select(task => task.TaskId).ToArray(), ct);
+            var export = Export(snapshot, selector, Now, versioned);
             return new DecisionResult<DecisionPreview>(projectId, snapshot.Revision, Compact(projectId, export, request));
         }, cancellationToken);
     }
@@ -210,20 +213,24 @@ public sealed partial class DecisionService
         return selector.All ? tasks : tasks.Take(selector.Last!.Value).ToArray();
     }
 
-    private static HashSet<string> SelectedIds(Snapshot snapshot, IReadOnlyList<DecisionTask> tasks)
+    /// <summary>
+    ///     The decisions the tasks touched. <paramref name="versioned" /> names those with a version under the tasks when the
+    ///     snapshot holds no history; without it the snapshot's versions are read.
+    /// </summary>
+    private static HashSet<string> SelectedIds(Snapshot snapshot, IReadOnlyList<DecisionTask> tasks, IReadOnlySet<string>? versioned)
     {
         var selected = tasks.Select(task => task.TaskId).ToHashSet(StringComparer.Ordinal);
         var ids = snapshot.Records.Where(record => selected.Contains(record.OriginTaskId)).Select(record => record.DecisionId).ToHashSet(StringComparer.Ordinal);
-        ids.UnionWith(snapshot.Versions.Where(version => selected.Contains(version.TaskId)).Select(version => version.DecisionId));
+        ids.UnionWith(versioned ?? snapshot.Versions.Where(version => selected.Contains(version.TaskId)).Select(version => version.DecisionId));
         ids.UnionWith(snapshot.Edges.Where(edge => selected.Contains(edge.TaskId) || edge.RemovalTaskId is { } removed && selected.Contains(removed)).Select(edge => edge.SourceId));
         return ids;
     }
 
-    private static DecisionExport Export(Snapshot snapshot, DecisionTaskSelector selector, DateTimeOffset now)
+    private static DecisionExport Export(Snapshot snapshot, DecisionTaskSelector selector, DateTimeOffset now, IReadOnlySet<string>? versioned = null)
     {
         var tasks = SelectTasks(snapshot.Tasks, selector);
         var taskIds = tasks.Select(task => task.TaskId).ToHashSet(StringComparer.Ordinal);
-        var selected = SelectedIds(snapshot, tasks);
+        var selected = SelectedIds(snapshot, tasks, versioned);
         var versions = snapshot.Versions.ToLookup(version => version.DecisionId, StringComparer.Ordinal);
         var decisions = snapshot.Records.Where(record => selected.Contains(record.DecisionId)).Select(record =>
         {

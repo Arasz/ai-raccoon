@@ -16,6 +16,9 @@ public interface IDecisionReader
     Task<IReadOnlyList<DecisionVersion>> VersionsAsync(string decisionId, CancellationToken cancellationToken);
     Task<IReadOnlyList<DecisionVersion>> CurrentVersionsAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<DecisionVersion>> AllVersionsAsync(CancellationToken cancellationToken);
+
+    /// <summary>The decisions that have any version recorded under one of <paramref name="taskIds" />.</summary>
+    Task<IReadOnlySet<string>> VersionedByAsync(IReadOnlyCollection<string> taskIds, CancellationToken cancellationToken);
     Task<IReadOnlyList<DecisionSearchHit>> SearchAsync(string query, CancellationToken cancellationToken);
 
     /// <summary>One page of the current versions <paramref name="filter" /> keeps, and how many it keeps before AfterId and Take.</summary>

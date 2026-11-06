@@ -97,6 +97,15 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
         public async Task<IReadOnlyList<DecisionVersion>> AllVersionsAsync(CancellationToken cancellationToken) =>
             (await Rows("SELECT * FROM decision_versions WHERE project_id=@projectId ORDER BY decision_id,version", null, cancellationToken)).Select(Version).ToArray();
 
+        public async Task<IReadOnlySet<string>> VersionedByAsync(IReadOnlyCollection<string> taskIds, CancellationToken cancellationToken)
+        {
+            Guard.IsNotNull(taskIds);
+            var ids = await connection.QueryAsync<string>(Command(
+                "SELECT DISTINCT decision_id FROM decision_versions WHERE project_id=@projectId AND task_id IN (SELECT value FROM json_each(@taskIds))",
+                new { taskIds = JsonSerializer.Serialize(taskIds) }, cancellationToken));
+            return ids.ToHashSet(StringComparer.Ordinal);
+        }
+
         public async Task<IReadOnlyList<DecisionSearchHit>> SearchAsync(string query, CancellationToken cancellationToken)
         {
             if (Match(query) is not { } match)
