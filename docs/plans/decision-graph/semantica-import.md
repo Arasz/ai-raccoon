@@ -7,7 +7,7 @@ No schema migration is needed: the bank stays at v23. The tool count stays at 43
 ## Contract corrections
 
 1. `data-model.md` says creation allows proposed or accepted, but real records need `rejected` or `deprecated`. Writing v1 proposed plus v2 rejected in one import is impossible (`decision_versions` has `UNIQUE(project_id, project_revision, decision_id)`, and a mutation gets one revision) and would invent history. An imported decision is created as version 1 directly in its mapped status, with a null `change_reason`. Amend `data-model.md`.
-2. The CLI line in `api.md` cannot pass the source digest or the preview revision. Add `--source-digest` and `--expected-project-revision`.
+2. The CLI line in `api.md` cannot pass the source digest or the preview revision. Add `--source-digest`, `--mapping-digest` and `--expected-project-revision`.
 3. "Source digest" means two things. The request digest covers the file. `decision_imports.source_digest` is per record, otherwise "changed source under an existing external ID conflicts" cannot work across a newer export.
 4. `superseded` cannot be imported: it needs a replacement and the permanent edge, and no fixture shows a supersession relationship. It is a blocker. The remedy is to import both records as `accepted`, then call `supersede_decision`.
 5. `HttpRoutes_MapEveryOperationOnce` compares routes to `DecisionOperations.All`, which also feeds `McpToolContractTests` and `UnregisteredIdRefusalTests`, and those assume every row is a tool. The `DecisionEndpoint` summary says "one per decision tool". Add a separate `DecisionOperations.HttpOnly` list.
@@ -76,7 +76,7 @@ No MCP tool: `api.md` says no agent tool imports external graphs. Both routes us
 | Route | Access | Body | Result (`value`) |
 |---|---|---|---|
 | `POST P/imports/semantica/preview` | Read | `{source, mapping}` | `DecisionImportReport` |
-| `POST P/imports/semantica/apply` | Write | `{sessionId, requestId, source, mapping, sourceDigest, expectedProjectRevision, actor?}` | `DecisionImportOutcome` |
+| `POST P/imports/semantica/apply` | Write | `{sessionId, requestId, source, mapping, sourceDigest, mappingDigest, expectedProjectRevision, actor?}` | `DecisionImportOutcome` |
 
 `source` and `mapping` are base64 of the exact file bytes, which keeps digests honest and keeps duplicate-key checks on the original text. The envelope is the existing `ApiEnvelope` with `projectId`, `projectRevision` and `replayed`.
 
@@ -84,11 +84,11 @@ No MCP tool: `api.md` says no agent tool imports external graphs. Both routes us
 // src/AiRaccoon.Core/Decisions/DecisionImports.cs
 public static class DecisionImportLimits { public const int MaxBytes = 10 * 1024 * 1024; public const int MaxIssues = 200; }
 public sealed record DecisionImportCommand(string SessionId, string RequestId, byte[] Source, byte[] Mapping,
-    string SourceDigest, long ExpectedProjectRevision, string? Actor = null);
+    string SourceDigest, string MappingDigest, long ExpectedProjectRevision, string? Actor = null);
 public sealed record DecisionImportIssue(string Code, string Path, string Message, string? RecordId = null);
 public sealed record DecisionImportCounts(int Entities, int Relationships, int Decisions, int Edges,
     int Retained, int AlreadyImported, int Collapsed);
-public sealed record DecisionImportReport(string SourceDigest, bool CanApply, DecisionImportCounts Counts,
+public sealed record DecisionImportReport(string SourceDigest, string MappingDigest, bool CanApply, DecisionImportCounts Counts,
     IReadOnlyList<DecisionImportIssue> Blockers, int OmittedBlockers,
     IReadOnlyList<DecisionImportIssue> Notices, int OmittedNotices);
 public sealed record DecisionImportOutcome(string SourceDigest, DecisionImportCounts Counts);
@@ -100,7 +100,7 @@ Task<DecisionResult<DecisionImportOutcome>> ApplySemanticaImportAsync(string pro
 // src/AiRaccoon/Decisions/DecisionRequests.cs
 internal sealed record ImportPreviewRequest(byte[] Source, byte[] Mapping);
 internal sealed record ImportApplyRequest(string SessionId, string RequestId, byte[] Source, byte[] Mapping,
-    string SourceDigest, long ExpectedProjectRevision, string? Actor = null);
+    string SourceDigest, string MappingDigest, long ExpectedProjectRevision, string? Actor = null);
 ```
 
 `Counts`: `Decisions` and `Edges` are what will be or were newly written. `Retained` is new import rows with no promoted decision or edge. `AlreadyImported` is records skipped because they match an existing row. `Collapsed` is byte-equal duplicates plus promoted relationships whose edge already exists.
@@ -111,7 +111,7 @@ internal sealed record ImportApplyRequest(string SessionId, string RequestId, by
 | Kestrel body limit hit | Same kind, new arm `BadHttpRequestException { StatusCode: 413 }` in `DecisionRefusals.For` | 413 |
 | Apply with any blocker | `decision-import-blocked` (new), message gives the count and says to run preview | 409 (the `StatusFor` default) |
 | Not UTF-8, bad JSON, duplicate keys, wrong shape, unsupported format, count mismatch, bad base64 | `invalid-argument`, with `source` or `mapping` as the parameter | 400 |
-| `sourceDigest` differs from the bytes | `decision-conflict` | 409 |
+| `sourceDigest` or `mappingDigest` differs from the bytes | `decision-conflict` | 409 |
 | Stale revision | `decision-conflict` with `currentProjectRevision`, via `RequireRevisionAsync` | 409 |
 | Same `requestId`, different command | `decision-request-conflict` | 409 |
 | Read-only project, unregistered project | Existing gate refusals | Existing |
@@ -166,7 +166,7 @@ Existing rows for this namespace and `externalId`: same digest and same mapping 
 Apply flow:
 
 1. Refuse if either array exceeds `MaxBytes`.
-2. Compute digests with `SHA256.HashData` and `Convert.ToHexString`. Compare `command.SourceDigest` to the source digest, ignoring case.
+2. Compute digests with `SHA256.HashData` and `Convert.ToHexString`. Compare `command.SourceDigest` and `command.MappingDigest` to the computed digests, ignoring case. A changed mapping can turn previewed edges into retained rows with no blocker, so apply is bound to the mapping that was previewed.
 3. Parse both files.
 4. Build `new DecisionWrite(mapping.LegacyTaskId, sessionId, requestId, actor)`.
 5. Call the existing `MutateAsync` with operation `"import-semantica"`, payload `{ sourceDigest, mappingDigest, expectedProjectRevision }`, and `requireTask: false`, so an unknown task is reported as a blocker rather than a 404. The payload uses computed digests, so changing either file under one `requestId` refuses.
@@ -218,17 +218,17 @@ Fixture expectations with the mapping fixture (`db05` accepted, `120d` accepted,
 
 ```text
 ai-raccoon decisions import-semantica --project-id ID --input PATH --mapping PATH
-    [--apply --request-id ID --source-digest HEX --expected-project-revision N]
+    [--apply --request-id ID --source-digest HEX --mapping-digest HEX --expected-project-revision N]
 ```
 
-- Without `--apply`, it previews. With `--apply`, all three companion flags are required. Companion flags without `--apply` are a usage error. Both cases exit `Usage.InvalidValue` (10) with nothing sent.
+- Without `--apply`, it previews. With `--apply`, all four companion flags are required. Companion flags without `--apply` are a usage error. Both cases exit `Usage.InvalidValue` (10) with nothing sent.
 - There is no `--session-id`. The session defaults to the request ID, so a retry with the same `--request-id` hashes identically.
 - Check `FileInfo.Length` before reading. Oversized: exit 10, nothing sent. IO failure: `Environment.IoFailed`, as `RecordAsync` does.
 - Stdout is the JSON report or outcome via `WriteFlatAsync` or `SendWriteAsync`. Diagnostics go to stderr through `TerminalText.Visible`.
 - Preview with blockers: report on stdout, stderr gives the count, exit `RequestRejected` (17).
-- Clean preview: exit 0, and stderr prints the exact apply command with the digest and revision filled in.
+- Clean preview: exit 0, and stderr prints the exact apply command with both digests and the revision filled in.
 - Both client calls pass a null deadline, like export. Apply passes the `Replay` text.
-- Add `ImportPreviewAsync` and `ImportApplyAsync` to `IDecisionClient`, `DecisionHttpClient`, `DirectGraphDecisionClient` and `FakeDecisionClient`.
+- Add `ImportPreviewAsync` and `ImportApplyAsync` to `IDecisionClient`, `DecisionHttpClient`, `DirectGraphDecisionClient`, `FakeDecisionClient`, `ServerSettingsStore` and `LazyServerSettingsStore` (which forwards through `AsDecisionClient`).
 - Add the `["decisions", "import-semantica"]` case in `ConfigCommands.cs:148-153` and the command in `CliCommandTree.DecisionsCommand`.
 
 ## Steps (one lane, sequential, test first)
@@ -243,7 +243,7 @@ Build gate for every code step: `dotnet build AiRaccoon.slnx`. Run tests with `d
 | S4 | Pure planner | `SemanticaImportPlan.cs` | S3 | Fixture plan matches the expectations above, and each blocker code has a test | `SemanticaImportPlanTests` |
 | S5 | Service operations | `IDecisionService.cs`, `DecisionService.Import.cs` | S4 | Preview writes nothing; apply is atomic, replay-safe and raises the revision by one | `DecisionImportTests`, including `DecisionImport_DryRunReplayAndUnknownData` |
 | S6 | HTTP routes | `DecisionEndpoint.cs`, `DecisionRefusals.cs`, `DecisionRequests.cs`, `DecisionOperations.cs` (`HttpOnly`), `DecisionApiTests.cs` | S5 | Both routes are mapped, kinds and statuses match the refusal table, tool count stays 43 | `DecisionImportApiTests`, `DecisionApiTests`, `McpToolInventoryTests`, `McpToolContractTests` |
-| S7 | CLI verb | `DecisionCommands.cs`, `CliCommandTree.cs`, `ConfigCommands.cs`, client files, `FakeDecisionClient.cs` | S6 | Preview then apply works against a real server and exit codes match the CLI section | `DecisionImportCliTests`, `DecisionCommandTreeTests`, `SettingsCommandTreeTests` |
+| S7 | CLI verb | `DecisionCommands.cs`, `CliCommandTree.cs`, `ConfigCommands.cs`, client files, `ServerSettingsStore.cs`, `LazyServerSettingsStore.cs`, `FakeDecisionClient.cs` | S6 | Preview then apply works against a real server and exit codes match the CLI section | `DecisionImportCliTests`, `DecisionCommandTreeTests`, `SettingsCommandTreeTests` |
 | S8 | Rehearse on a bank copy | No source change; results go in `implementation-evidence.md` | S7 | Source and mapped decision counts, edge counts, raw row counts and at least one refusal are recorded; restart keeps the rows | Manual run, commands and output recorded |
 | S9 | Docs and release | `docs/how-to/record-project-decisions.md`, `docs/reference/cli-reference.md`, `docs/adr/0142-*.md`, `implementation-evidence.md`, `README.md`, `VERSION`, `docs/changelog/2.5.0-*.md`, `docs/changelog/README.md`, `DecisionEndpoint` summary | S8 | ADR-0142's "Import preservation is not met" is replaced by what shipped; each T row has a recorded red and green | `AdrIndexTests`, repo-wide `NoConfigureAwaitTests` and `RetrySurfaceGateTests`, whole-solution build |
 
@@ -270,7 +270,7 @@ VERSION: a feature, so 2.5.0. Merging a bump auto-cuts a public release, so timi
 | T11 | `Plan_DependsOnCycleAndContradictsOrder` | Cycle reaches the store, or `contradicts` not canonical | Remove the `EnsureCanLink` call; remove the swap |
 | T12 | `DecisionImport_DryRunReplayAndUnknownData` (`DecisionImportTests`) | Preview writes; replay duplicates; unknown data lost or promoted. Flow: dump tables, preview, tables equal; apply; same `requestId` replays with `replayed: true`; rows equal; `raw_payload` for `person-1` and `CAUSED` equal source text; no `CAUSED` edge; export `importRecords` holds 22 rows | Write in preview; skip the receipt; store parsed instead of raw text |
 | T13 | `Apply_FailureMidWrite_LeavesEveryTableUnchanged` | Partial import commits | Decorator throws on the Nth `AddImportAsync`; mutation commits per record |
-| T14 | `Apply_StaleRevision_DigestMismatch_ChangedSource_ChangedMapping_Refuse`, plus `Apply_NewerExport_AddsOnlyNewRecords` | Stale or altered input applied, or a newer export blocked | Remove `RequireRevisionAsync`; drop the digest compare; put the file digest in the mapping column |
+| T14 | `Apply_StaleRevision_SourceDigestMismatch_MappingDigestMismatch_ChangedSource_ChangedMapping_Refuse`, plus `Apply_NewerExport_AddsOnlyNewRecords` | Stale or altered input applied, or a newer export blocked | Remove `RequireRevisionAsync`; drop each digest compare; put the file digest in the mapping column |
 | T15 | `ImportRoutes_AcceptMaxSizeAndRefuseOverLimit` (`DecisionImportApiTests`) | A legal 10 MiB pair refused; oversize returns an unkinded error. Settles H1. | Remove the `BadHttpRequestException` arm; lower the limit constant |
 | T16 | `ImportRoutes_RefusalKindsAndGate` (read-only apply refused, read-only preview allowed, unregistered project, 409 blocked) | Import bypasses access mode | Use `AccessRequirement.Read` on apply |
 | T17 | `HttpRoutes_MapEveryOperationOnce` (updated) plus `McpToolInventoryTests` | A tool or route appears silently | Add a route without a row; add a tool |
@@ -282,6 +282,6 @@ CLI tests use real argv, because option names keep their `--` prefix at `GetValu
 
 ## What was cut
 
-The normalized shape, any MCP tool, a schema migration, task creation during import, a mapping `schemaVersion`, a preview token or stored preview, a mapping digest guard on apply (it is still in the replay hash), custom edge reasons, per-row edge IDs, import of `superseded`, a CLI text format, a `--session-id` flag, a mapping generator command, and a separate cycle algorithm.
+The normalized shape, any MCP tool, a schema migration, task creation during import, a mapping `schemaVersion`, a preview token or stored preview, custom edge reasons, per-row edge IDs, import of `superseded`, a CLI text format, a `--session-id` flag, a mapping generator command, and a separate cycle algorithm.
 
 Kept beyond the literal contract: the `title` override (long scenarios cannot import otherwise), the `changed-mapping` blocker (a corrected status would be silently ignored otherwise), and the Kestrel 413 arm (the kind would be missing for non-CLI callers).
