@@ -324,4 +324,4 @@ Out of scope here: the rest of `api.md:77` (ai-badger prompts and skills, scaffo
 
 This work does not close #924. The issue still asks for the normalized shape, so the owner decides whether to narrow it.
 
-The review's optional cut of `decision-import-too-large` is declined: ADR-0142's refusal surface includes 413, and callers other than the CLI need the kind.
+The review's optional cut of `decision-import-too-large` is declined: callers other than the CLI need a kinded 413 on the Kestrel path.
