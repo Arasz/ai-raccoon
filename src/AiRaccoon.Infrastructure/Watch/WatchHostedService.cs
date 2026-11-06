@@ -18,6 +18,7 @@ public sealed partial class WatchHostedService : BackgroundService
     internal const string OperationName = "watch.reconcile";
 
     private readonly HashSet<WatchKey> _active = [];
+    private readonly HashSet<WatchKey> _heldRescans = [];
     private readonly Lock _activeGate = new();
     private readonly WatchCatchUp _catchUp;
     private readonly WatchEventSource _eventSource;
@@ -66,15 +67,67 @@ public sealed partial class WatchHostedService : BackgroundService
 
     private void OnWatchOverflowed(string projectId, string path)
     {
-        bool active;
-        lock (_activeGate)
+        var key = new WatchKey(projectId, path);
+        if (!CanRescan(key))
         {
-            active = _active.Contains(new WatchKey(projectId, path));
+            return;
         }
 
-        if (active)
+        if (_catchUp.IsScanning(projectId, path))
         {
-            _catchUp.EnqueueChangedFiles(projectId, path, _stopping);
+            lock (_activeGate)
+            {
+                _heldRescans.Add(key);
+            }
+
+            return;
+        }
+
+        _catchUp.EnqueueChangedFiles(projectId, path, _stopping);
+    }
+
+    private bool CanRescan(WatchKey key)
+    {
+        lock (_activeGate)
+        {
+            if (!_active.Contains(key))
+            {
+                return false;
+            }
+        }
+
+        return !_pipeline.IsStopped(key.ProjectId, key.Path);
+    }
+
+    /// <summary>
+    ///     Queues the rescans held behind a running scan, which may already have passed the lost change.
+    ///     One whose watch went inactive or stopped meanwhile is dropped.
+    /// </summary>
+    private void DrainHeldRescans(IOperationScope pass, CancellationToken cancellationToken)
+    {
+        WatchKey[] held;
+        lock (_activeGate)
+        {
+            held = [.. _heldRescans];
+        }
+
+        foreach (var key in held)
+        {
+            if (_catchUp.IsScanning(key.ProjectId, key.Path))
+            {
+                continue;
+            }
+
+            lock (_activeGate)
+            {
+                _heldRescans.Remove(key);
+            }
+
+            if (CanRescan(key))
+            {
+                pass.NoteWork();
+                _catchUp.EnqueueChangedFiles(key.ProjectId, key.Path, cancellationToken);
+            }
         }
     }
 
@@ -84,6 +137,7 @@ public sealed partial class WatchHostedService : BackgroundService
         {
             _active.Remove(new WatchKey(projectId, path));
             _registered.Remove(new WatchKey(projectId, path));
+            _heldRescans.Remove(new WatchKey(projectId, path));
         }
     }
 
@@ -132,6 +186,7 @@ public sealed partial class WatchHostedService : BackgroundService
         {
             _active.Clear();
             _registered.Clear();
+            _heldRescans.Clear();
         }
 
         await base.StopAsync(cancellationToken);
@@ -209,6 +264,7 @@ public sealed partial class WatchHostedService : BackgroundService
             stale = [.. _registered.Where(k => !seen.Contains(k))];
         }
 
+        DrainHeldRescans(pass, cancellationToken);
         HealIfDue(pass, cancellationToken);
 
         foreach (var s in stale)

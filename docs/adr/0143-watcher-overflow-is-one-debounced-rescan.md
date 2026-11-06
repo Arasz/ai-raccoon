@@ -19,7 +19,7 @@ The buffer size was also a constant, so a machine that overflowed on every burst
 
 - The first overflow of a watch opens a window of `WatchEventSource.OverflowDebounce` (2 s). Overflows inside the window only add to its count.
 - When the window closes, the source logs one `Warning` (event 299, with the count) and raises `Overflowed(projectId, path)` once.
-- `WatchHostedService` handles `Overflowed` by queueing a changed-files scan for that watch if it is active. The scan guard already joins a scan that is running.
+- `WatchHostedService` handles `Overflowed` by queueing a changed-files scan for that watch if it is active and not stopped. A running scan may already have passed the lost change, so joining it recovers nothing: the rescan is held until that scan ends, then queued on the next reconcile pass (2.5.1).
 - The window is fixed from the first overflow, not extended by later ones, so a sustained storm still rescans every 2 s at most instead of never.
 - `Stop` and `StopAll` drop an open window.
 

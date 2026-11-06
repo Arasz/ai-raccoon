@@ -243,6 +243,81 @@ public sealed class WatchHostedServiceTests
         await hosted.StopAsync(CancellationToken.None);
     }
 
+    private static void CloseOverflowWindow(WatchTestStack stack, WatchEventSource source, TempDir dir)
+    {
+        source.HandleError(Project, IngestPath.Normalize(dir.Path),
+            new ErrorEventArgs(new InternalBufferOverflowException("Too many changes at once")));
+        stack.Time.Advance(WatchEventSource.OverflowDebounce);
+    }
+
+    /// <summary>The guard joins a running scan, which may have passed the lost change, so the rescan waits for it.</summary>
+    [RetryFact]
+    public async Task WatcherOverflow_DuringARunningScan_ScansAgainAfterItEnds()
+    {
+        using var dir = TempDir.New("hosted-overflow-scanning");
+        var (stack, source, catchUp, hosted) = NewStack();
+        await StartSyncedWatchAsync(stack, catchUp, hosted, dir);
+        var release = new TaskCompletionSource();
+        var running = stack.ScanGuard.Run(Project, dir.Path, _ => release.Task, TestContext.Current.CancellationToken);
+        var started = stack.ScanGuard.StartedScans;
+
+        CloseOverflowWindow(stack, source, dir);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        stack.ScanGuard.SkippedScans.ShouldBe(0, "the rescan must not join the running scan");
+
+        release.SetResult();
+        await running;
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+
+        stack.ScanGuard.StartedScans.ShouldBe(started + 1);
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        stack.ScanGuard.StartedScans.ShouldBe(started + 1, "the held rescan is spent");
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    [RetryFact]
+    public async Task WatcherOverflow_OnAStoppedWatch_QueuesNoScan()
+    {
+        using var dir = TempDir.New("hosted-overflow-stopped");
+        var (stack, source, catchUp, hosted) = NewStack();
+        await StartSyncedWatchAsync(stack, catchUp, hosted, dir);
+        for (var i = 0; i < 5; i++)
+        {
+            stack.RetryPolicy.RecordFailure(Project, IngestPath.Normalize(dir.Path), stack.Time.GetUtcNow());
+        }
+
+        CloseOverflowWindow(stack, source, dir);
+
+        stack.ScanGuard.StartedScans.ShouldBe(1);
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    /// <summary>A rescan held behind a running scan is dropped when the watch stops before that scan ends.</summary>
+    [RetryFact]
+    public async Task HeldOverflowRescan_OnAWatchThatStops_QueuesNoScan()
+    {
+        using var dir = TempDir.New("hosted-overflow-held-stopped");
+        var (stack, source, catchUp, hosted) = NewStack();
+        await StartSyncedWatchAsync(stack, catchUp, hosted, dir);
+        var release = new TaskCompletionSource();
+        var running = stack.ScanGuard.Run(Project, dir.Path, _ => release.Task, TestContext.Current.CancellationToken);
+        var started = stack.ScanGuard.StartedScans;
+
+        CloseOverflowWindow(stack, source, dir);
+        for (var i = 0; i < 5; i++)
+        {
+            stack.RetryPolicy.RecordFailure(Project, IngestPath.Normalize(dir.Path), stack.Time.GetUtcNow());
+        }
+
+        release.SetResult();
+        await running;
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        stack.ScanGuard.StartedScans.ShouldBe(started);
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
     /// <summary>
     ///     An overflowed watcher drops events. After the debounce window the watch gets one
     ///     changed-files scan, so the dropped change is caught without waiting for the heal interval.
