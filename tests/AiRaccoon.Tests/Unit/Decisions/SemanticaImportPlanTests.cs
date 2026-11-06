@@ -136,14 +136,25 @@ public sealed class SemanticaImportPlanTests
 
     [Theory]
     [InlineData("nonsense", "unknown-status")]
-    [InlineData("Superseded", "superseded-status")]
+    [InlineData("superseded", "superseded-status")]
     [InlineData("1", "unknown-status")]
     public void Plan_UnusableStatus_Blocks(string status, string code) =>
         Codes(Plan(Export([DecisionJson("a")]), Mapping([("a", status)])).Blockers).ShouldBe([code]);
 
+    [Theory]
+    [InlineData("Deprecated")]
+    [InlineData("ACCEPTED")]
+    [InlineData("Superseded")]
+    public void Plan_StatusMatchesExactlyAndCaseSensitively(string status) =>
+        Codes(Plan(Export([DecisionJson("a")]), Mapping([("a", status)])).Blockers).ShouldBe(["unknown-status"]);
+
     [Fact]
-    public void Plan_StatusIsCaseInsensitive() =>
-        Plan(Export([DecisionJson("a")]), Mapping([("a", "Deprecated")])).Decisions.Single().Status.ShouldBe(DecisionStatus.Deprecated);
+    public void Plan_MappingEntryForARecordNotInTheExport_Blocks()
+    {
+        var plan = Plan(Export([DecisionJson("a")]), Mapping([("a", "accepted"), ("ghost", null)]));
+
+        plan.Blockers.Single().ShouldBe(new DecisionImportIssue("unknown-record", "mapping.records.ghost", "The mapping lists a record the export does not contain.", "ghost"));
+    }
 
     [Fact]
     public void Plan_StatusOrTitleOnNonDecision_Blocks()

@@ -251,7 +251,7 @@ public sealed record SemanticaImportPlan(IReadOnlyList<PlannedDecision> Decision
                 return false;
             }
 
-            var name = entry.Status.ToLowerInvariant();
+            var name = entry.Status;
             if (name == "superseded")
             {
                 Block("superseded-status", source.Path, "Import both records as accepted, then call supersede_decision.", source.Id);
