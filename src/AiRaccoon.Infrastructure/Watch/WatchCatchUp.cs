@@ -27,9 +27,6 @@ public sealed partial class WatchCatchUp(
     /// <summary>Task of the most recently enqueued scan (tests await it for determinism).</summary>
     internal Task? LastScan { get; private set; }
 
-    /// <summary>Whether a scan of this watch is running; a scan queued now would join it.</summary>
-    internal bool IsScanning(string projectId, string path) => scanGuard.IsRunning(projectId, path);
-
     public void EnqueueInitialScan(string projectId, string path, CancellationToken cancellationToken = default) =>
         LastScan = scanGuard.Run(projectId, path, ct => ScanCoreAsync(projectId, path, false, ct), cancellationToken);
 

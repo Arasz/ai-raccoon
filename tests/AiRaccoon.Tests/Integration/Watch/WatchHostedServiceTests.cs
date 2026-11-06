@@ -6,9 +6,7 @@ using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Observability;
 using AiRaccoon.Tests.Unit.Observability;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Logging.Testing;
 using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
 using Xunit;
@@ -28,15 +26,15 @@ public sealed class WatchHostedServiceTests
     private const string Project = "acme";
 
     private static (WatchTestStack Stack, WatchEventSource Source, WatchCatchUp CatchUp, WatchHostedService Hosted)
-        NewStack(IOperationTelemetry? telemetry = null, ILogger<WatchHostedService>? logger = null)
+        NewStack(IOperationTelemetry? telemetry = null)
     {
         var stack = new WatchTestStack();
         var source = new WatchEventSource(stack.Pipeline.Enqueue, _ => { },
-            NullLogger<WatchEventSource>.Instance);
+            NullLogger<WatchEventSource>.Instance, stack.Time);
         var catchUp = new WatchCatchUp(stack.Pipeline, stack.Store, stack.ScanGuard, stack.ScanLease, stack.Time,
             NullLogger<WatchCatchUp>.Instance, stack.IgnoreRules, new IndexableFileWalk());
         var hosted = new WatchHostedService(stack.Memory, stack.Store, stack.Pipeline, source, catchUp, stack.Time,
-            telemetry ?? TestTelemetry.None, logger ?? NullLogger<WatchHostedService>.Instance);
+            telemetry ?? TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
         return (stack, source, catchUp, hosted);
     }
 
@@ -245,98 +243,66 @@ public sealed class WatchHostedServiceTests
         await hosted.StopAsync(CancellationToken.None);
     }
 
-    private static void Overflow(WatchEventSource source, TempDir dir) =>
-        source.HandleError(Project, IngestPath.Normalize(dir.Path), new ErrorEventArgs(new InternalBufferOverflowException()));
-
-    /// <summary>A burst of overflows costs one scan and one log line, and the scan finds the lost change.</summary>
+    /// <summary>
+    ///     An overflowed watcher drops events. After the debounce window the watch gets one
+    ///     changed-files scan, so the dropped change is caught without waiting for the heal interval.
+    /// </summary>
     [RetryFact]
-    public async Task OverflowBurst_QueuesOneScan_AndLogsOnce()
+    public async Task WatcherOverflow_ScansTheWatchOnce_AfterTheDebounceWindow()
     {
         using var dir = TempDir.New("hosted-overflow");
-        var logger = new FakeLogger<WatchHostedService>();
-        var (stack, source, catchUp, hosted) = NewStack(logger: logger);
-        var file = await StartSyncedWatchAsync(stack, catchUp, hosted, dir);
-        await File.WriteAllTextAsync(file, "zephyrnew", TestContext.Current.CancellationToken);
-        File.SetLastWriteTimeUtc(file, stack.Time.GetUtcNow().UtcDateTime);
+        var (stack, source, catchUp, hosted) = NewStack();
+        await StartSyncedWatchAsync(stack, catchUp, hosted, dir);
+        var dropped = dir.File("dropped.md");
+        await File.WriteAllTextAsync(dropped, "zephyrdropped", TestContext.Current.CancellationToken);
 
-        Overflow(source, dir);
-        Overflow(source, dir);
-        Overflow(source, dir);
-        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        stack.ScanGuard.StartedScans.ShouldBe(1, "no scan inside the quiet window");
+        for (var i = 0; i < 3; i++)
+        {
+            source.HandleError(Project, dir.Path,
+                new ErrorEventArgs(new InternalBufferOverflowException("Too many changes at once")));
+        }
 
-        stack.Time.Advance(WatchHostedService.OverflowQuietPeriod);
-        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+        stack.ScanGuard.StartedScans.ShouldBe(1, "no rescan while the debounce window is open");
+        stack.Time.Advance(WatchEventSource.OverflowDebounce);
         await catchUp.LastScan!;
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
 
-        stack.ScanGuard.StartedScans.ShouldBe(2);
-        stack.Memory.Ingested.ShouldContain((Project, file, "zephyrnew"));
-        var warning = logger.Collector.GetSnapshot().Where(r => r.Level == LogLevel.Warning).ShouldHaveSingleItem();
-        warning.Message.ShouldContain("3");
-
-        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        stack.ScanGuard.StartedScans.ShouldBe(2, "the burst is spent");
-        await hosted.StopAsync(CancellationToken.None);
-    }
-
-    /// <summary>The guard joins a running scan, which may already have passed the lost change, so the burst waits.</summary>
-    [RetryFact]
-    public async Task OverflowDuringARunningScan_ScansAgainAfterItEnds()
-    {
-        using var dir = TempDir.New("hosted-overflow-scanning");
-        var (stack, source, catchUp, hosted) = NewStack();
-        await StartSyncedWatchAsync(stack, catchUp, hosted, dir);
-        var release = new TaskCompletionSource();
-        var running = stack.ScanGuard.Run(Project, dir.Path, _ => release.Task, TestContext.Current.CancellationToken);
-        var startedBefore = stack.ScanGuard.StartedScans;
-
-        Overflow(source, dir);
-        stack.Time.Advance(WatchHostedService.OverflowQuietPeriod);
-        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        stack.ScanGuard.SkippedScans.ShouldBe(0, "the burst must not join the running scan");
-
-        release.SetResult();
-        await running;
-        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
-        await catchUp.LastScan!;
-
-        stack.ScanGuard.StartedScans.ShouldBe(startedBefore + 1);
+        stack.ScanGuard.StartedScans.ShouldBe(2, "three overflows collapse into one scan");
+        stack.Memory.Ingested.ShouldContain((Project, dropped, "zephyrdropped"));
         await hosted.StopAsync(CancellationToken.None);
     }
 
     [RetryFact]
-    public async Task Overflow_OnADisabledWatch_QueuesNoScan()
+    public async Task Reconcile_StartsTheWatcherWithTheConfiguredBufferSize()
     {
-        using var dir = TempDir.New("hosted-overflow-disabled");
-        var (stack, source, catchUp, hosted) = NewStack();
-        await StartSyncedWatchAsync(stack, catchUp, hosted, dir);
+        using var dir = TempDir.New("hosted-buffer-setting");
+        var (stack, source, _, hosted) = NewStack();
+        stack.Enable();
+        stack.Memory.Settings[WatchConfigKeys.BufferSizeGlobal] = "16384";
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
 
-        Overflow(source, dir);
-        stack.Memory.Settings[WatchConfigKeys.EnabledProject(Project)] = "false";
-        stack.Time.Advance(WatchHostedService.OverflowQuietPeriod);
         await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
 
-        stack.ScanGuard.StartedScans.ShouldBe(1);
+        source.WatcherFor(Project, dir.Path)!.InternalBufferSize.ShouldBe(16384);
         await hosted.StopAsync(CancellationToken.None);
     }
 
+    /// <summary>
+    ///     A bank that cannot read the buffer setting must not strand the watch: the key is marked
+    ///     active before the watcher starts, so a throw there would skip it on every later pass.
+    /// </summary>
     [RetryFact]
-    public async Task Overflow_OnAStoppedWatch_QueuesNoScan()
+    public async Task Reconcile_WhenTheBufferSettingCannotBeRead_StillStartsTheWatcherWithTheDefault()
     {
-        using var dir = TempDir.New("hosted-overflow-stopped");
-        var (stack, source, catchUp, hosted) = NewStack();
-        await StartSyncedWatchAsync(stack, catchUp, hosted, dir);
-        for (var i = 0; i < 5; i++)
-        {
-            stack.RetryPolicy.RecordFailure(Project, IngestPath.Normalize(dir.Path), stack.Time.GetUtcNow());
-        }
+        using var dir = TempDir.New("hosted-buffer-unreadable");
+        var (stack, source, _, hosted) = NewStack();
+        stack.Enable();
+        stack.Memory.SettingReadErrors[WatchConfigKeys.BufferSizeGlobal] = new IOException("database is locked");
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
 
-        Overflow(source, dir);
-        stack.Time.Advance(WatchHostedService.OverflowQuietPeriod);
         await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
 
-        stack.ScanGuard.StartedScans.ShouldBe(1);
+        source.WatcherFor(Project, dir.Path)!.InternalBufferSize.ShouldBe(WatchBuffer.Default);
         await hosted.StopAsync(CancellationToken.None);
     }
 
