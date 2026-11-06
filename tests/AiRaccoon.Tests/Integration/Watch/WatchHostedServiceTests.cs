@@ -30,7 +30,7 @@ public sealed class WatchHostedServiceTests
     {
         var stack = new WatchTestStack();
         var source = new WatchEventSource(stack.Pipeline.Enqueue, _ => { },
-            NullLogger<WatchEventSource>.Instance);
+            NullLogger<WatchEventSource>.Instance, stack.Time);
         var catchUp = new WatchCatchUp(stack.Pipeline, stack.Store, stack.ScanGuard, stack.ScanLease, stack.Time,
             NullLogger<WatchCatchUp>.Instance, stack.IgnoreRules, new IndexableFileWalk());
         var hosted = new WatchHostedService(stack.Memory, stack.Store, stack.Pipeline, source, catchUp, stack.Time,
@@ -240,6 +240,69 @@ public sealed class WatchHostedServiceTests
         await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
 
         stack.ScanGuard.StartedScans.ShouldBe(1);
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     An overflowed watcher drops events. After the debounce window the watch gets one
+    ///     changed-files scan, so the dropped change is caught without waiting for the heal interval.
+    /// </summary>
+    [RetryFact]
+    public async Task WatcherOverflow_ScansTheWatchOnce_AfterTheDebounceWindow()
+    {
+        using var dir = TempDir.New("hosted-overflow");
+        var (stack, source, catchUp, hosted) = NewStack();
+        await StartSyncedWatchAsync(stack, catchUp, hosted, dir);
+        var dropped = dir.File("dropped.md");
+        await File.WriteAllTextAsync(dropped, "zephyrdropped", TestContext.Current.CancellationToken);
+
+        for (var i = 0; i < 3; i++)
+        {
+            source.HandleError(Project, dir.Path,
+                new ErrorEventArgs(new InternalBufferOverflowException("Too many changes at once")));
+        }
+
+        stack.ScanGuard.StartedScans.ShouldBe(1, "no rescan while the debounce window is open");
+        stack.Time.Advance(WatchEventSource.OverflowDebounce);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.ScanGuard.StartedScans.ShouldBe(2, "three overflows collapse into one scan");
+        stack.Memory.Ingested.ShouldContain((Project, dropped, "zephyrdropped"));
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    [RetryFact]
+    public async Task Reconcile_StartsTheWatcherWithTheConfiguredBufferSize()
+    {
+        using var dir = TempDir.New("hosted-buffer-setting");
+        var (stack, source, _, hosted) = NewStack();
+        stack.Enable();
+        stack.Memory.Settings[WatchConfigKeys.BufferSizeGlobal] = "16384";
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        source.WatcherFor(Project, dir.Path)!.InternalBufferSize.ShouldBe(16384);
+        await hosted.StopAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    ///     A bank that cannot read the buffer setting must not strand the watch: the key is marked
+    ///     active before the watcher starts, so a throw there would skip it on every later pass.
+    /// </summary>
+    [RetryFact]
+    public async Task Reconcile_WhenTheBufferSettingCannotBeRead_StillStartsTheWatcherWithTheDefault()
+    {
+        using var dir = TempDir.New("hosted-buffer-unreadable");
+        var (stack, source, _, hosted) = NewStack();
+        stack.Enable();
+        stack.Memory.SettingReadErrors[WatchConfigKeys.BufferSizeGlobal] = new IOException("database is locked");
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await hosted.ReconcileAsync(TestContext.Current.CancellationToken);
+
+        source.WatcherFor(Project, dir.Path)!.InternalBufferSize.ShouldBe(WatchBuffer.Default);
         await hosted.StopAsync(CancellationToken.None);
     }
 

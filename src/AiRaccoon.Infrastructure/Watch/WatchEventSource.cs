@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Ingestion;
+using AiRaccoon.Core.Watch;
 using Microsoft.Extensions.Logging;
 
 namespace AiRaccoon.Infrastructure.Watch;
@@ -14,15 +15,18 @@ public sealed record WatchEventError(string ProjectId, string WatchPath, string 
 public sealed partial class WatchEventSource(
     Action<WatchEvent> onEvent,
     Action<WatchEventError> onError,
-    ILogger<WatchEventSource> logger) : IDisposable
+    ILogger<WatchEventSource> logger,
+    TimeProvider? timeProvider = null) : IDisposable
 {
     /// <summary>
-    ///     Windows allocates this buffer from non-paged kernel pool and defaults it to 8 KB; a burst
-    ///     of changes (git checkout, IDE reformat, install) overflows it, raises Error and loses the
-    ///     events it could not store. 64 KB is the documented maximum (ADR-0129); other platforms
-    ///     ignore the value.
+    ///     How long a watch's buffer overflows are gathered before they trigger one rescan and one log
+    ///     line. The window opens on the first overflow and is not extended by later ones (ADR-0143).
     /// </summary>
-    private const int EventBufferSize = 64 * 1024;
+    public static TimeSpan OverflowDebounce { get; } = TimeSpan.FromSeconds(2);
+
+    private readonly Dictionary<WatchKey, OverflowWindow> _overflows = new();
+
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
 
     // File-mode registrations: WatchKey(projectId, registeredPath) → the watched file. FileSystemWatcher
     // requires a directory, so the watcher sits on the parent; Translate filters to this file.
@@ -32,10 +36,16 @@ public sealed partial class WatchEventSource(
 
     private readonly Dictionary<WatchKey, FileSystemWatcher> _watchers = new();
 
+    /// <summary>Raised once per debounce window after the watcher for (projectId, path) overflowed and dropped events.</summary>
+    public event Action<string, string>? Overflowed;
+
     public void Dispose() => StopAll();
 
-    /// <summary>Creates + enables the watcher for (projectId, path); idempotent; failures become error events.</summary>
-    public void Start(string projectId, string path)
+    /// <summary>
+    ///     Creates + enables the watcher for (projectId, path); idempotent; failures become error events.
+    ///     <paramref name="bufferSize" /> is the OS event buffer (see <see cref="WatchBuffer" />); other platforms ignore it.
+    /// </summary>
+    public void Start(string projectId, string path, int bufferSize = WatchBuffer.Default)
     {
         if (!TryNormalize(path, out var normalized))
         {
@@ -82,7 +92,7 @@ public sealed partial class WatchEventSource(
                 {
                     IncludeSubdirectories = includeSubdirectories,
                     NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
-                    InternalBufferSize = EventBufferSize
+                    InternalBufferSize = bufferSize
                 };
                 if (filter is not null)
                 {
@@ -119,6 +129,7 @@ public sealed partial class WatchEventSource(
         lock (_gate)
         {
             _fileTargets.Remove(new WatchKey(projectId, normalized));
+            DropOverflow(new WatchKey(projectId, normalized));
             if (_watchers.Remove(new WatchKey(projectId, normalized), out var watcher))
             {
                 watcher.Dispose();
@@ -137,6 +148,12 @@ public sealed partial class WatchEventSource(
 
             _watchers.Clear();
             _fileTargets.Clear();
+            foreach (var window in _overflows.Values)
+            {
+                window.Timer?.Dispose();
+            }
+
+            _overflows.Clear();
         }
     }
 
@@ -175,7 +192,71 @@ public sealed partial class WatchEventSource(
 
     internal void HandleRenamed(string projectId, string watchPath, RenamedEventArgs e) => Translate(projectId, watchPath, e.FullPath, WatchEventKind.Renamed, e.OldFullPath);
 
-    internal void HandleError(string projectId, string watchPath, ErrorEventArgs e) => ReportError(projectId, watchPath, e.GetException() ?? new IOException("FileSystemWatcher error"));
+    internal void HandleError(string projectId, string watchPath, ErrorEventArgs e)
+    {
+        var exception = e.GetException();
+        if (exception is InternalBufferOverflowException)
+        {
+            NoteOverflow(projectId, watchPath);
+            return;
+        }
+
+        ReportError(projectId, watchPath, exception ?? new IOException("FileSystemWatcher error"));
+    }
+
+    /// <summary>Counts an overflow into the watch's open window, opening one (and its timer) on the first.</summary>
+    private void NoteOverflow(string projectId, string watchPath)
+    {
+        TryNormalize(watchPath, out var normalized);
+        var key = new WatchKey(projectId, normalized);
+        lock (_gate)
+        {
+            if (_overflows.TryGetValue(key, out var open))
+            {
+                open.Count++;
+                return;
+            }
+
+            var window = new OverflowWindow();
+            _overflows[key] = window;
+            window.Timer = _time.CreateTimer(_ => CloseOverflowWindow(key), null, OverflowDebounce,
+                Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private void CloseOverflowWindow(WatchKey key)
+    {
+        int count;
+        lock (_gate)
+        {
+            if (!_overflows.Remove(key, out var window))
+            {
+                return;
+            }
+
+            window.Timer?.Dispose();
+            count = window.Count;
+        }
+
+        try
+        {
+            Log.BufferOverflowed(logger, count, key.ProjectId, key.Path);
+            Overflowed?.Invoke(key.ProjectId, key.Path);
+        }
+        catch (Exception ex)
+        {
+            ReportError(key.ProjectId, key.Path, ex);
+        }
+    }
+
+    // Callers hold _gate.
+    private void DropOverflow(WatchKey key)
+    {
+        if (_overflows.Remove(key, out var window))
+        {
+            window.Timer?.Dispose();
+        }
+    }
 
     private void Translate(string projectId, string watchPath, string fullPath, WatchEventKind kind, string? oldPath)
     {
@@ -253,8 +334,19 @@ public sealed partial class WatchEventSource(
         }
     }
 
+    private sealed class OverflowWindow
+    {
+        public int Count { get; set; } = 1;
+
+        public ITimer? Timer { get; set; }
+    }
+
     private static partial class Log
     {
+        [LoggerMessage(EventId = 299, Level = LogLevel.Warning,
+            Message = "Watch buffer overflowed {Count} times for {ProjectId} on {WatchPath}; events were dropped, scanning for changed files")]
+        public static partial void BufferOverflowed(ILogger logger, int count, string projectId, string watchPath);
+
         [LoggerMessage(EventId = 300, Level = LogLevel.Error,
             Message = "Watch event source error for {ProjectId} on {WatchPath}")]
         public static partial void WatchError(ILogger logger, string projectId, string watchPath,

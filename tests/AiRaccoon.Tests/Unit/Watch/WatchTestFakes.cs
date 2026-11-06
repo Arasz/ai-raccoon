@@ -450,8 +450,13 @@ internal sealed class FakeWatchMemoryStore : FakeMemoryStore
         return Task.FromResult(0);
     }
 
+    /// <summary>Settings keys whose read throws, like a locked bank.</summary>
+    public Dictionary<string, Exception> SettingReadErrors { get; } = new(StringComparer.Ordinal);
+
     public override Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) =>
-        Task.FromResult(Settings.GetValueOrDefault(key));
+        SettingReadErrors.TryGetValue(key, out var error)
+            ? Task.FromException<string?>(error)
+            : Task.FromResult(Settings.GetValueOrDefault(key));
 
     public override Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default)
     {
