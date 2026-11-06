@@ -1,5 +1,8 @@
 using AiRaccoon.Infrastructure.Watch;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging.Testing;
+using Microsoft.Extensions.Time.Testing;
 using AiRaccoon.Tests.Unit.Watch;
 using Shouldly;
 using Xunit;
@@ -112,6 +115,130 @@ public sealed class WatchEventSourceTests
         var error = errors.ShouldHaveSingleItem();
         error.WatchPath.ShouldBe(dir.Path);
         error.Message.ShouldContain("overflow");
+    }
+
+    private static ErrorEventArgs Overflow() => new(new InternalBufferOverflowException("Too many changes at once"));
+
+    [RetryFact]
+    public void RepeatedOverflows_CollapseIntoOneRescan_AfterTheDebounceWindow()
+    {
+        using var dir = TempDir.New("source-overflow-burst");
+        var errors = new List<WatchEventError>();
+        var clock = new FakeTimeProvider();
+        var source = new WatchEventSource(_ => { }, errors.Add, NullLogger<WatchEventSource>.Instance, clock);
+        var rescans = new List<(string ProjectId, string Path)>();
+        source.Overflowed += (projectId, path) => rescans.Add((projectId, path));
+
+        for (var i = 0; i < 5; i++)
+        {
+            source.HandleError(Project, dir.Path, Overflow());
+        }
+
+        rescans.ShouldBeEmpty("the rescan waits for the debounce window");
+        clock.Advance(WatchEventSource.OverflowDebounce);
+
+        rescans.ShouldHaveSingleItem().ShouldBe((Project, dir.Path));
+        errors.ShouldBeEmpty("an overflow is a rescan trigger, not a failure report");
+    }
+
+    [RetryFact]
+    public void RepeatedOverflows_AreLoggedOnce_WithTheirCount()
+    {
+        using var dir = TempDir.New("source-overflow-log");
+        var logger = new FakeLogger<WatchEventSource>();
+        var clock = new FakeTimeProvider();
+        var source = new WatchEventSource(_ => { }, _ => { }, logger, clock);
+
+        for (var i = 0; i < 4; i++)
+        {
+            source.HandleError(Project, dir.Path, Overflow());
+        }
+
+        logger.Collector.Count.ShouldBe(0, "nothing is logged while the window is open");
+        clock.Advance(WatchEventSource.OverflowDebounce);
+
+        var line = logger.Collector.GetSnapshot().ShouldHaveSingleItem();
+        line.Id.Id.ShouldBe(304);
+        line.Level.ShouldBe(LogLevel.Warning);
+        line.Message.ShouldContain("4");
+    }
+
+    [RetryFact]
+    public void AnOverflowAfterTheWindowClosed_StartsANewRescan()
+    {
+        using var dir = TempDir.New("source-overflow-again");
+        var clock = new FakeTimeProvider();
+        var source = new WatchEventSource(_ => { }, _ => { }, NullLogger<WatchEventSource>.Instance, clock);
+        var rescans = 0;
+        source.Overflowed += (_, _) => rescans++;
+
+        source.HandleError(Project, dir.Path, Overflow());
+        clock.Advance(WatchEventSource.OverflowDebounce);
+        source.HandleError(Project, dir.Path, Overflow());
+        clock.Advance(WatchEventSource.OverflowDebounce);
+
+        rescans.ShouldBe(2);
+    }
+
+    [RetryFact]
+    public void Overflows_OnDifferentWatches_RescanEachOnce()
+    {
+        using var dir = TempDir.New("source-overflow-a");
+        using var other = TempDir.New("source-overflow-b");
+        var clock = new FakeTimeProvider();
+        var source = new WatchEventSource(_ => { }, _ => { }, NullLogger<WatchEventSource>.Instance, clock);
+        var paths = new List<string>();
+        source.Overflowed += (_, path) => paths.Add(path);
+
+        source.HandleError(Project, dir.Path, Overflow());
+        source.HandleError(Project, other.Path, Overflow());
+        source.HandleError(Project, dir.Path, Overflow());
+        clock.Advance(WatchEventSource.OverflowDebounce);
+
+        paths.Order().ShouldBe(new[] { dir.Path, other.Path }.Order());
+    }
+
+    [RetryFact]
+    public void Stop_DropsAPendingOverflowRescan()
+    {
+        using var dir = TempDir.New("source-overflow-stop");
+        var clock = new FakeTimeProvider();
+        var source = new WatchEventSource(_ => { }, _ => { }, NullLogger<WatchEventSource>.Instance, clock);
+        var rescans = 0;
+        source.Overflowed += (_, _) => rescans++;
+
+        source.HandleError(Project, dir.Path, Overflow());
+        source.Stop(Project, dir.Path);
+        clock.Advance(WatchEventSource.OverflowDebounce);
+
+        rescans.ShouldBe(0);
+    }
+
+    [RetryFact]
+    public void StopAll_DropsEveryPendingOverflowRescan()
+    {
+        using var dir = TempDir.New("source-overflow-stopall");
+        var clock = new FakeTimeProvider();
+        var source = new WatchEventSource(_ => { }, _ => { }, NullLogger<WatchEventSource>.Instance, clock);
+        var rescans = 0;
+        source.Overflowed += (_, _) => rescans++;
+
+        source.HandleError(Project, dir.Path, Overflow());
+        source.StopAll();
+        clock.Advance(WatchEventSource.OverflowDebounce);
+
+        rescans.ShouldBe(0);
+    }
+
+    [RetryFact]
+    public void Start_UsesTheGivenBufferSize()
+    {
+        using var dir = TempDir.New("source-buffer-given");
+        var source = NewSource([], []);
+
+        source.Start(Project, dir.Path, 16 * 1024);
+
+        source.WatcherFor(Project, dir.Path)!.InternalBufferSize.ShouldBe(16 * 1024);
     }
 
     [RetryFact]

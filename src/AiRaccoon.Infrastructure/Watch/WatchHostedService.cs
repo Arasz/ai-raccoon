@@ -47,6 +47,7 @@ public sealed partial class WatchHostedService : BackgroundService
         // removal drops the key here instantly, so a remove-then-re-add never reads as continuously active.
         _pipeline.Unregistered += OnWatchUnregistered;
         _pipeline.Recovered += OnWatchRecovered;
+        _eventSource.Overflowed += OnWatchOverflowed;
     }
 
     public static TimeSpan PollInterval { get; } = TimeSpan.FromSeconds(1);
@@ -61,6 +62,20 @@ public sealed partial class WatchHostedService : BackgroundService
     {
         Log.RecoveredScanQueued(_logger, projectId, path);
         _catchUp.EnqueueChangedFiles(projectId, path, _stopping);
+    }
+
+    private void OnWatchOverflowed(string projectId, string path)
+    {
+        bool active;
+        lock (_activeGate)
+        {
+            active = _active.Contains(new WatchKey(projectId, path));
+        }
+
+        if (active)
+        {
+            _catchUp.EnqueueChangedFiles(projectId, path, _stopping);
+        }
     }
 
     private void OnWatchUnregistered(string projectId, string path)
@@ -136,6 +151,7 @@ public sealed partial class WatchHostedService : BackgroundService
         var registrations = await _store.ListWatchesAsync(cancellationToken);
         pass.Tag("registrations", registrations.Count.ToString());
         var seen = new HashSet<WatchKey>();
+        int? bufferSize = null;
         foreach (var registration in registrations)
         {
             var key = new WatchKey(registration.ProjectId, registration.Path);
@@ -175,7 +191,9 @@ public sealed partial class WatchHostedService : BackgroundService
             }
 
             pass.NoteWork();
-            _eventSource.Start(registration.ProjectId, registration.Path);
+            bufferSize ??= WatchBuffer.Resolve(
+                await _memory.GetSettingAsync(WatchConfigKeys.BufferSizeGlobal, cancellationToken));
+            _eventSource.Start(registration.ProjectId, registration.Path, bufferSize.Value);
             if (registration.LastChangeTs == 0)
             {
                 _catchUp.EnqueueInitialScan(registration.ProjectId, registration.Path, cancellationToken);
