@@ -17,7 +17,8 @@ namespace AiRaccoon.Tests.TestHelpers;
 
 /// <summary>
 ///     One token-guarded web host serving both the decision HTTP routes and the MCP endpoint, so a
-///     test can send the same operation through each adapter and compare what comes back.
+///     test can send the same operation through each adapter and compare what comes back. It holds the
+///     env gate as a reader from start until the host stops (docs/adr/0066).
 /// </summary>
 public sealed class DecisionHost : IAsyncDisposable
 {
@@ -28,13 +29,15 @@ public sealed class DecisionHost : IAsyncDisposable
     private readonly string _root;
     private readonly bool _ownsRoot;
     private readonly WebApplication _app;
+    private readonly IAsyncDisposable _envGate;
     private readonly List<McpClient> _clients = [];
 
-    private DecisionHost(string root, bool ownsRoot, WebApplication app, HttpClient http)
+    private DecisionHost(string root, bool ownsRoot, WebApplication app, HttpClient http, IAsyncDisposable envGate)
     {
         _root = root;
         _ownsRoot = ownsRoot;
         _app = app;
+        _envGate = envGate;
         Http = http;
     }
 
@@ -51,12 +54,27 @@ public sealed class DecisionHost : IAsyncDisposable
 
     private static async Task<DecisionHost> StartAsync(string root, bool ownsRoot, CancellationToken cancellationToken)
     {
-        var options = new InfrastructureOptions { DataRoot = root, Scope = InstallScope.User };
-        var app = McpServerSetup.CreateWebHost(new ServerConfig(0, McpTransport.Http, options) { McpToken = Token });
-        await app.StartAsync(cancellationToken);
-        var http = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
-        http.DefaultRequestHeaders.Add(McpTokenGate.HeaderName, Token);
-        return new DecisionHost(root, ownsRoot, app, http);
+        var envGate = await TestData.HoldEnvGateAsync(cancellationToken);
+        WebApplication? app = null;
+        try
+        {
+            var options = new InfrastructureOptions { DataRoot = root, Scope = InstallScope.User };
+            app = McpServerSetup.CreateWebHost(new ServerConfig(0, McpTransport.Http, options) { McpToken = Token });
+            await app.StartAsync(cancellationToken);
+            var http = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
+            http.DefaultRequestHeaders.Add(McpTokenGate.HeaderName, Token);
+            return new DecisionHost(root, ownsRoot, app, http, envGate);
+        }
+        catch
+        {
+            if (app is not null)
+            {
+                await app.DisposeAsync();
+            }
+
+            await envGate.DisposeAsync();
+            throw;
+        }
     }
 
     public Task RegisterAsync(string projectId, CancellationToken cancellationToken) =>
@@ -123,8 +141,16 @@ public sealed class DecisionHost : IAsyncDisposable
         }
 
         Http.Dispose();
-        await _app.StopAsync(CancellationToken.None);
-        await _app.DisposeAsync();
+        try
+        {
+            await _app.StopAsync(CancellationToken.None);
+            await _app.DisposeAsync();
+        }
+        finally
+        {
+            await _envGate.DisposeAsync();
+        }
+
         if (_ownsRoot)
         {
             TestData.DeleteTempRoot(_root);

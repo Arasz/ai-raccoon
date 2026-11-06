@@ -548,13 +548,14 @@ internal static class CliCommandTree
         };
 
         var export = new Command("export",
-            "Writes the complete selected snapshot — every decision version, edge history, boundary stubs, referenced tasks and import records — as JSON (default, lossless) or Markdown. " +
-            "Selects the latest task by default. The output is plaintext even for an encrypted bank. With --output the file is written beside the destination and published only once complete; " +
-            "an existing file is refused without --force. A nonzero exit means nothing was written.")
+            "Writes the complete selected snapshot — every decision version, edge history, boundary stubs, referenced tasks and import records — as JSON (default, lossless) or Markdown (for reading). " +
+            "Selects the latest task by default. The output is plaintext even for an encrypted bank. Without --output the answer is read in full before printing, but a failure while printing " +
+            "(a closed pipe, Ctrl-C) can leave partial output on stdout, so check the exit status. With --output the file is written beside the destination and published only once complete, " +
+            "so a nonzero exit leaves the destination untouched; an existing file is refused without --force.")
         {
             ProjectIdOption(),
             ChoiceOption("--format", "json", "json", "markdown"),
-            new Option<string?>("--output") { Description = "Publish to this file instead of stdout (owner-only)", HelpName = "path" },
+            new Option<string?>("--output") { Description = "Publish to this file atomically instead of stdout (owner-only on POSIX)", HelpName = "path" },
             new Option<bool>("--force") { Description = "Replace an existing --output file" }
         };
         AddTaskSelection(export);

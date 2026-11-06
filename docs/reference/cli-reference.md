@@ -52,10 +52,10 @@ proxy; full servers come only from `serve`).
 | `project id get --name <name>` | Prints the one id registered under an exact, case-sensitive name, with no prefix. Exits 18 when none matches and 19 when several do, listing each id on stderr with stdout empty |
 | `project id check <id>` | Prints `known <id>` (the id it resolves to) and exits 0, or prints `unknown <id>` / `retired <id>` and exits 18. Accepts any non-blank id, guid or raw text |
 | `decisions task register --project-id <id> --task-id <task> --title <text> [--source-ref <uri>] [--session-id <id>] [--request-id <id>]` | Registers a decision task through the server, like `register_decision_task`; see [decisions](#decisions) below |
-| `decisions record --project-id <id> --task-id <task> --input <path> [--session-id <id>] [--request-id <id>]` | Records one decision from a JSON file under a registered task, like `record_decision` |
+| `decisions record --project-id <id> --task-id <task> --input <path> [--session-id <id>] [--request-id <id>]` | Records one decision from a JSON file under a registered task, like `record_decision`. A field `record_decision` does not take is refused (exit 10), not dropped |
 | `decisions get <decision> --project-id <id> [--history] [--format json\|markdown]` | Prints one decision, its current version or every version, like `get_decision` |
 | `decisions query --project-id <id> [--query <text>] [--category <category>]` | Prints current decision summaries matching literal text and a category, like `query_decisions` |
-| `decisions export --project-id <id> [--tasks <n> \| --all \| --task-id <task>...] [--format json\|markdown] [--output <path>] [--force]` | Writes the complete selected decision snapshot, uncapped, as lossless JSON or Markdown |
+| `decisions export --project-id <id> [--tasks <n> \| --all \| --task-id <task>...] [--format json\|markdown] [--output <path>] [--force]` | Writes the complete selected decision snapshot, uncapped, as lossless JSON or as Markdown for reading |
 | `decisions preview --project-id <id> [--tasks <n> \| --all \| --task-id <task>...] [--format text\|json] [--max-decisions <n>] [--max-edges <n>] [--max-chars <n>]` | Prints a compact, budgeted summary of the selected tasks' decisions |
 | `serve [options]` | Runs the HTTP MCP endpoint in the foreground; see [serve](#serve) below. `serve observability` prints a ready-to-run monitoring command for the running server |
 | `doctor` | Shows bank schema/version, code engine state and embedding settings, without changing the bank |
@@ -86,15 +86,18 @@ A selected task with no decisions still counts as selected.
 1 MiB and points here. JSON is the default and lossless format: the project id and revision,
 then the server's export fields (`schemaVersion`, `selector`, `selectedTaskIds`, `tasks`,
 `decisions` with every version, `edges` including removed ones, `boundaryNodes`,
-`referencedTasks`, `importRecords`, `counts`). Markdown renders the same snapshot for people,
-with full rationale and history. Decision text is escaped there, so neither a Markdown viewer nor
+`referencedTasks`, `importRecords`, `counts`). Markdown is a reading format, not a lossless
+one: it renders the same snapshot for people, with full rationale and history, but drops each
+edge's `sessionId`, `removedAt`, `removalActor` and `removalSessionId`. Decision text is escaped there, so neither a Markdown viewer nor
 a terminal interprets it, and source URIs are shown but never linked or fetched. The output is
 plaintext even when the bank is encrypted.
 
 Without `--output` the export goes to stdout, and only after the whole answer was read; a
-connection that ends early prints nothing and exits nonzero, so check the exit status. With
-`--output` the CLI writes an owner-only file (`0600` on POSIX) next to the destination and renames
-it into place only when it is complete. An interrupted export leaves an existing destination
+connection that ends early prints nothing and exits nonzero. Printing itself streams, so a failure
+while writing (a closed pipe, Ctrl-C) can leave partial output on stdout: check the exit status.
+With `--output` the CLI writes a file next to the destination and renames it into place only when
+it is complete, so the publish is atomic. On POSIX that file is owner-only (`0600`); on Windows it
+takes the permissions the destination directory gives new files. An interrupted export leaves an existing destination
 untouched and removes its staging file. An existing destination is refused (exit 10) unless
 `--force` is given.
 

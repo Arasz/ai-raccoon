@@ -24,8 +24,11 @@ public sealed partial class DecisionService
         Guard.IsInRange(request.MaxChars, 1000, 50001, "maxChars");
         return Store.ReadAsync(projectId, async (reader, ct) =>
         {
-            var snapshot = await LoadAsync(reader, true, true, ct);
-            var export = Export(snapshot, request.Selector ?? new DecisionTaskSelector(), Now);
+            // Preview shows current versions only, so it loads no history: membership by version comes from SQL.
+            var selector = request.Selector ?? new DecisionTaskSelector();
+            var snapshot = await LoadAsync(reader, false, false, ct);
+            var versioned = await reader.VersionedByAsync(SelectTasks(snapshot.Tasks, selector).Select(task => task.TaskId).ToArray(), ct);
+            var export = Export(snapshot, selector, Now, versioned);
             return new DecisionResult<DecisionPreview>(projectId, snapshot.Revision, Compact(projectId, export, request));
         }, cancellationToken);
     }
@@ -51,19 +54,14 @@ public sealed partial class DecisionService
         var selector = request.Selector ?? new DecisionTaskSelector(all: true);
         return Store.ReadAsync(projectId, async (reader, ct) =>
         {
-            var snapshot = await LoadAsync(reader, !selector.All, false, ct);
-            var selected = SelectedIds(snapshot, SelectTasks(snapshot.Tasks, selector));
-            var ranks = request.Query is null ? null : (await reader.SearchAsync(request.Query, ct)).ToDictionary(hit => hit.DecisionId, hit => hit.Rank, StringComparer.Ordinal);
-            var matches = snapshot.Current.Values.Where(version => selected.Contains(version.DecisionId)
-                && (request.Category is null || version.Content.Category == request.Category)
-                && (statuses is null || statuses.Contains(version.Status))
-                && (ranks is null || ranks.ContainsKey(version.DecisionId))).OrderBy(version => version.DecisionId, StringComparer.Ordinal).ToArray();
-            var page = matches.Where(version => request.AfterId is null || StringComparer.Ordinal.Compare(version.DecisionId, request.AfterId) > 0)
-                .Take(request.Limit + 1).ToArray();
-            var hasMore = page.Length > request.Limit;
-            var shown = page.Take(request.Limit).Select(version => Match(version, ranks?.GetValueOrDefault(version.DecisionId))).ToArray();
-            return new DecisionResult<DecisionQueryResult>(projectId, snapshot.Revision,
-                new DecisionQueryResult(shown, matches.Length, hasMore, hasMore ? shown[^1].Decision.DecisionId : null, ranks is null ? "exact" : "fts"));
+            var revision = await reader.RevisionAsync(ct);
+            var taskIds = selector.All ? null : SelectTasks(await reader.TasksAsync(ct), selector).Select(task => task.TaskId).ToArray();
+            var found = await reader.FindCurrentAsync(
+                new DecisionCurrentFilter(request.Query, taskIds, request.Category, statuses, AfterId: request.AfterId, Take: request.Limit + 1), ct);
+            var hasMore = found.Page.Count > request.Limit;
+            var shown = found.Page.Take(request.Limit).Select(hit => Match(hit.Version, hit.Rank)).ToArray();
+            return new DecisionResult<DecisionQueryResult>(projectId, revision,
+                new DecisionQueryResult(shown, found.Total, hasMore, hasMore ? shown[^1].Decision.DecisionId : null, request.Query is null ? "exact" : "fts"));
         }, cancellationToken);
     }
 
@@ -75,18 +73,11 @@ public sealed partial class DecisionService
         Guard.IsInRange(limit, 1, 21, nameof(limit));
         return Store.ReadAsync(projectId, async (reader, ct) =>
         {
-            var snapshot = await LoadAsync(reader, false, false, ct);
-            var ranks = (await reader.SearchAsync(scenario, ct)).ToDictionary(hit => hit.DecisionId, hit => hit.Rank, StringComparer.Ordinal);
-            var now = Now;
-            var matches = snapshot.Current.Values.Where(version => ranks.ContainsKey(version.DecisionId)
-                && (category is null || version.Content.Category == category)
-                && (includeInactive || version.Status == DecisionStatus.Accepted
-                    && (!version.Content.ValidFrom.HasValue || version.Content.ValidFrom.Value <= now)
-                    && (!version.Content.ValidUntil.HasValue || version.Content.ValidUntil.Value > now)))
-                .OrderBy(version => ranks[version.DecisionId]).ThenBy(version => version.DecisionId, StringComparer.Ordinal).ToArray();
-            return new DecisionResult<DecisionQueryResult>(projectId, snapshot.Revision,
-                new DecisionQueryResult(matches.Take(limit).Select(version => Match(version, ranks[version.DecisionId])).ToArray(), matches.Length,
-                    matches.Length > limit, null, "fts"));
+            var revision = await reader.RevisionAsync(ct);
+            var found = await reader.FindCurrentAsync(new DecisionCurrentFilter(scenario, Category: category,
+                Statuses: includeInactive ? null : [DecisionStatus.Accepted], ActiveAt: includeInactive ? null : Now, Take: limit, ByRank: true), ct);
+            return new DecisionResult<DecisionQueryResult>(projectId, revision,
+                new DecisionQueryResult(found.Page.Select(hit => Match(hit.Version, hit.Rank)).ToArray(), found.Total, found.Total > limit, null, "fts"));
         }, cancellationToken);
     }
 
@@ -108,14 +99,16 @@ public sealed partial class DecisionService
 
             var live = snapshot.Edges.Where(edge => edge.RemovedRevision is null
                 && (request.IncludeContext || edge.Kind is DecisionEdgeKind.DependsOn or DecisionEdgeKind.Supersedes)).ToArray();
+            var touching = Touching(live);
             var visited = new HashSet<string>(StringComparer.Ordinal) { request.DecisionId };
             var pending = new Queue<(string Id, int Depth)>();
             pending.Enqueue((request.DecisionId, 0));
             var reasons = new HashSet<string>(StringComparer.Ordinal);
             while (pending.TryDequeue(out var node))
             {
-                foreach (var edge in live)
+                foreach (var index in touching.GetValueOrDefault(node.Id, []))
                 {
+                    var edge = live[index];
                     string? next = null;
                     if ((request.Direction is DecisionDirection.Upstream or DecisionDirection.Both || edge.Kind == DecisionEdgeKind.Contradicts) && edge.SourceId == node.Id)
                     {
@@ -161,6 +154,32 @@ public sealed partial class DecisionService
         }, cancellationToken);
     }
 
+    /// <summary>The positions in <paramref name="edges" /> of each decision's edges, in ascending order, so a walk visits them in live-edge order.</summary>
+    private static Dictionary<string, List<int>> Touching(IReadOnlyList<DecisionEdge> edges)
+    {
+        var touching = new Dictionary<string, List<int>>(StringComparer.Ordinal);
+        for (var index = 0; index < edges.Count; index++)
+        {
+            Add(edges[index].SourceId, index);
+            if (edges[index].TargetId != edges[index].SourceId)
+            {
+                Add(edges[index].TargetId, index);
+            }
+        }
+
+        return touching;
+
+        void Add(string decisionId, int index)
+        {
+            if (!touching.TryGetValue(decisionId, out var positions))
+            {
+                touching[decisionId] = positions = [];
+            }
+
+            positions.Add(index);
+        }
+    }
+
     private sealed record Snapshot(long Revision, IReadOnlyList<DecisionTask> Tasks, IReadOnlyList<DecisionRecord> Records,
         IReadOnlyDictionary<string, DecisionVersion> Current, IReadOnlyList<DecisionVersion> Versions,
         IReadOnlyList<DecisionEdge> Edges, IReadOnlyList<DecisionImport> Imports);
@@ -194,20 +213,24 @@ public sealed partial class DecisionService
         return selector.All ? tasks : tasks.Take(selector.Last!.Value).ToArray();
     }
 
-    private static HashSet<string> SelectedIds(Snapshot snapshot, IReadOnlyList<DecisionTask> tasks)
+    /// <summary>
+    ///     The decisions the tasks touched. <paramref name="versioned" /> names those with a version under the tasks when the
+    ///     snapshot holds no history; without it the snapshot's versions are read.
+    /// </summary>
+    private static HashSet<string> SelectedIds(Snapshot snapshot, IReadOnlyList<DecisionTask> tasks, IReadOnlySet<string>? versioned)
     {
         var selected = tasks.Select(task => task.TaskId).ToHashSet(StringComparer.Ordinal);
         var ids = snapshot.Records.Where(record => selected.Contains(record.OriginTaskId)).Select(record => record.DecisionId).ToHashSet(StringComparer.Ordinal);
-        ids.UnionWith(snapshot.Versions.Where(version => selected.Contains(version.TaskId)).Select(version => version.DecisionId));
+        ids.UnionWith(versioned ?? snapshot.Versions.Where(version => selected.Contains(version.TaskId)).Select(version => version.DecisionId));
         ids.UnionWith(snapshot.Edges.Where(edge => selected.Contains(edge.TaskId) || edge.RemovalTaskId is { } removed && selected.Contains(removed)).Select(edge => edge.SourceId));
         return ids;
     }
 
-    private static DecisionExport Export(Snapshot snapshot, DecisionTaskSelector selector, DateTimeOffset now)
+    private static DecisionExport Export(Snapshot snapshot, DecisionTaskSelector selector, DateTimeOffset now, IReadOnlySet<string>? versioned = null)
     {
         var tasks = SelectTasks(snapshot.Tasks, selector);
         var taskIds = tasks.Select(task => task.TaskId).ToHashSet(StringComparer.Ordinal);
-        var selected = SelectedIds(snapshot, tasks);
+        var selected = SelectedIds(snapshot, tasks, versioned);
         var versions = snapshot.Versions.ToLookup(version => version.DecisionId, StringComparer.Ordinal);
         var decisions = snapshot.Records.Where(record => selected.Contains(record.DecisionId)).Select(record =>
         {

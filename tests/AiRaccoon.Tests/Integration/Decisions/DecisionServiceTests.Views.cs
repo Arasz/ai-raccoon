@@ -122,6 +122,35 @@ public sealed partial class DecisionServiceTests
         three.Truncated.ShouldBeFalse();
     }
 
+    /// <summary>
+    ///     At the node cutoff the walk keeps the neighbour whose edge comes first in live-edge order (source id, kind,
+    ///     target id), whether that edge points in or out: here the incoming edge from the smallest id wins.
+    /// </summary>
+    [RetryFact]
+    public async Task Graph_keeps_live_edge_order_at_the_node_cutoff()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var service = Service();
+        await service.RegisterTaskAsync("a", new DecisionWrite("task", "s", "register"), "Task", cancellationToken: ct);
+        var ids = new List<string>();
+        foreach (var name in new[] { "one", "two", "three" })
+        {
+            ids.Add((await service.RecordAsync("a", new DecisionWrite("task", "s", "record-" + name),
+                new DecisionContent(name, "architecture", "s", "o", "r"), DecisionStatus.Accepted, ct)).Value.DecisionId);
+        }
+
+        ids.Sort(StringComparer.Ordinal);
+        var (first, middle, last) = (ids[0], ids[1], ids[2]);
+        var revision = (await service.ExportAsync("a", cancellationToken: ct)).ProjectRevision;
+        revision = (await service.LinkAsync("a", new DecisionWrite("task", "s", "out"), middle, last, DecisionEdgeKind.DependsOn, "requires", revision, ct)).ProjectRevision;
+        await service.LinkAsync("a", new DecisionWrite("task", "s", "in"), first, middle, DecisionEdgeKind.DependsOn, "requires", revision, ct);
+
+        var graph = (await service.GraphAsync("a", new DecisionGraphRequest(middle, DecisionDirection.Both, MaxNodes: 2), ct)).Value;
+
+        graph.Nodes.Select(node => node.DecisionId).ShouldBe([first, middle]);
+        graph.Reasons.ShouldBe(["nodes"]);
+    }
+
     /// <summary>Edges among the visited nodes past the internal cap are cut and counted, not silently dropped.</summary>
     [RetryFact]
     public async Task Graph_cuts_edges_past_the_internal_cap_and_counts_the_rest()

@@ -345,6 +345,21 @@ public sealed class DecisionCliTests : IAsyncLifetime
         (await BackendExportAsync("""{"selector":{"all":true}}"""))["value"]!["decisions"]!.AsArray().ShouldBeEmpty();
     }
 
+    /// <summary>A misspelled optional field is refused by the server, not dropped while the rest is recorded.</summary>
+    [RetryFact]
+    public async Task DecisionCli_Record_UnknownField_IsRefusedAndNothingIsRecorded()
+    {
+        await RegisterTaskAsync("t1", "First");
+        var input = await InputAsync("""{"title":"T","category":"c","scenario":"s","outcome":"o","reasoning":"r","maekr":"someone"}""");
+
+        var (exit, stdout, stderr) = await Cli(["record", "--project-id", _project, "--task-id", "t1", "--input", input]);
+
+        exit.ShouldBe(ErrorCode.Usage.InvalidValue, stderr);
+        stdout.ShouldBeEmpty();
+        stderr.ShouldContain("maekr");
+        (await BackendExportAsync("""{"selector":{"all":true}}"""))["value"]!["decisions"]!.AsArray().ShouldBeEmpty();
+    }
+
     public static TheoryData<string> UnusableInputs() => new()
     {
         """{"taskId":"t2","title":"T","category":"c","scenario":"s","outcome":"o","reasoning":"r"}""",

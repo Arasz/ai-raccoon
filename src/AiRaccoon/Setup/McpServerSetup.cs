@@ -152,7 +152,8 @@ internal static partial class McpServerSetup
             return mcpServerBuilder
                 .WithRequestFilters(f => f
                     .AddCallToolFilter(ToolRefusals.Filter)
-                    .AddCallToolFilter(ToolTelemetry.Filter))
+                    .AddCallToolFilter(ToolTelemetry.Filter)
+                    .AddCallToolFilter(DecisionTools.UnknownArgumentFilter))
                 .HandleHttpTransport();
         }
 
