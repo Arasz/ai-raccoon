@@ -90,6 +90,17 @@ public static class DecisionOperations
         new("preview_decisions", "POST", "/preview", false, new Dictionary<string, object?>())
     ];
 
+    /// <summary>HTTP routes with no MCP tool: Tool is the gate operation name, not a registered tool.</summary>
+    public static IReadOnlyList<DecisionOperation> HttpOnly { get; } =
+    [
+        new("import-semantica", "POST", "/imports/semantica/preview", false, new Dictionary<string, object?> { ["source"] = "", ["mapping"] = "" }),
+        new("import-semantica", "POST", "/imports/semantica/apply", true, new Dictionary<string, object?>
+        {
+            ["sessionId"] = "session", ["requestId"] = "import", ["source"] = "", ["mapping"] = "", ["sourceDigest"] = "A",
+            ["mappingDigest"] = "B", ["expectedProjectRevision"] = 0
+        })
+    ];
+
     public static TheoryData<string> Tools() => [.. All.Select(o => o.Tool)];
 
     public static TheoryData<string> WriteTools() => [.. All.Where(o => o.Write).Select(o => o.Tool)];

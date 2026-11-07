@@ -57,6 +57,7 @@ proxy; full servers come only from `serve`).
 | `decisions query --project-id <id> [--query <text>] [--category <category>]` | Prints current decision summaries matching literal text and a category, like `query_decisions` |
 | `decisions export --project-id <id> [--tasks <n> \| --all \| --task-id <task>...] [--format json\|markdown] [--output <path>] [--force]` | Writes the complete selected decision snapshot, uncapped, as lossless JSON or as Markdown for reading |
 | `decisions preview --project-id <id> [--tasks <n> \| --all \| --task-id <task>...] [--format text\|json] [--max-decisions <n>] [--max-edges <n>] [--max-chars <n>]` | Prints a compact, budgeted summary of the selected tasks' decisions |
+| `decisions import-semantica --project-id <id> --input <path> --mapping <path> [--apply --request-id <id> [--session-id <id>] --source-digest <hex> --mapping-digest <hex> --expected-project-revision <n>]` | Imports a Semantica 0.7.0 `export_graph` file: a dry run by default, a write with `--apply` |
 | `serve [options]` | Runs the HTTP MCP endpoint in the foreground; see [serve](#serve) below. `serve observability` prints a ready-to-run monitoring command for the running server |
 | `doctor` | Shows bank schema/version, code engine state and embedding settings, without changing the bank |
 
@@ -131,6 +132,16 @@ neither `--query` nor `--category` it lists the project's decisions by id.
 
 Refusals map to exit codes: an unregistered or retired project exits 18, an invalid value 10,
 any other refusal (a conflict, a missing record, a read-only project) 17.
+
+`import-semantica` reads one Semantica 0.7.0 `export_graph` JSON file and an operator-written mapping,
+each at most 10 MiB, and sends their bytes to the server. Without `--apply` it prints the report as JSON.
+With blockers it exits 17 and prints their count on stderr. A clean report exits 0 and prints the exact
+apply command on stderr, with a fresh request id, both digests and the project revision filled in.
+`--apply` needs `--request-id`, `--source-digest`, `--mapping-digest` and `--expected-project-revision`
+together; the companion flags without `--apply`, or `--apply` without all four, exit 10 and send nothing,
+as does a file over 10 MiB. `--session-id` defaults to the request id, so repeating the printed command
+replays the import. An unreadable file exits with the IO failure code. See the
+[how-to](../how-to/record-project-decisions.md#semantica) for the mapping file.
 
 ## settings
 

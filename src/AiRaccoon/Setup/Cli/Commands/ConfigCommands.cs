@@ -151,6 +151,7 @@ internal sealed class ConfigCommands(
                 ["decisions", "query"] => await decisions.QueryAsync(parsedCliArgs, streams, ctx),
                 ["decisions", "export"] => await decisions.ExportAsync(parsedCliArgs, streams, ctx),
                 ["decisions", "preview"] => await decisions.PreviewAsync(parsedCliArgs, streams, ctx),
+                ["decisions", "import-semantica"] => await decisions.ImportSemanticaAsync(parsedCliArgs, streams, ctx),
                 _ => throw new UnhandledCommandException($"unhandled command: {string.Join(' ', commandPath)}")
             };
         }

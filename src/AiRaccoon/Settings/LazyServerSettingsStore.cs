@@ -140,6 +140,14 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     public async Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default) =>
         await AsDecisionClient(await InnerAsync(cancellationToken)).QueryAsync(projectId, query, cancellationToken);
 
+    /// <inheritdoc />
+    public async Task<JsonDocument> ImportPreviewAsync(string projectId, byte[] source, byte[] mapping, CancellationToken cancellationToken = default) =>
+        await AsDecisionClient(await InnerAsync(cancellationToken)).ImportPreviewAsync(projectId, source, mapping, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<JsonDocument> ImportApplyAsync(string projectId, ImportApplyRequest request, CancellationToken cancellationToken = default) =>
+        await AsDecisionClient(await InnerAsync(cancellationToken)).ImportApplyAsync(projectId, request, cancellationToken);
+
     /// <summary>Same reasoning as <see cref="AsMigrationStore" />, for the decision routes.</summary>
     private static IDecisionClient AsDecisionClient(ISettingsStore store) =>
         store as IDecisionClient ?? throw new NotSupportedException(

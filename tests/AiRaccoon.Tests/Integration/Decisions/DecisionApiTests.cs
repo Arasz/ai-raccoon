@@ -52,7 +52,7 @@ public sealed class DecisionApiTests : IAsyncLifetime
             .Select(e => $"{e.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Single()} {e.RoutePattern.RawText!["/decisions/projects/{projectId}".Length..]}")
             .Order(StringComparer.Ordinal);
 
-        routes.ShouldBe(DecisionOperations.All.Select(o => $"{o.Method} {o.Route}").Order(StringComparer.Ordinal));
+        routes.ShouldBe(DecisionOperations.All.Concat(DecisionOperations.HttpOnly).Select(o => $"{o.Method} {o.Route}").Order(StringComparer.Ordinal));
     }
 
     /// <summary>Read from the raw tools/list JSON: a false hint the SDK dropped would be absent here.</summary>

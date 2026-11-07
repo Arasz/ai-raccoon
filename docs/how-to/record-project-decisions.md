@@ -107,10 +107,42 @@ so it holds across a server restart.
 
 ## Semantica
 
-The native graph does not replace a Semantica setup yet. Keep the Semantica MCP server entry and the
-agent instructions that point to it. Importing existing Semantica exports is not in 2.4.0 (it is
-tracked in #924), and switching the agent framework's instructions to the native tools is a
-separate change made after this release is accepted.
+The native graph does not replace a Semantica setup by itself. Keep the Semantica MCP server entry and
+the agent instructions that point to it until you have imported your decisions and checked them.
+Switching the agent framework's instructions to the native tools is a separate change.
+
+`ai-raccoon decisions import-semantica` imports one Semantica 0.7.0 `export_graph` JSON file (the
+envelope with `format` and a `data` string holding `entities`, `relationships` and `statistics`).
+No other Semantica shape is supported. Each file may be at most 10 MiB.
+
+1. Export the graph from Semantica to a file, and register the tasks the decisions belong to, oldest
+   first, with `decisions task register`. The import never creates tasks, and imported timestamps never
+   decide task order.
+2. Write a mapping file. This skeleton lists every record and leaves out `status` on purpose, so the
+   preview blocks until you choose one:
+
+   ```sh
+   jq '.data|fromjson|{sourceNamespace:"semantica-main",legacyTaskId:"semantica-legacy",edgeKinds:{depends_on:"depends_on",supports:"supports",contradicts:"contradicts"},records:(((.entities+.relationships)|map({key:.id,value:{externalId:.id}}))|from_entries)}' export.json > mapping.json
+   ```
+
+   - `legacyTaskId` is the registered task that owns every record without its own `taskId`.
+   - Give each `decision` entity a `status` of `proposed`, `accepted`, `rejected` or `deprecated`. It is
+     never guessed from the outcome text. `superseded` cannot be imported: import both decisions as
+     `accepted`, then call `supersede_decision`.
+   - `edgeKinds` maps a relationship type to `depends_on`, `supports` or `contradicts`. Unlisted types
+     are kept verbatim in the import record and are not turned into edges.
+   - `title` on a record overrides the decision title when the Semantica text is longer than 200 characters.
+3. Preview: `ai-raccoon decisions import-semantica --project-id <id> --input export.json --mapping mapping.json`.
+   The report goes to stdout. With blockers it exits 17 and writes nothing. A clean report exits 0 and
+   prints the exact `--apply` command on stderr, with both digests, the project revision and a request id.
+4. Run that command. Apply writes everything or nothing and raises the project revision by one. Running
+   it again, or importing the same file with a new request id, writes nothing and reports `replayed`.
+   If the project changed after the preview, apply refuses with `decision-conflict`; preview again.
+
+Importing a newer export later adds only the new records. A record that changed since it was imported
+is a blocker (`changed-source`, or `changed-mapping` when only the mapping changed). Every imported
+record, including the ones that are not promoted, is kept verbatim in the import records that
+`decisions export` returns.
 
 ## Upgrade and roll back
 

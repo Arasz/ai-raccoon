@@ -229,3 +229,78 @@ Each mutation was reverted and the solution rebuilt before the next; the class w
 Docs: [how-to](../../how-to/record-project-decisions.md) (registration, recording, linking, CLI export and preview, access modes, limits, Semantica, upgrade and rollback), ADR-0142 status and "What shipped in 2.4.0", ADR index row, how-to index, `VERSION` 2.4.0, [changelog](../../changelog/2.4.0-native-decision-graph.md), changelog index and the README What's new line. Rollback restores the 2.3.0 binary together with a data-root copy taken before upgrade: `MemorySchema.CurrentVersion` is 23, and 2.3.0 (`CurrentVersion` 22) refuses the bank under ADR-0019's forward-version guard.
 
 Final local run after the last change: the solution built with 0 warnings, and 32 classes passed 360/360. These were every `Decision*` class, `DecisionCliTests`, `DecisionEndpointTests`, `DecisionCommandTreeTests`, `ProjectIdsRepairJobTests`, `ProjectIdAliasMapTests`, the source gates (`NoHandRolledCryptoTests`, `NoConfigureAwaitTests`, `LoggerMessageEventIdTests`, `RetrySurfaceGateTests`, `LayeringRulesTests`, `ProjectIdAliasDefaultCollectionGateTests`), the docs gates (`AdrIndexTests`, `MergeConflictMarkerTests`, `FirstRunMemoryEngineTests`, `ObservabilityCountersCommandDocsTests`, `HowToExitTableTests`), `VersionContractTests`, `McpToolContractTests` and `ToolInventoryTests`. CI on the release head was still running when this was written.
+
+## Semantica import acceptance
+
+Each test was written first and seen to fail, then each named mutation was applied, built, run and restored, and the solution was rebuilt clean before the green was trusted. Counts are failed tests in the named classes.
+
+| T | Test | Mutation | Red | Green |
+| --- | --- | --- | --- | --- |
+| T1 | `DecisionStateTests.Importable_AllowsOnlyMappableStatuses` | `Importable` true for `Superseded` | 1 of 36 | 36/36 |
+| T2 | `SemanticaParsingTests.Parse_RealFixture_ReadsEveryRecord` | Return empty lists after the envelope check | 10 of 52 | 52/52 |
+| T3 | `Parse_DuplicateKey_InEnvelopeInnerDataAndMapping_Refuses` | Parse the inner string with default `JsonDocument.Parse` | 3 of 52 | 52/52 |
+| T4 | `Parse_InvalidUtf8InsideString_RefusesAsArgument` | Lenient `Encoding.UTF8` decode | 2 of 52 | 52/52 |
+| T5 | `Parse_UnsupportedShape_Refuses` | Drop the exact-key check / drop the count comparison | 6 of 52 / 2 of 52 | 52/52 |
+| T6 | `SemanticaImportPlanTests.Plan_Fixture_MatchesExpectedCounts` | Promote every relationship type | 5 of 38 | 38/38 |
+| T7 | `Plan_NeverInfersStatusFromOutcome` | Fall back to `outcome` when status is missing | 1 of 38 | 38/38 |
+| T8 | `Plan_OverlongOrMissingContent_BlocksPerRecord` | Use entity `text` for a missing `reasoning` | 1 of 38 | 38/38 |
+| T9 | `Plan_MappedEdgeToNonDecision_Blocks`, `Plan_UnmappedCaused_RetainedNotPromoted` | Skip the endpoint check; default unmapped types to `depends_on` | 1 of 38; 5 of 38 | 38/38 |
+| T10 | `Plan_DuplicateRules_CollapseEqualRefuseDifferent` | Collapse duplicates by ID only | 1 of 38 | 38/38 |
+| T11 | `Plan_DependsOnCycleAndContradictsOrder` | Remove the `EnsureCanLink` call / remove the `contradicts` swap | 1 of 38 / 2 of 38 | 38/38 |
+| T12 | `DecisionImportTests.DecisionImport_DryRunReplayAndUnknownData` | Store re-serialized JSON as the raw payload / run the preview in a write transaction | 1 of 8 / 3 of 8 | 8/8 |
+| T13 | `Apply_FailureMidWrite_LeavesEveryTableUnchanged` | Swallow the injected failure on a later import row (a partial commit) | 1 of 8 | 8/8 |
+| T14 | `Apply_StaleRevision_DigestMismatch_ChangedSource_ChangedMapping_Refuse`, `Apply_SameRequestIdWithADifferentFile_ConflictsOnTheRequest`, `Apply_NewerExport_AddsOnlyNewRecords` | Remove `RequireRevisionAsync` / drop the source digest compare / drop the mapping digest compare / drop the mapping digest from the request payload | 2 / 1 / 1 / 1 of 8 | 8/8 |
+| T15 | `DecisionImportApiTests.ImportRoutes_AcceptMaxSizeAndRefuseOverLimit` | Disable the `BadHttpRequestException` arm / limit 9 MiB / limit 11 MiB | 1 / 1 / 1 | 2/2 |
+| T16 | `ImportRoutes_RefusalKindsAndGate` | Apply requires `Read` | 1 of 42 | 42/42 |
+| T17 | `DecisionApiTests.HttpRoutes_MapEveryOperationOnce` | Rename the apply route / add an extra route | 2 / 1 | 40/40 |
+| T18 | `DecisionImportCliTests.ImportSemantica_PreviewThenApply_AgainstARealServer` | Print a wrong source digest / return 0 on blockers | 2 of 5 / 1 of 5 | 5/5 |
+| T19 | `_ApplyWithoutCompanions_SendsNothing`, `_RetryWithSameRequestId_Replays` | Weaken the companion check / drop the lone-flag check / generate a session id | 1 / 1 / 1 | 5/5 |
+| T20 | `_OversizedFile_SendsNothing` | Double the `FileInfo.Length` limit | 1 of 5 | 5/5 |
+
+First attempts that did not prove anything, fixed before they counted:
+
+- The first T4 test put the bad byte inside the word `json`, so the format check refused it too and the lenient-decode mutation survived. The bad byte now sits in a free-text field.
+- A payload mutation that swapped the two digests survived because the swap is symmetric. The same-`requestId` test also changed the expected revision, so it could not isolate the payload. It now holds the revision fixed.
+- The T15 test padded with the limit constant, so a 9 MiB limit survived. It now pins 10 MiB literally.
+- Two CLI mutations written as `if (false)` failed to build (unreachable code is an error here), so those runs exercised a stale binary. They were discarded and redone.
+
+Source gates, run once at the end: `NoConfigureAwaitTests` 1/1, `NoHandRolledCryptoTests` 7/7 (after `SemanticaImportPlan.cs` joined its hashing allowlist), `LoggerMessageEventIdTests` 5/5, `RetrySurfaceGateTests` 2/2, `AdrIndexTests` 7/7, `McpToolInventoryTests` 3/3 and `McpToolContractTests` 3/3 (tool count stays 43), `ToolRefusalsTests` 42/42, `SettingsCommandTreeTests` 172/172. All 46 `Decision*` and `Semantica*` test classes: 362/362.
+
+Two existing gates needed updates the plan did not foresee. `SettingsCommandTreeTests.ApplyLeaves_MatchCliBankWriteTestsCoverage` expects every `--apply` leaf to have an outbox row in `CliBankWriteTests`; the import verb writes only through the server's HTTP routes, so it is listed as a server-routed leaf. `NoConfigurationWriteRemainsReachableOutsideSettings` needed required arguments for the new verb.
+
+H1 is settled: Kestrel's default 30,000,000-byte body limit accepts a legal pair of 10 MiB files (about 28 MB of base64), and a larger body is refused with `decision-import-too-large` and a 413.
+
+### Rehearsal on a bank copy
+
+Source: a copy of `~/ai-raccoon-eval/copies/cb99fe6ecbe0.db`, an older copy of the live bank at schema v17, placed in a scratch data root outside the repository. The live bank and port 7721 were not touched. The copy's `watches` table was dropped before the first open, so it could not re-ingest real directories. The server ran as `serve --port 7945 --idle-timeout 0`; opening the copy migrated it to v23. The granite model data file was copied into the worktree's build output because the server refuses to start without it.
+
+| Check | Result |
+| --- | --- |
+| Source file | 9 entities, 13 relationships, digest `290A36C0…5A11` |
+| Preview before the tasks exist | exit 17, `unknown-task` for both task ids, 3 decisions and 3 edges plannable, nothing written |
+| Preview after registering the two tasks | exit 0, 4 decisions, 3 edges, 15 retained, apply command printed on stderr |
+| Refusals | stale revision: `decision-conflict`, exit 17; wrong source digest: `decision-conflict`, exit 17; missing companion flag: exit 10, nothing sent; bad status in the mapping: `decision-import-blocked`, exit 17; file over 10 MiB: exit 10, nothing sent; companion flag without `--apply`: exit 10. Request receipts stayed at 2 (the two task registrations) |
+| Apply | exit 0, revision 2 to 3, `replayed: false` |
+| Repeat of the printed command | exit 0, `replayed: true`, revision still 3 |
+| Rows in the bank | 4 decisions, 4 versions, 3 edges, 22 import rows (4 with a decision id, 18 without) |
+| After a server restart | `export --all`: 2 tasks, 4 decisions, 3 edges, 22 import records, revision 3; every raw payload parses equal to its source record; statuses accepted, proposed, accepted, rejected; the rejected one is under `storage-task` |
+| Task selector | `export --task-id storage-task`: 1 decision, 1 edge, 1 boundary node, 1 import record |
+| Precedent lookup | the HTTP `precedents` route for "where decisions live storage": 1 match, "Choose where decisions live", accepted, method `fts` |
+| Graph traversal | from the first decision, both directions, depth 2: 2 nodes, 1 edge, not truncated |
+| Synthetic file near the limit | source 9,802,497 bytes, mapping 392,071 bytes, 3,500 decisions, 5,248 relationships (a 3,499 `depends_on` chain plus 1,749 `supports`): preview 1.71 s, apply 1.95 s wall, both inside the 10 s budget; 3,500 decisions, 5,248 edges and 8,748 import rows written at revision 2. The fallback of planning in `ReadAsync` was not needed, and the quadratic cycle check (H4) was not a problem at this size |
+
+The transcript of the commands and their output is in the scratch directory `/private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/0661bdac-1d0f-4eba-9380-36817c5be932/scratchpad/s8files/transcript.txt`.
+
+### Planner decisions where the plan was silent
+
+- Status matching is exact and lowercase. `Accepted` or `ACCEPTED` is `unknown-status`, and `Superseded` is `unknown-status` too; only the exact lowercase `superseded` gets `superseded-status`.
+- An explicit JSON `null` for `confidence` or `decision_maker` counts as absent.
+- A mapping `title` on a record that is not a decision entity is an `invalid-content` blocker, as is `status` on one (`status-on-non-decision`).
+- A relationship of an unlisted type whose endpoint is not in the file gets both an `unsupported-relationship` notice and an `unresolved-endpoint` notice, and is retained.
+- An unlisted edge-kind target (`supersedes`, or any other word) is an `invalid-edge-kind` blocker for each such mapping entry.
+- Apply with an unusable `legacyTaskId` identifier is refused as `decision-import-blocked` before the write; a task that is simply unregistered is reported by the planner as `unknown-task`.
+- `Collapsed` also counts a byte-equal duplicate record, as the plan's count definition says, and a promoted relationship whose edge already exists.
+- Apply digests are compared ignoring case; the preview prints uppercase.
+- The CLI quotes a path or id in the printed apply command only when it holds characters outside letters, digits and `_ . / : -`.
+- Closing the review-tests gate (S9) is not done here: it needs a reviewer other than the author.
+
