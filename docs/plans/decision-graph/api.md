@@ -1,6 +1,6 @@
 # Decision agent API and CLI
 
-Status: reviewed contract, following the [data model](data-model.md). Model, storage (schema v23), service, adapters, CLI and migration are complete in PR #923, Semantica import is deferred to #924, and the release step shipped as 2.4.0. Import names below describe future behavior.
+Status: reviewed contract, following the [data model](data-model.md). Model, storage (schema v23), service, adapters, CLI and migration are complete in PR #923, Semantica import for the `export_graph` shape followed in #924, and the release step shipped as 2.4.0.
 
 ## Common contract
 
@@ -68,7 +68,7 @@ Shown 1 selected decision, 1 boundary node, 1 edge; omitted 0 decisions, 0 edges
 
 ## Migration and ownership handover
 
-> **Deferred to [#924](https://github.com/Arasz/ai-raccoon/issues/924).** `import-semantica` is not built in PR #923. The `export_graph` envelope now has a real Semantica 0.7.0 fixture; the normalized shape still needs its own exporter fixture before it can be supported. The CLI line above and the two paragraphs below are the design for that issue, not shipped behaviour.
+> **Shipped for one shape ([#924](https://github.com/Arasz/ai-raccoon/issues/924)).** `import-semantica` imports the Semantica 0.7.0 `export_graph` envelope, which has a real exporter fixture. The normalized shape is still unsupported until it has one. The two paragraphs below are the design; the implementation is described in [semantica-import.md](semantica-import.md).
 
 `import-semantica` is a one-time compatibility adapter over an authenticated backend import endpoint `POST P/imports/semantica/preview` and `POST P/imports/semantica/apply`, with a shared store/service, not direct CLI SQLite access. There is no generic import or NER/entity tool. Default is read-only dry run with mapping and validation report; --apply needs explicit request ID, source digest and the preview's project revision. CLI sends file bytes, never a backend-local path. Accept UTF-8 JSON up to 10 MiB and reject duplicate keys, overlong fields and unsupported schema versions. One shape is supported, backed by the real Semantica 0.7.0 `export_graph` JSON envelope fixture (`format` plus a `data` string holding `entities`, `relationships` and `statistics`). The normalized nodes/edges/decisions/metadata shape is not supported until a real exporter fixture exists. Do not claim other Semantica formats supported until fixture-backed. Apply is bound to the previewed bytes: it also needs the mapping digest, and `--session-id` defaults to the request ID.
 

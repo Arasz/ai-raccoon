@@ -2,7 +2,7 @@
 
 Date: 2026-10-26
 
-Status: Accepted 2026-11-04 for 2.4.0. Semantica import is deferred to #924, and the agent framework's switch to the native tools is a separate change.
+Status: Accepted 2026-11-04 for 2.4.0. Semantica import shipped after 2.4.0 as `decisions import-semantica` (#924), and the agent framework's switch to the native tools is a separate change.
 
 ## Context
 
@@ -36,4 +36,4 @@ The bank is schema v23 with the decision tables, excluded from cloud sync. `IDec
 
 Each release requirement has a test that was seen to fail under a targeted mutation; the [implementation evidence](../plans/decision-graph/implementation-evidence.md) lists them. `DecisionIntegration_RestartAndAccessModes` covers the cross-surface part. It registers, records and links over HTTP, MCP and the CLI, restarts the server on the same bank, and checks that reads, export and preview agree on every surface in `ro`, `rw` and `full`, and that writes are refused alike in `ro`. It found that MCP refused `depends_on` links, which was fixed before release. Independent test-quality reviews covered the model and service, the adapters and CLI, and the migration and repair suites.
 
-Import preservation is not met. Semantica import is not part of 2.4.0 and is deferred to #924; until it ships, operators keep their Semantica configuration. Rollback restores the previous binary together with a bank backup taken before the upgrade, because a 2.3.0 binary refuses a v23 bank (ADR-0019). The [how-to](../how-to/record-project-decisions.md) gives the steps.
+Import preservation shipped after 2.4.0. `ai-raccoon decisions import-semantica` imports the Semantica 0.7.0 `export_graph` JSON envelope, the one shape backed by a real exporter fixture, through a dry run that must come first: apply is bound to the previewed source and mapping bytes, the project revision and a request id. Decisions are created directly in their mapped status (never inferred from the outcome, and never `superseded`, which needs `supersede_decision`), links are limited to `depends_on`, `supports` and `contradicts`, and every source record is kept verbatim in `decision_imports`. The normalized nodes/edges shape is not supported until a real fixture exists. Until you have imported and checked your decisions, keep your Semantica configuration. Rollback restores the previous binary together with a bank backup taken before the upgrade, because a 2.3.0 binary refuses a v23 bank (ADR-0019). The [how-to](../how-to/record-project-decisions.md) gives the steps.

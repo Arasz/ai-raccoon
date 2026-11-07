@@ -81,7 +81,9 @@ registers a new project id; call `get_project_id` first), and 13 decision tools 
 The decision tools are the exception to the optional `projectId`: they require it (`projectId!`)
 and never resolve one from the working directory. Each maps 1:1 onto a `/decisions/projects/{projectId}`
 HTTP route, answers with `structuredContent` plus the same JSON as text, and refuses with the same
-kind as that route.
+kind as that route. Two further HTTP routes have no tool: `POST /decisions/projects/{projectId}/imports/semantica/preview`
+(read access) and `.../apply` (write access) serve `ai-raccoon decisions import-semantica`; their bodies carry the
+two files as base64.
 `memory_configure` and `memory_set_structure_alpha` were removed by the CLI-config
 refactor: configuration is no longer an MCP tool — the CLI verbs are the single
 config channel (see [Command-line options](#command-line-options)).
