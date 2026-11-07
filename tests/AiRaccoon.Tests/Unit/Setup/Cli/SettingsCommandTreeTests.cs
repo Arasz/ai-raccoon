@@ -135,8 +135,12 @@ public class SettingsCommandTreeTests
 ["decisions preview"] = ["--project-id", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"],
 ["decisions record"] = ["--project-id", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70", "--task-id", "t", "--input", "/nonexistent/decision.json"],
 ["decisions get"] = ["d1", "--project-id", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"],
-["decisions query"] = ["--project-id", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"]
+["decisions query"] = ["--project-id", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70"],
+["decisions import-semantica"] = ["--project-id", "0b7c2b0e-6a8e-4f7e-9d1a-2f3c4d5e6f70", "--input", "/nonexistent/export.json", "--mapping", "/nonexistent/mapping.json"]
     };
+
+    /// <summary>`--apply` leaves that reach the bank only through the server's HTTP routes, never an outbox request; DecisionImportCliTests proves the route.</summary>
+    private static readonly string[] ServerRoutedApplyLeaves = ["decisions import-semantica"];
 
     public static TheoryData<string[]> SettingsArgv()
     {
@@ -208,7 +212,7 @@ public class SettingsCommandTreeTests
             .Select(leaf => leaf.Path)
             .ToArray();
 
-        applyLeaves.ShouldBe(CliBankWriteTests.ApplyCommandPaths, ignoreOrder: true,
+        applyLeaves.ShouldBe([.. CliBankWriteTests.ApplyCommandPaths, .. ServerRoutedApplyLeaves], ignoreOrder: true,
             "a new --apply leaf needs a CliBankWriteTests.ApplyCommands() row proving its write is server-routed, not a direct bank write");
     }
 
