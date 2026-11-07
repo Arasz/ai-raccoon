@@ -86,3 +86,17 @@ internal sealed record SelectionRequest(DecisionTaskSelector? Selector = null)
     public Task<DecisionResult<DecisionExport>> SendAsync(IDecisionService service, string projectId, CancellationToken ct) =>
         service.ExportAsync(projectId, Selector, ct);
 }
+
+internal sealed record ImportPreviewRequest(byte[] Source, byte[] Mapping)
+{
+    public Task<DecisionResult<DecisionImportReport>> SendAsync(IDecisionService service, string projectId, CancellationToken ct) =>
+        service.PreviewSemanticaImportAsync(projectId, Source, Mapping, ct);
+}
+
+internal sealed record ImportApplyRequest(string SessionId, string RequestId, byte[] Source, byte[] Mapping,
+    string SourceDigest, string MappingDigest, long ExpectedProjectRevision, string? Actor = null)
+{
+    public Task<DecisionResult<DecisionImportOutcome>> SendAsync(IDecisionService service, string projectId, CancellationToken ct) =>
+        service.ApplySemanticaImportAsync(projectId, new DecisionImportCommand(SessionId, RequestId, Source, Mapping,
+            SourceDigest, MappingDigest, ExpectedProjectRevision, Actor), ct);
+}

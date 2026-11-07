@@ -31,6 +31,8 @@ internal static class DecisionRefusals
     {
         DecisionRevisionConflictException conflict => new DecisionRefusal(DecisionErrorKinds.Conflict, StatusCodes.Status409Conflict,
             conflict.Message, new Dictionary<string, object?> { ["currentProjectRevision"] = conflict.CurrentRevision }),
+        BadHttpRequestException { StatusCode: StatusCodes.Status413PayloadTooLarge } => new DecisionRefusal(DecisionErrorKinds.ImportTooLarge,
+            StatusCodes.Status413PayloadTooLarge, "The request body is larger than the server accepts.", None),
         DecisionException refusal => new DecisionRefusal(refusal.Kind, StatusFor(refusal.Kind), refusal.Message, Details(refusal)),
         ArgumentException or JsonException => new DecisionRefusal(InvalidArgument, StatusCodes.Status400BadRequest, exception.Message, None),
         _ when ToolRefusals.PrefixFor(exception) is { } kind => new DecisionRefusal(kind, StatusCodes.Status422UnprocessableEntity,
@@ -53,7 +55,7 @@ internal static class DecisionRefusals
     private static int StatusFor(string kind) => kind switch
     {
         DecisionErrorKinds.NotFound => StatusCodes.Status404NotFound,
-        DecisionErrorKinds.ExportTooLarge => StatusCodes.Status413PayloadTooLarge,
+        DecisionErrorKinds.ExportTooLarge or DecisionErrorKinds.ImportTooLarge => StatusCodes.Status413PayloadTooLarge,
         _ => StatusCodes.Status409Conflict
     };
 
