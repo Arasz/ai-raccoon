@@ -38,6 +38,12 @@ internal sealed class FakeDecisionClient : IDecisionClient
     public Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default) =>
         Call("query", cancellationToken);
 
+    public Task<JsonDocument> ImportPreviewAsync(string projectId, byte[] source, byte[] mapping, CancellationToken cancellationToken = default) =>
+        Call("import-preview", cancellationToken);
+
+    public Task<JsonDocument> ImportApplyAsync(string projectId, ImportApplyRequest request, CancellationToken cancellationToken = default) =>
+        Call("import-apply", cancellationToken);
+
     private Task<JsonDocument> Call(string operation, CancellationToken cancellationToken)
     {
         Calls.Add(operation);

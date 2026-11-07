@@ -23,6 +23,12 @@ internal interface IDecisionClient
     Task<JsonDocument> GetAsync(string projectId, string decisionId, bool includeHistory, CancellationToken cancellationToken = default);
 
     Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default);
+
+    /// <summary>The dry run of a Semantica import; it runs without the per-request deadline because the files are large.</summary>
+    Task<JsonDocument> ImportPreviewAsync(string projectId, byte[] source, byte[] mapping, CancellationToken cancellationToken = default);
+
+    /// <summary>Applies a previewed Semantica import; it runs without the per-request deadline because the files are large.</summary>
+    Task<JsonDocument> ImportApplyAsync(string projectId, ImportApplyRequest request, CancellationToken cancellationToken = default);
 }
 
 /// <summary>The server refused a decision request; <see cref="Kind" /> is the refusal kind it reported.</summary>
@@ -47,6 +53,10 @@ internal sealed class DirectGraphDecisionClient : IDecisionClient
     public Task<JsonDocument> GetAsync(string projectId, string decisionId, bool includeHistory, CancellationToken cancellationToken = default) => throw Refused();
 
     public Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default) => throw Refused();
+
+    public Task<JsonDocument> ImportPreviewAsync(string projectId, byte[] source, byte[] mapping, CancellationToken cancellationToken = default) => throw Refused();
+
+    public Task<JsonDocument> ImportApplyAsync(string projectId, ImportApplyRequest request, CancellationToken cancellationToken = default) => throw Refused();
 
     private static NotSupportedException Refused() =>
         new("ai-raccoon: decisions are read and written only through the server; this command writes the bank directly");

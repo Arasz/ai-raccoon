@@ -95,6 +95,14 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     public Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default) =>
         _decisions.QueryAsync(projectId, query, cancellationToken);
 
+    /// <inheritdoc />
+    public Task<JsonDocument> ImportPreviewAsync(string projectId, byte[] source, byte[] mapping, CancellationToken cancellationToken = default) =>
+        _decisions.ImportPreviewAsync(projectId, source, mapping, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<JsonDocument> ImportApplyAsync(string projectId, ImportApplyRequest request, CancellationToken cancellationToken = default) =>
+        _decisions.ImportApplyAsync(projectId, request, cancellationToken);
+
     public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(key);

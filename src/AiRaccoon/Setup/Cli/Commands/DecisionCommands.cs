@@ -12,7 +12,7 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Setup.Cli.Commands;
 
 /// <summary>
-///     `decisions task register | record | get | query | export | preview` over the server's decision routes. Machine output
+///     `decisions task register | record | get | query | export | preview | import-semantica` over the server's decision routes. Machine output
 ///     goes to stdout, diagnostics to stderr. An export is read in full before it is written; stdout is then written as it
 ///     renders and can hold partial output if writing fails, while --output publishes the file only once it is complete.
 /// </summary>
@@ -232,6 +232,84 @@ internal sealed class DecisionCommands
 
         return ErrorCode.Ok.Success;
     }
+
+    public async Task<int> ImportSemanticaAsync(ParseResult parseResult, StandardStreams streams, CancellationToken cancellationToken)
+    {
+        var input = parseResult.GetValue<string>("--input")!;
+        var mappingPath = parseResult.GetValue<string>("--mapping")!;
+        var apply = parseResult.GetValue<bool>("--apply");
+        var requestId = parseResult.GetValue<string?>("--request-id");
+        var sourceDigest = parseResult.GetValue<string?>("--source-digest");
+        var mappingDigest = parseResult.GetValue<string?>("--mapping-digest");
+        var revision = parseResult.GetValue<long?>("--expected-project-revision");
+        var sessionId = parseResult.GetValue<string?>("--session-id");
+        var given = new[] { requestId, sessionId, sourceDigest, mappingDigest, revision?.ToString() };
+        if (!apply && given.Any(value => value is not null))
+        {
+            await streams.WriteErrorLineAsync("ai-raccoon: --request-id, --session-id, --source-digest, --mapping-digest and --expected-project-revision belong to --apply; nothing was sent");
+            return ErrorCode.Usage.InvalidValue;
+        }
+
+        if (apply && (requestId is null || sourceDigest is null || mappingDigest is null || revision is null))
+        {
+            await streams.WriteErrorLineAsync("ai-raccoon: --apply needs --request-id, --source-digest, --mapping-digest and --expected-project-revision from the preview; nothing was sent");
+            return ErrorCode.Usage.InvalidValue;
+        }
+
+        byte[] source;
+        byte[] mapping;
+        try
+        {
+            foreach (var path in new[] { input, mappingPath })
+            {
+                if (new FileInfo(path).Length > DecisionImportLimits.MaxBytes)
+                {
+                    await streams.WriteErrorLineAsync($"ai-raccoon: {TerminalText.Visible(path)} is over the {DecisionImportLimits.MaxBytes}-byte limit; nothing was sent");
+                    return ErrorCode.Usage.InvalidValue;
+                }
+            }
+
+            source = await File.ReadAllBytesAsync(input, cancellationToken);
+            mapping = await File.ReadAllBytesAsync(mappingPath, cancellationToken);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await streams.WriteErrorLineAsync($"ai-raccoon: could not read the import files ({TerminalText.Visible(ex.Message)}); nothing was sent");
+            return ErrorCode.Environment.IoFailed;
+        }
+
+        var projectId = ProjectId(parseResult);
+        if (apply)
+        {
+            var request = new ImportApplyRequest(sessionId ?? requestId!, requestId!, source, mapping, sourceDigest!, mappingDigest!, revision!.Value);
+            return await SendWriteAsync(streams, "import", request.SessionId, request.RequestId,
+                () => _client.ImportApplyAsync(projectId, request, cancellationToken), cancellationToken);
+        }
+
+        using var response = await _client.ImportPreviewAsync(projectId, source, mapping, cancellationToken);
+        var data = Data(response);
+        await WriteFlatAsync(streams.Output, data, cancellationToken);
+        var report = data.GetProperty("value");
+        if (!report.GetProperty("canApply").GetBoolean())
+        {
+            var count = report.GetProperty("blockers").GetArrayLength() + report.GetProperty("omittedBlockers").GetInt32();
+            await streams.WriteErrorLineAsync($"ai-raccoon: the import has {count} blocker{(count == 1 ? "" : "s")}; fix the mapping or the project and preview again. Nothing was written");
+            return ErrorCode.Usage.RequestRejected;
+        }
+
+        await streams.WriteErrorLineAsync("ai-raccoon: to apply exactly this preview, run:");
+        await streams.WriteErrorLineAsync(string.Join(' ', "ai-raccoon", "decisions", "import-semantica", "--project-id", Quote(projectId), "--input", Quote(input),
+            "--mapping", Quote(mappingPath), "--apply", "--request-id", Guid.CreateVersion7().ToString("N"),
+            "--source-digest", report.GetProperty("sourceDigest").GetString()!, "--mapping-digest", report.GetProperty("mappingDigest").GetString()!,
+            "--expected-project-revision", data.GetProperty("projectRevision").GetInt64()));
+        return ErrorCode.Ok.Success;
+    }
+
+    /// <summary>The word as one shell argument: bare when it is plain, single-quoted otherwise.</summary>
+    private static string Quote(string value) =>
+        value.All(character => char.IsAsciiLetterOrDigit(character) || character is '_' or '.' or '/' or ':' or '-')
+            ? value
+            : "'" + TerminalText.Visible(value).Replace("'", "'\\''") + "'";
 
     private static string ProjectId(ParseResult parseResult) => parseResult.GetValue<string>("--project-id")!;
 
