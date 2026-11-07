@@ -8,10 +8,13 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AiRaccoon.Settings;
 
-/// <summary>The decision HTTP routes: one per decision tool, behind the same gate, service and refusal mapping.</summary>
+/// <summary>The decision HTTP routes: one per decision tool plus the two import routes, behind the same gate, service and refusal mapping.</summary>
 internal static class DecisionEndpoint
 {
     private const string Root = "/decisions/projects/{projectId}";
+
+    /// <summary>The gate operation name of both import routes; they have no MCP tool.</summary>
+    private const string ImportSemantica = "import-semantica";
 
     extension(WebApplication app)
     {
@@ -47,6 +50,10 @@ internal static class DecisionEndpoint
                 Run(projectId, body, DecisionTools.TnExportDecisions, AccessRequirement.Read, gate, ct, (SelectionRequest r, string p) => r.SendAsync(service, p, ct)));
             app.MapPost(Root + "/preview", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
                 Run(projectId, body, DecisionTools.TnPreviewDecisions, AccessRequirement.Read, gate, ct, (DecisionPreviewOptions r, string p) => service.PreviewAsync(p, r, ct)));
+            app.MapPost(Root + "/imports/semantica/preview", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
+                Run(projectId, body, ImportSemantica, AccessRequirement.Read, gate, ct, (ImportPreviewRequest r, string p) => r.SendAsync(service, p, ct)));
+            app.MapPost(Root + "/imports/semantica/apply", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
+                Run(projectId, body, ImportSemantica, AccessRequirement.Write, gate, ct, (ImportApplyRequest r, string p) => r.SendAsync(service, p, ct)));
         }
     }
 

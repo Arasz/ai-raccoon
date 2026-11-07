@@ -572,6 +572,23 @@ internal static class CliCommandTree
         };
         AddTaskSelection(preview);
 
+        var import = new Command("import-semantica",
+            "One-time import of a Semantica 0.7.0 export_graph JSON file into the project's decision graph, with an operator-written mapping. " +
+            "Without --apply it is a dry run: the report goes to stdout, and a clean report prints the exact --apply command on stderr. " +
+            "--apply needs --request-id, --source-digest, --mapping-digest and --expected-project-revision from that preview; --session-id defaults to the request id. " +
+            "Each file may be at most 10 MiB.")
+        {
+            ProjectIdOption(),
+            new Option<string>("--input") { Description = "The Semantica export_graph JSON file", HelpName = "path", Required = true },
+            new Option<string>("--mapping") { Description = "The mapping JSON file", HelpName = "path", Required = true },
+            new Option<bool>("--apply") { Description = "Write the import; without it the command only previews" },
+            new Option<string?>("--request-id") { Description = "With --apply: the request identity, for an exact retry", HelpName = "id" },
+            new Option<string?>("--session-id") { Description = "With --apply: the writing session (default: the request id)", HelpName = "id" },
+            new Option<string?>("--source-digest") { Description = "With --apply: the sourceDigest the preview reported", HelpName = "hex" },
+            new Option<string?>("--mapping-digest") { Description = "With --apply: the mappingDigest the preview reported", HelpName = "hex" },
+            new Option<long?>("--expected-project-revision") { Description = "With --apply: the projectRevision the preview reported", HelpName = "N" }
+        };
+
         return new Command("decisions",
             "The project decision graph through the server (the CLI never opens the bank): register tasks, record, get and query decisions, export complete snapshots, preview compact summaries.")
         {
@@ -580,7 +597,8 @@ internal static class CliCommandTree
             get,
             query,
             export,
-            preview
+            preview,
+            import
         };
     }
 

@@ -65,6 +65,20 @@ internal sealed class DecisionHttpClient : IDecisionClient
     public Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default) =>
         SendAsync(projectId, "query", JsonContent.Create(query), _requestDeadline, cancellationToken);
 
+    public Task<JsonDocument> ImportPreviewAsync(string projectId, byte[] source, byte[] mapping, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNull(source);
+        Guard.IsNotNull(mapping);
+        return SendAsync(projectId, "imports/semantica/preview", JsonContent.Create(new ImportPreviewRequest(source, mapping)), null, cancellationToken);
+    }
+
+    public Task<JsonDocument> ImportApplyAsync(string projectId, ImportApplyRequest request, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNull(request);
+        return SendAsync(projectId, "imports/semantica/apply", JsonContent.Create(request), null, cancellationToken,
+            Replay(request.SessionId, request.RequestId));
+    }
+
     /// <summary>The retry instruction for a write whose answer was lost after the server may have committed it.</summary>
     internal static string Replay(string? sessionId, string? requestId) =>
         $"the server may have committed it, so the outcome is unknown; retry with --session-id {sessionId} --request-id {requestId} to replay it safely";
