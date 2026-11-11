@@ -108,6 +108,7 @@ It asks for your password once, for `powermetrics` (add `--no-power` to skip it)
 | Workspace sandboxes | Isolated in-progress notes that consolidate into the project or get discarded | [Workspaces](docs/explanation/agent-memory-capabilities.md#workspace-sandbox-context-lifecycle) |
 | Shared tier | Cross-project facts promoted by `share_memory`, exempt from decay | [Shared tier](docs/explanation/agent-memory-capabilities.md#propose-and-shared-promotion-tier) |
 | Rating and decay | Retrieval raises a memory's rating; a background sweep expires what nobody uses | [Degradation](docs/explanation/agent-memory-capabilities.md#memory-rating-and-degradation-sweep-reaper) |
+| Decision graph | Versioned project decisions with status, typed links and per-task export, over MCP and `ai-raccoon decisions`; imports Semantica exports | [Record decisions](docs/how-to/record-project-decisions.md) |
 | Cloud sync | Optional S3 or Azure Blob snapshot sync with optimistic locking | [Architecture](docs/explanation/architecture.md#sync-cycle) |
 | Encryption at rest | Page-level ChaCha20 via `AIRACCOON_DB_PASSPHRASE`, rekeyable | [Configure](docs/how-to/configure-ai-raccoon-server.md#manage-database-encryption) · [Rekey](docs/how-to/rekey-an-encrypted-bank.md) |
 | Telemetry | OpenTelemetry metrics and traces, OTLP export, `get_engine_statistics` | [Monitor](docs/how-to/monitor-and-export-telemetry.md) · [Metrics](docs/how-to/read-performance-metrics.md) |
