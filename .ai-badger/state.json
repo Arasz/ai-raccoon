@@ -1,8 +1,14 @@
 {
-  "lastUpdated": "2026-10-23",
+  "lastUpdated": "2026-11-11",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "air-decision-checklist-gaps-unlink-upstream",
+      "title": "Manual checklist: decision recording items (unlink, graph bounds, MCP export cap, output-schema conformance) run live on 2.6.0; upstreamed to ai-badger",
+      "pr": 931,
+      "finished": "2026-11-11"
+    },
     {
       "id": "air-ort-node-placement-log-summary",
       "title": "2.3.0: log ONNX Runtime node placement per execution provider (EventIds 450-452)",
@@ -255,7 +261,7 @@
       "summary": "Live dry run proposed 23,459 rows to -1: pre-granite (#687) and August chunkings of unchanged files, not corruption (tokenizer switch explains ~5k, #775 ~30). #794 keeps a partition's stored order when positions are 0..n-1 and reproduced rows are in document order; #795 (from two parallel reviews) locates every row's text in one SearchValues pass and keeps the heaviest stored-order chain (reproduced rows outweigh), adds duplicate/lone-CR/moved/out-of-place tests, fixes how-to drift, bumps 1.53.9. Snapshot: 742 to -1, 21 moved."
     }
   ],
-  "next": "Publish 1.60.1, 1.60.2 and 1.60.3 in order: none of the three has been published yet, and 1.60.3 adds the root-help pointer to the monitoring verb. Post-merge follow-ups for air-fix-repair-open-workspaces-census: publish to NuGet (the installed tool is a local build of the same commit) so `dotnet tool update -g ai-raccoon` moves off the local package; the delegated review of PR #889 never ran (openrouter balance exhausted, free tier capped) and was done in-session, so give the diff a human read if you want the second pair of eyes. Then: the 254-vs-1022 retrieval measurement, and a rule on #706.",
+  "next": "Finish air-decision-mcp-schema-explicit-errors (2.6.1): decision MCP replies validate against their outputSchema (null fields were omitted but required, so Claude Code rejected every decision reply), refusals carry structured error {kind, message}, range refusals name inclusive bounds. Then merge ai-badger #667 (decision checklist items + CLI fallback) and den-refresh this repo. Publish 1.60.1, 1.60.2 and 1.60.3 in order: none of the three has been published yet, and 1.60.3 adds the root-help pointer to the monitoring verb. Post-merge follow-ups for air-fix-repair-open-workspaces-census: publish to NuGet (the installed tool is a local build of the same commit) so `dotnet tool update -g ai-raccoon` moves off the local package; the delegated review of PR #889 never ran (openrouter balance exhausted, free tier capped) and was done in-session, so give the diff a human read if you want the second pair of eyes. Then: the 254-vs-1022 retrieval measurement, and a rule on #706.",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
     "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
@@ -276,6 +282,7 @@
   ],
   "research": [],
   "stillTrue": [
+    "A checklist driver that reads only content[0].text cannot catch MCP output-schema violations; validate structuredContent against the tools/list outputSchema the way Claude Code does (2026-11-11)",
     "dotnet_env=local must be set per-directory for the DeployToLocalSource build target to push to .nupkg-local",
     "Transport is the --transport flag (stdio|http|https|proxy), default proxy since ADR-0020. MCP_TRANSPORT and AIRACCOON_DATA_ROOT do NOT exist - ServerConfig records that the env layer was removed by the single-channel ruling, and McpServerFactory injects the data root via WebApplicationFactory.UseSetting, not the environment",
     "sqlite-memory's content-hash dedup is global — cross-context duplicates need preserve_duplicate_paths=1 + distinct logical paths",
