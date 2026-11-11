@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Decisions;
 using AiRaccoon.Decisions;
@@ -189,7 +190,12 @@ internal static partial class ToolRefusals
                                        && DecisionRefusals.For(ex) is { } refusal)
             {
                 // The decision tools refuse exactly as their HTTP routes do: one shared mapping.
-                return Refused(request, refusal.Text, refusal.Kind, LevelFor(refusal.Kind));
+                var refused = Refused(request, refusal.Text, refusal.Kind, LevelFor(refusal.Kind));
+                refused.StructuredContent = JsonSerializer.SerializeToElement(new JsonObject
+                {
+                    ["error"] = new JsonObject { ["kind"] = refusal.Kind, ["message"] = refusal.Message }
+                });
+                return refused;
             }
             catch (Exception ex) when (PrefixFor(ex) is { } prefix)
             {

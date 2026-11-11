@@ -80,8 +80,10 @@ registers a new project id; call `get_project_id` first), and 13 decision tools 
 `find_decision_precedents`, `get_decision_graph`, `export_decisions` and `preview_decisions`.
 The decision tools are the exception to the optional `projectId`: they require it (`projectId!`)
 and never resolve one from the working directory. Each maps 1:1 onto a `/decisions/projects/{projectId}`
-HTTP route, answers with `structuredContent` plus the same JSON as text, and refuses with the same
-kind as that route. Two further HTTP routes have no tool: `POST /decisions/projects/{projectId}/imports/semantica/preview`
+HTTP route, answers with `structuredContent` plus the same JSON as text (null fields are written, as the
+tools' `outputSchema` requires them), and refuses with the same kind as that route. A refusal is an error
+result whose text is `<kind>: <message>` and whose `structuredContent` is `{"error": {"kind", "message"}}`.
+Range refusals name the inclusive bounds (for example depth 0 to 10). Two further HTTP routes have no tool: `POST /decisions/projects/{projectId}/imports/semantica/preview`
 (read access) and `.../apply` (write access) serve `ai-raccoon decisions import-semantica`; their bodies carry the
 two files as base64.
 `memory_configure` and `memory_set_structure_alpha` were removed by the CLI-config

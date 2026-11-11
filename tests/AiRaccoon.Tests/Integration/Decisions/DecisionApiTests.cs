@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
+using Json.Schema;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Client;
@@ -190,6 +191,132 @@ public sealed class DecisionApiTests : IAsyncLifetime
         {
             ["decisionId"] = id, ["expectedVersion"] = 1, ["targetStatus"] = "sideways", ["changeReason"] = "why"
         }), "invalid-argument", 400);
+    }
+
+    /// <summary>
+    ///     Claude Code validates a reply's structuredContent against the tool's outputSchema: every successful decision
+    ///     reply must pass, nullable properties included.
+    /// </summary>
+    [RetryFact]
+    public async Task EverySuccessfulReply_ValidatesAgainstTheToolsOutputSchema()
+    {
+        var list = await _mcp.SendRequestAsync(new JsonRpcRequest { Method = RequestMethods.ToolsList }, Ct);
+        var schemas = list.Result!["tools"]!.AsArray().Where(t => t!["outputSchema"] is not null).ToDictionary(t => (string)t!["name"]!,
+            t => JsonSchema.FromText(t!["outputSchema"]!.ToJsonString()));
+        var exercised = new HashSet<string>(StringComparer.Ordinal);
+
+        async Task<JsonElement> Call(string tool, Dictionary<string, object?> args)
+        {
+            var result = await _mcp.CallToolAsync(tool, args, cancellationToken: Ct);
+            var text = string.Concat(result.Content.OfType<TextContentBlock>().Select(b => b.Text));
+            result.IsError.ShouldNotBe(true, $"{tool}: {text}");
+            result.StructuredContent.ShouldNotBeNull(tool);
+            var content = result.StructuredContent!.Value;
+            var evaluation = schemas[tool].Evaluate(content,
+                new EvaluationOptions { OutputFormat = OutputFormat.List });
+            var errors = evaluation.IsValid ? [] : (evaluation.Details ?? []).Where(d => d.Errors is not null)
+                .SelectMany(d => d.Errors!.Select(e => $"{d.InstanceLocation}: {e.Value}")).ToArray();
+            evaluation.IsValid.ShouldBeTrue($"{tool} reply breaks its outputSchema: {string.Join("; ", errors)}\n{content.GetRawText()}");
+            exercised.Add(tool);
+            return content;
+        }
+
+        Dictionary<string, object?> Args(string tool, string requestId, Action<Dictionary<string, object?>>? edit = null)
+        {
+            var args = DecisionOperations.Named(tool).McpArgs(_project);
+            if (args.ContainsKey("requestId"))
+            {
+                args["requestId"] = requestId;
+            }
+
+            edit?.Invoke(args);
+            return args;
+        }
+
+        string Record(JsonElement reply) => reply.GetProperty("data").GetProperty("value").GetProperty("decisionId").GetString()!;
+        long Revision(JsonElement reply) => reply.GetProperty("data").GetProperty("projectRevision").GetInt64();
+
+        await Call("register_decision_task", Args("register_decision_task", "register"));
+        var a = Record(await Call("record_decision", Args("record_decision", "record-a")));
+        var b = Record(await Call("record_decision", Args("record_decision", "record-b", x => x["title"] = "B")));
+        var c = Record(await Call("record_decision", Args("record_decision", "record-c", x => x["title"] = "C")));
+        var d = Record(await Call("record_decision", Args("record_decision", "record-d", x => x["title"] = "D")));
+        await Call("amend_decision", Args("amend_decision", "amend", x => { x["decisionId"] = a; x["expectedVersion"] = 1; }));
+        await Call("transition_decision", Args("transition_decision", "transition", x => { x["decisionId"] = a; x["expectedVersion"] = 2; }));
+        await Call("get_decision", Args("get_decision", "", x => x["decisionId"] = a));
+        await Call("get_decision", Args("get_decision", "", x => { x["decisionId"] = a; x["includeHistory"] = true; }));
+        await Call("query_decisions", Args("query_decisions", ""));
+        await Call("find_decision_precedents", Args("find_decision_precedents", "", x => x["scenario"] = "Scenario"));
+        await Call("get_decision_graph", Args("get_decision_graph", "", x => x["decisionId"] = a));
+        await Call("preview_decisions", Args("preview_decisions", ""));
+        var revision = Revision(await Call("export_decisions", Args("export_decisions", "")));
+        var link = await Call("link_decisions", Args("link_decisions", "link", x =>
+        {
+            x["sourceId"] = a; x["targetId"] = b; x["expectedProjectRevision"] = revision;
+        }));
+        await Call("unlink_decisions", Args("unlink_decisions", "unlink", x =>
+        {
+            x["edgeId"] = link.GetProperty("data").GetProperty("value").GetProperty("edgeId").GetString();
+            x["expectedProjectRevision"] = Revision(link);
+        }));
+        foreach (var (accepted, requestId) in new[] { (c, "accept-c"), (d, "accept-d") })
+        {
+            await Call("transition_decision", Args("transition_decision", requestId, x => { x["decisionId"] = accepted; x["expectedVersion"] = 1; }));
+        }
+
+        await Call("supersede_decision", Args("supersede_decision", "supersede", x =>
+        {
+            x["replacementId"] = c; x["replacedId"] = d; x["expectedReplacementVersion"] = 2; x["expectedReplacedVersion"] = 2;
+        }));
+
+        exercised.Order(StringComparer.Ordinal).ShouldBe(DecisionOperations.All.Select(o => o.Tool).Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>A refused decision call carries the unchanged text and a structured error with the same kind and message.</summary>
+    [RetryFact]
+    public async Task Refusal_CarriesAStructuredErrorBesideTheUnchangedText()
+    {
+        (await Mcp("register_decision_task", _project)).Kind.ShouldBe("ok");
+        var id = DecisionIdOf((await Mcp("record_decision", _project)).Body);
+        var stale = new Dictionary<string, object?>(DecisionOperations.Named("transition_decision").McpArgs(_project))
+        {
+            ["decisionId"] = id, ["expectedVersion"] = 2, ["requestId"] = "stale-structured"
+        };
+        var invalid = new Dictionary<string, object?>(DecisionOperations.Named("get_decision").McpArgs(_project)) { ["decisionId"] = id, ["bogus"] = 1 };
+        var denied = DecisionOperations.Named("record_decision").McpArgs(_project);
+
+        await AssertRefusalAsync("transition_decision", stale, "decision-conflict");
+        await AssertRefusalAsync("get_decision", invalid, "invalid-argument");
+        await _host.SetModeAsync(_project, "ro", Ct);
+        await AssertRefusalAsync("record_decision", denied, "access-denied");
+    }
+
+    private async Task AssertRefusalAsync(string tool, Dictionary<string, object?> args, string kind)
+    {
+        var result = await _mcp.CallToolAsync(tool, args, cancellationToken: Ct);
+        var text = result.Content.OfType<TextContentBlock>().Single().Text;
+
+        result.IsError.ShouldBe(true, tool);
+        result.StructuredContent.ShouldNotBeNull($"{tool}: {text}");
+        var error = result.StructuredContent!.Value.GetProperty("error");
+        error.GetProperty("kind").GetString().ShouldBe(kind, tool);
+        text.ShouldStartWith($"{kind}: {error.GetProperty("message").GetString()}", Case.Sensitive, tool);
+    }
+
+    /// <summary>Range refusals name the inclusive bounds: "between or equal to", not the exclusive range wording.</summary>
+    [RetryTheory]
+    [InlineData(11, 100, "<0> and <10>")]
+    [InlineData(2, 0, "<1> and <500>")]
+    public async Task GraphBoundsRefusal_NamesTheInclusiveRange(int depth, int maxNodes, string bounds)
+    {
+        (await Mcp("register_decision_task", _project)).Kind.ShouldBe("ok");
+        var id = DecisionIdOf((await Mcp("record_decision", _project)).Body);
+
+        var mcp = await _host.McpAsync(_mcp, "get_decision_graph",
+            new Dictionary<string, object?> { ["projectId"] = _project, ["decisionId"] = id, ["depth"] = depth, ["maxNodes"] = maxNodes }, Ct);
+
+        mcp.Kind.ShouldBe("invalid-argument", mcp.Body);
+        mcp.Body.ShouldContain($"between or equal to {bounds}", Case.Sensitive, mcp.Body);
     }
 
     [RetryFact]

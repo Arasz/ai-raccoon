@@ -11,12 +11,12 @@ public sealed record DecisionTaskSelector
             nameof(last), "Choose only one of last, all or taskIds.");
         if (last.HasValue)
         {
-            Guard.IsInRange(last.Value, 1, 1001, nameof(last));
+            Guard.IsBetweenOrEqualTo(last.Value, 1, 1000, nameof(last));
         }
 
         if (taskIds is not null)
         {
-            Guard.IsInRange(taskIds.Count, 1, 101, nameof(taskIds));
+            Guard.IsBetweenOrEqualTo(taskIds.Count, 1, 100, nameof(taskIds));
             foreach (var id in taskIds)
             {
                 DecisionText.Identifier(id, nameof(taskIds));
