@@ -19,9 +19,9 @@ public sealed partial class DecisionService
         CancellationToken cancellationToken = default)
     {
         var request = options ?? new DecisionPreviewOptions();
-        Guard.IsInRange(request.MaxDecisions, 1, 101, "maxDecisions");
-        Guard.IsInRange(request.MaxEdges, 0, 201, "maxEdges");
-        Guard.IsInRange(request.MaxChars, 1000, 50001, "maxChars");
+        Guard.IsBetweenOrEqualTo(request.MaxDecisions, 1, 100, "maxDecisions");
+        Guard.IsBetweenOrEqualTo(request.MaxEdges, 0, 200, "maxEdges");
+        Guard.IsBetweenOrEqualTo(request.MaxChars, 1000, 50000, "maxChars");
         return Store.ReadAsync(projectId, async (reader, ct) =>
         {
             // Preview shows current versions only, so it loads no history: membership by version comes from SQL.
@@ -37,7 +37,7 @@ public sealed partial class DecisionService
         CancellationToken cancellationToken = default)
     {
         var request = query ?? new DecisionQuery();
-        Guard.IsInRange(request.Limit, 1, 101, "limit");
+        Guard.IsBetweenOrEqualTo(request.Limit, 1, 100, "limit");
         ValidateSearch(request.Query, request.Category);
         if (request.AfterId is not null)
         {
@@ -47,7 +47,7 @@ public sealed partial class DecisionService
         var statuses = request.Statuses?.ToArray();
         if (statuses is not null)
         {
-            Guard.IsInRange(statuses.Length, 1, 6, "statuses");
+            Guard.IsBetweenOrEqualTo(statuses.Length, 1, 5, "statuses");
             Guard.IsTrue(statuses.All(status => Enum.IsDefined(status)), "statuses");
         }
 
@@ -70,7 +70,7 @@ public sealed partial class DecisionService
     {
         ValidateSearch(scenario, category);
         DecisionText.Required(scenario, 2000, nameof(scenario));
-        Guard.IsInRange(limit, 1, 21, nameof(limit));
+        Guard.IsBetweenOrEqualTo(limit, 1, 20, nameof(limit));
         return Store.ReadAsync(projectId, async (reader, ct) =>
         {
             var revision = await reader.RevisionAsync(ct);
@@ -87,8 +87,8 @@ public sealed partial class DecisionService
         Guard.IsNotNull(request);
         DecisionText.Identifier(request.DecisionId, "decisionId");
         Guard.IsTrue(Enum.IsDefined(request.Direction), "direction");
-        Guard.IsInRange(request.Depth, 0, 11, "depth");
-        Guard.IsInRange(request.MaxNodes, 1, 501, "maxNodes");
+        Guard.IsBetweenOrEqualTo(request.Depth, 0, 10, "depth");
+        Guard.IsBetweenOrEqualTo(request.MaxNodes, 1, 500, "maxNodes");
         return Store.ReadAsync(projectId, async (reader, ct) =>
         {
             var snapshot = await LoadAsync(reader, false, false, ct);

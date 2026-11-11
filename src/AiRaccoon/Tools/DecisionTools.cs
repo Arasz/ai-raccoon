@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Decisions;
 using AiRaccoon.Decisions;
@@ -35,13 +36,17 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
 
     /// <summary>
     ///     The SDK's options with the decision enums' snake_case converters ahead of its own enum converter, which
-    ///     would otherwise win over the types' attributes and refuse <c>depends_on</c>.
+    ///     would otherwise win over the types' attributes and refuse <c>depends_on</c>. Nulls are written, because
+    ///     the output schema lists nullable properties as required.
     /// </summary>
     internal static JsonSerializerOptions SerializerOptions { get; } = CreateSerializerOptions();
 
     private static JsonSerializerOptions CreateSerializerOptions()
     {
-        var options = new JsonSerializerOptions(McpJsonUtilities.DefaultOptions);
+        var options = new JsonSerializerOptions(McpJsonUtilities.DefaultOptions)
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.Never
+        };
         options.Converters.Insert(0, new DecisionEnumConverter<DecisionEdgeKind>());
         options.Converters.Insert(0, new DecisionEnumConverter<DecisionStatus>());
         options.Converters.Insert(0, new DecisionEnumConverter<DecisionDirection>());
@@ -316,7 +321,7 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, TnExportDecisions, cancellationToken);
         var result = await new SelectionRequest(selector).SendAsync(service, canonical, cancellationToken);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
-        DecisionRefusals.EnsureWithinMcpLimit(envelope, canonical, McpJsonUtilities.DefaultOptions);
+        DecisionRefusals.EnsureWithinMcpLimit(envelope, canonical, SerializerOptions);
         return envelope;
     }
 
