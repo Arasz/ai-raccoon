@@ -355,6 +355,16 @@
       "acceptance-reason": ""
     },
     {
+      "item": "decision-tool-replies-match-output-schema",
+      "expected-result": "Validate every decision tool's structuredContent against the outputSchema that tools/list advertises (jsonschema Draft 2020-12), the way Claude Code does, for record_decision, get_decision, query_decisions, find_decision_precedents, get_decision_graph and preview_decisions. Every reply must validate. A raw JSON-RPC client that reads only content[0].text cannot fail this item, so the other decision items do not cover it. (ADR-0142; MCP structured output)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
       "item": "decision-record-and-replay",
       "expected-result": "register_decision_task then record_decision on a registered scratch project. A record without status is proposed, status=accepted is accepted, and an empty required field is refused as invalid-argument. Resending the same sessionId+requestId returns replayed=true with the same decisionId and revision; judge 'no duplicate' by the export counts, not by the replay flag alone. (ADR-0142, docs/how-to/record-project-decisions.md)",
       "command": "",

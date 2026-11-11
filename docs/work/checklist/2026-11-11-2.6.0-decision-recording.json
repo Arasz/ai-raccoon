@@ -12,7 +12,15 @@
     "mcp-prompt-count": "2",
     "note": "python3 .claude/skills/ai-raccoon-manual-checklist/scripts/derive-facts.py ."
   },
-  "findings-against-prior-runs": [],
+  "findings-against-prior-runs": [
+    {
+      "prior-run": "this run, items decision-record-and-replay through decision-semantica-import (morning of 2026-11-11)",
+      "prior-claim": "The decision MCP tools work: pass.",
+      "what-is-actually-true": "The server-side behaviour passes. Claude Code, however, rejects every decision tool reply, because structuredContent fails the advertised outputSchema.",
+      "evidence": "Owner report for 2.5.1 (record/get/query/precedents/register fail in Claude Code; preview and the CLI work). Reproduced on 2.6.0 by schema_check.py: 6 of 6 successful calls invalid.",
+      "so-what": "The driver mcp.py read only content[0].text, so no decision item could fail on the client contract. The new decision-tool-replies-match-output-schema item checks it directly. Agents must use the decisions CLI until the server is fixed (ai-badger #667 documents the fallback)."
+    }
+  ],
   "items": [
     {
       "item": "build-and-install-global-package",
@@ -41,6 +49,16 @@
       "evidence": "43 tools; decision tools: get_decision, export_decisions, unlink_decisions, register_decision_task, amend_decision, query_decisions, find_decision_precedents, record_decision, link_decisions, get_decision_graph, transition_decision, supersede_decision, preview_decisions",
       "observed-result": "tools/list returns 43 tools, which matches the derived mcp-tool-count. The tools were listed, not all called; prompts were not exercised in this pass.",
       "status": "substituted",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-tool-replies-match-output-schema",
+      "expected-result": "Validate every decision tool's structuredContent against the outputSchema that tools/list advertises (jsonschema Draft 2020-12), the way Claude Code does, for record_decision, get_decision, query_decisions, find_decision_precedents, get_decision_graph and preview_decisions. Every reply must validate. A raw JSON-RPC client that reads only content[0].text cannot fail this item, so the other decision items do not cover it. (ADR-0142; MCP structured output)",
+      "command": "python3 /private/tmp/air-2.6.0-decisions/schema_check.py 64470",
+      "evidence": "record_decision: INVALID at data/value: 'changeReason' is a required property; get_decision: INVALID at data/value/versions/0: 'changeReason' is a required property; query_decisions: INVALID at data/value: 'nextAfterId' is a required property; find_decision_precedents: INVALID at data/value: 'nextAfterId' ...; get_decision_graph: INVALID at meta: 'promotionsWaitTimeSeconds' is a required property; preview_decisions: INVALID at meta: 'promotionsWaitTimeSeconds' ...; invalid tools: 6. 13 of 43 tools advertise an outputSchema, all of them decision tools.",
+      "observed-result": "Every successful decision call returns structuredContent that fails its own outputSchema. Null-valued properties are left out of the reply, but the schema lists them as required. Claude Code rejects the reply after the server has already committed the write. In practice preview_decisions works in Claude Code (owner report), even though it fails strict validation on meta.",
+      "status": "fail",
       "accepted": null,
       "acceptance-reason": ""
     },
