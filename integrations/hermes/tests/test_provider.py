@@ -6,7 +6,7 @@ import json
 import pytest
 import shutil
 
-CURATED_TOOLS = {"memory_search", "memory_write", "memory_stats", "memory_share"}
+CURATED_TOOLS = {"query", "add_memory", "get_store_statistics", "share_memory"}
 
 
 def _init(provider, session_id="s1", **kwargs):
@@ -108,8 +108,8 @@ def test_shutdown_without_client_does_not_raise(make_provider):
 def test_system_prompt_block_teaches_memory_first(make_provider):
     provider, _ = make_provider()
     block = provider.system_prompt_block()
-    assert "memory_search" in block
-    assert "memory_write" in block
+    assert "the query tool" in block
+    assert "add_memory" in block
 
 
 # -- prefetch ---------------------------------------------------------------
@@ -128,6 +128,7 @@ def test_prefetch_formats_hits_as_block(make_provider):
     assert "0.9" in block
     assert fake.searches[0]["project_id"] == "hermes-default"
     assert fake.searches[0]["limit"] == 5
+    assert fake.searches[0]["session_id"] == "s1"
 
 
 def test_prefetch_empty_when_no_hits(make_provider):
@@ -212,32 +213,33 @@ def test_handle_tool_call_injects_project_id_and_returns_json(make_provider):
     provider, fake = make_provider()
     _init(provider)
     fake.search_results = {"results": [{"snippet": "hit", "ranking": 0.8}]}
-    result = provider.handle_tool_call("memory_search", {"query": "q", "limit": 3})
+    result = provider.handle_tool_call("query", {"query": "q", "limit": 3})
     payload = json.loads(result)
     assert payload == fake.search_results
     assert fake.searches[0]["project_id"] == "hermes-default"
     assert fake.searches[0]["query"] == "q"
+    assert fake.searches[0]["session_id"] == "s1"
 
 
 def test_handle_tool_call_stats_and_share(make_provider):
     provider, fake = make_provider()
     _init(provider)
-    provider.handle_tool_call("memory_stats", {})
-    provider.handle_tool_call("memory_share", {"hash": "abc"})
+    provider.handle_tool_call("get_store_statistics", {})
+    provider.handle_tool_call("share_memory", {"hash": "abc"})
     assert fake.stats_calls == 1
     assert fake.shares[0]["hash"] == "abc"
 
 
 def test_handle_tool_call_unknown_tool_returns_json_error(make_provider):
     provider, _ = make_provider()
-    result = provider.handle_tool_call("memory_sweep", {})
+    result = provider.handle_tool_call("trigger_memory_cleanup", {})
     payload = json.loads(result)
     assert "error" in payload
 
 
 def test_handle_tool_call_without_client_returns_json_error(make_provider):
     provider, _ = make_provider()
-    result = provider.handle_tool_call("memory_search", {"query": "q"})
+    result = provider.handle_tool_call("query", {"query": "q"})
     assert "error" in json.loads(result)
 
 

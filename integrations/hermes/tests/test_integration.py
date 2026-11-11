@@ -58,27 +58,27 @@ def real_provider(provider_module, tmp_path, request):
 
 def test_stdio_write_search_round_trip(real_provider):
     write_result = json.loads(real_provider.handle_tool_call(
-        "memory_write", {"content": "integration probe fact 12345",
+        "add_memory", {"content": "integration probe fact 12345",
                          "sourceFile": "probe.md", "section": "test"}))
     assert "hash" in write_result and write_result["hash"]
 
     search_result = json.loads(real_provider.handle_tool_call(
-        "memory_search", {"query": "integration probe fact", "limit": 5, "minRelativeScore": 0.0}))
+        "query", {"query": "integration probe fact", "limit": 5, "minRelativeScore": 0.0}))
     snippets = [r.get("snippet", "") for r in search_result.get("results", [])]
     assert any("integration probe fact 12345" in s for s in snippets), snippets
 
 
 def test_prefetch_returns_block_with_hit(real_provider):
     real_provider.handle_tool_call(
-        "memory_write", {"content": "prefetch probe marker 777", "sourceFile": "probe.md"})
+        "add_memory", {"content": "prefetch probe marker 777", "sourceFile": "probe.md"})
     block = real_provider.prefetch("prefetch probe marker", session_id="itest")
     assert block.startswith("## AiRaccoon Memory")
     assert "prefetch probe marker 777" in block
 
 
 def test_stats_counts_entries(real_provider):
-    real_provider.handle_tool_call("memory_write", {"content": "stats probe entry 999"})
-    stats = json.loads(real_provider.handle_tool_call("memory_stats", {}))
+    real_provider.handle_tool_call("add_memory", {"content": "stats probe entry 999"})
+    stats = json.loads(real_provider.handle_tool_call("get_store_statistics", {}))
     assert stats["entries"] >= 1
     assert "pending" in stats
 

@@ -44,8 +44,8 @@ class FakeClient:
     def connect(self):
         pass
 
-    def search(self, project_id, query, scope="all", limit=5, min_relative_score=0.0, context_label=None):
-        self.searches.append(dict(project_id=project_id, query=query, scope=scope,
+    def search(self, project_id, query, session_id, scope="all", limit=5, min_relative_score=0.0, context_label=None):
+        self.searches.append(dict(project_id=project_id, query=query, session_id=session_id, scope=scope,
                                   limit=limit, min_relative_score=min_relative_score, context_label=context_label))
         return self.search_results
 

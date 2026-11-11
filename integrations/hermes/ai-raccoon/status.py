@@ -15,35 +15,32 @@ from __future__ import annotations
 from typing import Dict
 
 STATUS_WORDS: Dict[str, str] = {
-    "memory_write": "remembering",
-    "memory_search": "searching",
-    "memory_list": "listing",
-    "memory_stats": "counting",
-    "memory_share": "sharing",
-    "memory_share_extract": "extracting",
-    "memory_delete": "forgetting",
-    "memory_delete_context": "forgetting",
-    "memory_ingest_file": "ingesting",
-    "memory_ingest_directory": "ingesting",
-    "memory_embed_pending": "embedding",
-    "memory_workspace_begin": "opening",
-    "memory_workspace_status": "checking",
-    "memory_workspace_consolidate": "consolidating",
-    "memory_workspace_discard": "discarding",
-    "memory_sweep": "sweeping",
-    "memory_set_ttl": "expiring",
-    "memory_sync": "syncing",
-    "memory_watch_add": "watching",
-    "memory_watch_status": "watching",
-    "memory_watch_remove": "watching",
+    "add_memory": "remembering",
+    "query": "searching",
+    "get_index": "listing",
+    "get_store_statistics": "counting",
+    "share_memory": "sharing",
+    "trigger_memory_sharing": "extracting",
+    "delete_entry": "forgetting",
+    "delete_context": "forgetting",
+    "ingest_file": "ingesting",
+    "ingest_directory": "ingesting",
+    "embed_deferred_entries": "embedding",
+    "initialize_workspace": "opening",
+    "get_workspace_status": "checking",
+    "close_workspace": "consolidating",
+    "discard_workspace": "discarding",
+    "trigger_memory_cleanup": "sweeping",
+    "set_memory_ttl": "expiring",
+    "sync_to_cloud": "syncing",
+    "add_watch": "watching",
+    "get_watch_status": "watching",
+    "remove_watch": "watching",
 }
 
 
 def status_word(tool: str) -> str:
-    """One word for the tool; unknown tools fall back to the name minus the memory_ prefix."""
+    """One word for the tool; an unknown tool falls back to its first underscore-separated part."""
     if tool in STATUS_WORDS:
         return STATUS_WORDS[tool]
-    if tool.startswith("memory_"):
-        suffix = tool[len("memory_"):]
-        return suffix or "working"
-    return "working" if tool == "memory" else tool
+    return tool.split("_", 1)[0] or "working"
