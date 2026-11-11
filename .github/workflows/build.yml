@@ -254,7 +254,9 @@ jobs:
     # here at roughly 2x the measured 14 minutes so growth shows up as a slow gate
     # instead of a silent one. Re-measure when this comment looks old again.
     needs: changes
-    runs-on: ubuntu-latest
+    # Pinned: on the ubuntu-latest Ubuntu 26 image the lavapipe apt install could not
+    # resolve security.ubuntu.com (exit 100). Move back once that image installs it.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
