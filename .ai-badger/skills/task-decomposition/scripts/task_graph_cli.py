@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["pydantic>=2.12,<3"]
+# dependencies = ["pydantic>=2.14.3,<3"]
 # ///
 """task_graph_cli.py — the 12 frozen task-graph tools as a CLI, payload-equal to the MCP server.
 

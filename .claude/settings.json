@@ -248,15 +248,6 @@
         ]
       },
       {
-        "matcher": "^(mcp__.+__|.+-)?export_graph$",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -f \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py\" ]; then python3 \"${CLAUDE_PROJECT_DIR}/.ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py\"; elif [ -f \".ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py\" ]; then python3 \".ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py\"; else echo '{\"systemMessage\": \"ai-badger: .ai-badger/skills/semantica-knowledge-graph/scripts/semantica_export_autosave_hook.py not found - hook skipped\"}'; fi"
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "hooks": [
           {
@@ -295,7 +286,6 @@
       "mcp__code-review-graph__*",
       "mcp__hermes__*",
       "mcp__ai-raccoon__*",
-      "mcp__semantica__*",
       "mcp__playwright__*",
       "mcp__task-graph__*"
     ]
@@ -304,7 +294,6 @@
     "code-review-graph",
     "hermes",
     "ai-raccoon",
-    "semantica",
     "playwright",
     "task-graph"
   ]

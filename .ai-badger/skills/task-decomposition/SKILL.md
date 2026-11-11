@@ -160,7 +160,7 @@ the join rule — those are graph-only semantics; checkbox state is the only sta
 `plan_create` over an in-flight task that has no plan row — that is the legacy plan-file path.
 
 **First run is honest about `uv`.** On a cold `uv` cache the first `uv run --script` call
-fetches `pydantic>=2.12,<3` before the tool starts, so the very first plan needs network; a
+fetches `pydantic>=2.14.3,<3` before the tool starts, so the very first plan needs network; a
 warm cache starts offline, and the hand-written file path above needs no network at all.
 
 ## Gotchas

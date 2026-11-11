@@ -294,13 +294,6 @@ _DDL = (
     )
     """,
     """
-    CREATE TABLE IF NOT EXISTS semantica_nudge (
-        session_id TEXT PRIMARY KEY,
-        payload    TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-    )
-    """,
-    """
     CREATE TABLE IF NOT EXISTS dispatch_lanes (
         lane_id    TEXT PRIMARY KEY,
         entries    TEXT NOT NULL,
@@ -625,22 +618,16 @@ USER_FAMILIES: dict[str, Family] = {
         legacy_path=lambda: _user_root() / "memory-grade" / "searches.json",
         legacy_kind="recent",  # flipped from "deferred" by P1.4's memory-grade rewiring
     ),
-    # P2.0b session-store families (D10): the seven session-scoped surfaces. The file-set
+    # P2.0b session-store families (D10): the six session-scoped surfaces. The file-set
     # kinds (FILE_SET_KINDS) import a whole legacy set in one transaction and rename per
     # file ("<stem>.migrated<suffix>"); the legacy DIRECTORY itself never moves (D5). The
-    # natural keys: session id / session id / lane id / legacy hash verbatim (D4, all
+    # natural keys: session id / lane id / legacy hash verbatim (D4, all
     # worktrees of a repo share one record) / filename stem (session AND project).
     "memory_first": Family(
         table="memory_first",
         db="user",
         legacy_path=lambda: _user_root() / "memory-first",
         legacy_kind="markers",  # empty <uuid> presence markers + <uuid>.denials sidecars
-    ),
-    "semantica_nudge": Family(
-        table="semantica_nudge",
-        db="user",
-        legacy_path=lambda: _user_root() / "semantica-nudge",
-        legacy_kind="nudges",  # flat empty <uuid> files: presence means the nudge was shown
     ),
     "dispatch_lanes": Family(
         table="dispatch_lanes",
@@ -785,9 +772,9 @@ def session_info(row: dict) -> dict:
 
 
 #: The file-set kinds (P2.0b, D10): families whose legacy source is many files — a legacy
-#: directory's children (``markers``/``nudges``/``lanes``/``stem_denials``) or a pattern at
+#: directory's children (``markers``/``lanes``/``stem_denials``) or a pattern at
 #: the user root (``kv_glob``). See Store._migrate_file_set for the import contract.
-FILE_SET_KINDS = frozenset({"markers", "nudges", "lanes", "kv_glob", "stem_denials"})
+FILE_SET_KINDS = frozenset({"markers", "lanes", "kv_glob", "stem_denials"})
 
 
 def _file_set_paths(family: Family) -> list[Path]:
@@ -1643,8 +1630,7 @@ class Store:  # pylint: disable=too-many-public-methods  # one accessor per stor
             return row is not None
         key_column = {
             "tasks": "task_id", "token_usage": "task_id", "sessions": "session_id",
-            "memory_first": "session_id", "semantica_nudge": "session_id",
-            "dispatch_lanes": "lane_id",
+            "memory_first": "session_id", "dispatch_lanes": "lane_id",
         }.get(table, "key")
         row = self.conn.execute(
             f"SELECT 1 FROM {table} WHERE {key_column} = ?", (key,)
@@ -1877,8 +1863,6 @@ class Store:  # pylint: disable=too-many-public-methods  # one accessor per stor
         """
         if family.legacy_kind == "markers":
             return self._import_markers(files)
-        if family.legacy_kind == "nudges":
-            return self._import_nudges(files)
         if family.legacy_kind == "lanes":
             return self._import_lanes(files)
         if family.legacy_kind == "kv_glob":
@@ -1914,18 +1898,6 @@ class Store:  # pylint: disable=too-many-public-methods  # one accessor per stor
                  entry["denials"], stamp),
             )
         return list(sessions)
-
-    def _import_nudges(self, files: list[Path]) -> list:
-        """semantica-nudge shape: flat empty <uuid> files — one row per session, payload
-        {"shown": true} (the file's presence is the whole fact)."""
-        stamp = _now()
-        for path in files:
-            self.conn.execute(
-                "INSERT OR IGNORE INTO semantica_nudge(session_id, payload, updated_at) "
-                "VALUES (?, ?, ?)",
-                (path.name, json.dumps({"shown": True}), stamp),
-            )
-        return [path.name for path in files]
 
     def _import_lanes(self, files: list[Path]) -> list:
         """dispatch-lanes shape: one non-JSON file per lane, lines of

@@ -10,7 +10,7 @@ lazy migration, dual-read, retention; this document is the schema companion, not
 | Database | Path | Tables |
 |---|---|---|
 | project | `.ai-badger/task-tracking/tracking.db` (gitignored via the scaffold's managed block) | `tasks`, `token_usage`, `sessions`, `statusline` (KV), `marker_state` (KV), `meta` |
-| user | `~/.ai-badger/ai-badger.db` | `awm_state` (KV), `awm_decisions` (log), `commit_reminder` (KV), `pending_feedback`, `searches` (log), `memory_first`, `semantica_nudge`, `dispatch_lanes`, `dirty_sweeps`, `blast_radius_denials`, `meta` |
+| user | `~/.ai-badger/ai-badger.db` | `awm_state` (KV), `awm_decisions` (log), `commit_reminder` (KV), `pending_feedback`, `searches` (log), `memory_first`, `dispatch_lanes`, `dirty_sweeps`, `blast_radius_denials`, `meta` |
 | audit | `~/.ai-badger/debug/audit.db` — moved whole by `AI_BADGER_DEBUG_DIR` when that is set | `hook_audit` (log), `hook_state` (KV), `meta` |
 
 Every table keeps normal columns for what is filtered or sorted and JSON columns for
@@ -163,8 +163,6 @@ creates tracking structure, and the store opens `tracking.db` only under an exis
 - `searches` (log) — memory-grade search records; 60-day retention (grades themselves go to
   the raccoon server's SQLite, not here).
 - `memory_first` — ADR-0017's consulted-session markers and denial counters.
-- `semantica_nudge` — one row per session the semantica nudge was shown to (the writer is
-  framework-side and imports the engine directly, so no vendoring).
 - `dispatch_lanes` — delegation lane records (one lane per row; legacy lanes were files of
   `<epoch-float> <tool_use_id>` lines).
 - `dirty_sweeps` — cross-worktree dirty-sweep records, keyed by sha1 of the main checkout
@@ -258,7 +256,7 @@ The pre-migration shapes of the migrated stores — `executed-tasks.json`, `toke
 `prompt-markers/marker-state.json` (project scope); `~/.claude/awm/state.json`,
 `~/.claude/awm/decisions.jsonl`, `~/.ai-badger/commit-reminder/state.json` + `pending.json`,
 `~/.ai-badger/pending-feedback.json`, `~/.ai-badger/memory-grade/searches.json`,
-`memory-first/`, `semantica-nudge/`, `dispatch-lanes/`, `dirty-sweep-*.json`,
+`memory-first/`, `dispatch-lanes/`, `dirty-sweep-*.json`,
 `blast-radius-guard/*.denials`, `debug/state.json` + `debug/audit.jsonl` (user/audit scope) —
 matter only until a deployment's first write has migrated them. Their contents survive as the
 rows and KV values described above; the store module's family definitions
