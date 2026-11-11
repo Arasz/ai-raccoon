@@ -355,6 +355,16 @@
       "acceptance-reason": ""
     },
     {
+      "item": "decision-tool-replies-match-output-schema",
+      "expected-result": "Validate every decision tool's structuredContent against the outputSchema that tools/list advertises (jsonschema Draft 2020-12), the way Claude Code does, for record_decision, get_decision, query_decisions, find_decision_precedents, get_decision_graph and preview_decisions. Every reply must validate. A raw JSON-RPC client that reads only content[0].text cannot fail this item, so the other decision items do not cover it. (ADR-0142; MCP structured output)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
       "item": "decision-record-and-replay",
       "expected-result": "register_decision_task then record_decision on a registered scratch project. A record without status is proposed, status=accepted is accepted, and an empty required field is refused as invalid-argument. Resending the same sessionId+requestId returns replayed=true with the same decisionId and revision; judge 'no duplicate' by the export counts, not by the replay flag alone. (ADR-0142, docs/how-to/record-project-decisions.md)",
       "command": "",
@@ -407,6 +417,36 @@
     {
       "item": "decision-semantica-import",
       "expected-result": "decisions import-semantica with tests/AiRaccoon.Tests/Resources/Semantica/export-graph-json-0.7.0.json: preview with the legacy tasks unregistered exits 17; a mapping with one decision's status removed exits 17 with a missing-status blocker; the clean preview exits 0 and prints the --apply command; apply creates decisions in their mapped statuses with replayed=false; re-running apply returns replayed=true and leaves the revision unchanged; export shows importRecords equal to entities+relationships. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-unlink-keeps-history",
+      "expected-result": "unlink_decisions with a stale expectedProjectRevision -> decision-conflict; with the current revision the edge leaves get_decision_graph but stays in export_decisions with removedAt and removalActor; unlinking a supersedes edge -> decision-invalid-transition (supersession is permanent). (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-graph-bounds",
+      "expected-result": "On a chain X1 depends_on X2 depends_on X3, get_decision_graph from X1 upstream: depth 0 = seed alone with truncated reason depth; depth 1 = 2 nodes, reason depth; depth 2 = 3 nodes, not truncated; maxNodes 2 = 2 nodes, reason nodes. downstream from X1 returns the seed alone (direction control). depth 11 and maxNodes 0 -> invalid-argument. Upstream = edges whose source is the node (DecisionService.Views.cs). (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-mcp-export-size-cap",
+      "expected-result": "Record enough decisions in one task to pass 1 MiB (reasoning is capped at 16 000 chars, so about 80 x 15 000). MCP export_decisions of that task -> decision-export-too-large naming the byte size and the CLI command; ai-raccoon decisions export of the same task exits 0 and its counts match what was recorded. (ADR-0142, docs/how-to/record-project-decisions.md)",
       "command": "",
       "evidence": "",
       "observed-result": "",
