@@ -1,0 +1,290 @@
+name: build-gpu
+
+# Platform and GPU tests, split out of build.yml so a hosted-runner problem here (a mirror that
+# will not resolve, a missing arm64 or macOS runner) does not turn the required integration gate
+# red. None of these jobs is a required check.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-gpu-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  changes:
+    # Same diff classifier as build.yml: platform jobs skip their expensive steps
+    # on a doc-only change but still report.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Classify the diff
+        id: filter
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+
+          # Mirrors the paths this workflow used to trigger on. Anything not
+          # matched here (docs/**, *.md, etc.) is treated as safe to skip.
+          # docs/ subdirs are included because 8 test files read docs at runtime
+          # via TestData.RepoFile — a docs-only PR that breaks one must go red (#541).
+          # VERSION is included because it is the file release.yml triggers on: a
+          # release PR that changes only VERSION would otherwise take all three
+          # required checks green having built nothing, and the commit that cuts a
+          # public release is the last one that should reach main unbuilt.
+          # All of tests/ counts: fixtures and goldens under tests/**/Resources are
+          # read at runtime, and a golden-only fix that skipped the suite merged unverified.
+          CODE_REGEX='^src/.*\.cs$|^tests/|\.csproj$|\.sln$|(^|/)Directory\.Build\.props$|(^|/)Directory\.Packages\.props$|\.feature$|\.onnx$|^nuget\.config$|^scripts/verify-tool-package\.py$|^\.github/workflows/build\.yml$|^\.github/workflows/build-gpu\.yml$|^VERSION$|^docs/adr/|^docs/reference/|^docs/how-to/|^docs/plans/'
+
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
+            echo "No usable base commit (new branch or force-push); treating as a code change."
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD")
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          if echo "$CHANGED" | grep -qE "$CODE_REGEX"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  gpu-vulkan:
+    # The bundled WebGPU core on linux-x64 with a software Vulkan driver (lavapipe): the session
+    # must land on WebGPU and match the CPU's vectors.
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      MSBUILDDISABLENODEREUSE: 1
+      TESTINGPLATFORM_TELEMETRY_OPTOUT: 1
+    steps:
+      - name: Skip (doc-only change)
+        if: needs.changes.outputs.code != 'true'
+        run: echo "No code-relevant paths changed; skipping build and tests."
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: needs.changes.outputs.code == 'true'
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: needs.changes.outputs.code == 'true'
+        with:
+          global-json-file: global.json
+      - name: Install lavapipe (software Vulkan; this runner has no GPU)
+        if: needs.changes.outputs.code == 'true'
+        # Hosted runners intermittently fail to resolve the Ubuntu mirrors; retry before failing.
+        run: |
+          for attempt in 1 2 3; do
+            if sudo apt-get update -qq && sudo apt-get install -y -qq mesa-vulkan-drivers vulkan-tools; then
+              exit 0
+            fi
+            echo "::warning::apt attempt $attempt failed; retrying in $((attempt * 30))s"
+            sleep $((attempt * 30))
+          done
+          echo "::error::lavapipe could not be installed after 3 attempts"
+          exit 1
+      - name: Cache the bundled model weights
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/Models/granite-embedding-small-english-r2/model_fp16.onnx_data
+          key: bundled-granite-small-fp16-28d16e29cd623f25
+      - name: Fetch and verify the bundled model
+        if: needs.changes.outputs.code == 'true'
+        run: python3 scripts/download-embedding-model.py
+      - name: Cache the WebGPU core
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/webgpu-core
+          key: webgpu-core-onnxruntime-node-1.30.0-6e3390d6b783e7be
+      - name: Fetch and verify the WebGPU core
+        if: needs.changes.outputs.code == 'true'
+        run: python3 scripts/download-webgpu-core.py
+      - name: Cache the MLX runtime
+        if: needs.changes.outputs.code == 'true'
+        # The osx-arm64 pack-time guard needs it even on this runner.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/mlx-runtime
+          key: mlx-runtime-onnxruntime-ep-mlx-0.29.6-6ce838e9c39b799a
+      - name: Fetch and verify the MLX runtime
+        if: needs.changes.outputs.code == 'true'
+        run: python3 scripts/download-mlx-runtime.py
+      - name: Build
+        if: needs.changes.outputs.code == 'true'
+        run: mkdir -p .nupkg-local && dotnet build --nologo
+      - name: GPU session tests with a Vulkan adapter present
+        if: needs.changes.outputs.code == 'true'
+        env:
+          AIRACCOON_REQUIRE_WEBGPU: 1
+        run: |
+          vulkaninfo --summary | grep -E 'deviceName|driverName' || true
+          dotnet exec tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineGpuSessionTests
+      - name: Upload test stderr log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gpu-vulkan-test-stderr
+          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          if-no-files-found: ignore
+
+  build-arm64:
+    # linux-arm64 is a shipped RID that no other job runs on. GitHub's arm64 runners are free for
+    # public repositories and have no GPU. Not a required check: a red here reports an arm64
+    # difference without blocking merges while the lane earns trust. Runs on pushes to main (and
+    # manual dispatch) only, so a PR waits on x64 alone and arm64 is checked on the merge commit.
+    needs: changes
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      MSBUILDDISABLENODEREUSE: 1
+      TESTINGPLATFORM_TELEMETRY_OPTOUT: 1
+    steps:
+      - name: Skip (doc-only change)
+        if: needs.changes.outputs.code != 'true'
+        run: echo "No code-relevant paths changed; skipping build and tests."
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: needs.changes.outputs.code == 'true'
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: needs.changes.outputs.code == 'true'
+        with:
+          global-json-file: global.json
+      - name: Cache the bundled model weights (ADR-0108)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/Models/granite-embedding-small-english-r2/model_fp16.onnx_data
+          key: bundled-granite-small-fp16-28d16e29cd623f25
+      - name: Fetch and verify the bundled model
+        if: needs.changes.outputs.code == 'true'
+        run: python3 scripts/download-embedding-model.py
+      - name: Cache the WebGPU core (ADR-0115)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/webgpu-core
+          key: webgpu-core-onnxruntime-node-1.30.0-6e3390d6b783e7be
+      - name: Fetch and verify the WebGPU core
+        if: needs.changes.outputs.code == 'true'
+        # VersionContractPackedTests packs every RID, and the win/linux-x64 packs need the core.
+        run: python3 scripts/download-webgpu-core.py
+      - name: Cache the MLX runtime (ADR-0110)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/mlx-runtime
+          key: mlx-runtime-onnxruntime-ep-mlx-0.29.6-6ce838e9c39b799a
+      - name: Fetch and verify the MLX runtime
+        if: needs.changes.outputs.code == 'true'
+        run: python3 scripts/download-mlx-runtime.py
+      - name: Build
+        if: needs.changes.outputs.code == 'true'
+        run: mkdir -p .nupkg-local && dotnet build --nologo
+      - name: Fast tests
+        if: needs.changes.outputs.code == 'true'
+        run: dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Fast&Performance!=Benchmark" --no-build -v m
+      - name: Slow tests (integration + E2E)
+        if: needs.changes.outputs.code == 'true'
+        run: dotnet test --project tests/AiRaccoon.Tests --filter "Speed=Slow&Performance!=Benchmark" --no-build -v m
+      - name: Upload test stderr log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-arm64-test-stderr
+          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          if-no-files-found: ignore
+
+  build-mlx:
+    # The named MLX run (config-D P2 AC2; test review F1): the one run that sets
+    # AIRACCOON_REQUIRE_MLX=1, so BundledEngineMlxSessionTests runs real MLX sessions instead of
+    # skipping. On every linux host the plugin is absent and those cases skip, which reads green
+    # while exercising nothing. osx-arm64 is the only shipped RID with the MLX plugin (ADR-0110),
+    # and GitHub's macos-15 runners are arm64. Not a required status check: a red here reports an
+    # MLX regression without blocking merges while the lane earns trust (same shape as
+    # build-arm64); runs on pushes to main and manual dispatch only.
+    needs: changes
+    if: github.event_name != 'pull_request'
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      MSBUILDDISABLENODEREUSE: 1
+      TESTINGPLATFORM_TELEMETRY_OPTOUT: 1
+    steps:
+      - name: Skip (doc-only change)
+        if: needs.changes.outputs.code != 'true'
+        run: echo "No code-relevant paths changed; skipping build and tests."
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: needs.changes.outputs.code == 'true'
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: needs.changes.outputs.code == 'true'
+        with:
+          # Pinned via global.json, not a floating 10.0.x. An unpinned SDK is a mutable
+          # dependency re-resolved on every run — the same hazard this workflow already
+          # avoids by pinning every action to a commit SHA.
+          global-json-file: global.json
+      - name: Cache the bundled model weights (ADR-0108)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/Models/granite-embedding-small-english-r2/model_fp16.onnx_data
+          key: bundled-granite-small-fp16-28d16e29cd623f25
+      - name: Fetch and verify the bundled model
+        if: needs.changes.outputs.code == 'true'
+        # The 97 MB weights are not committed (ADR-0108); the script is a no-op on a verified cache hit.
+        run: python3 scripts/download-embedding-model.py
+      - name: Cache the MLX runtime (ADR-0110)
+        if: needs.changes.outputs.code == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: src/AiRaccoon/mlx-runtime
+          key: mlx-runtime-onnxruntime-ep-mlx-0.29.6-6ce838e9c39b799a
+      - name: Fetch and verify the MLX runtime
+        if: needs.changes.outputs.code == 'true'
+        # The plugin's native files are not committed (ADR-0110); the build copies them into the
+        # output's mlx/ directory, where ResolveMlxPluginDirectory(AppContext.BaseDirectory) looks.
+        # That copy is RID-gated on osx-arm64 (AiRaccoon.csproj), so this job must build RID-qualified:
+        # a RID-agnostic build copies nothing and the fail-closed switch would (correctly) fail.
+        run: python3 scripts/download-mlx-runtime.py
+      - name: Build
+        if: needs.changes.outputs.code == 'true'
+        run: mkdir -p .nupkg-local && dotnet build tests/AiRaccoon.Tests/AiRaccoon.Tests.csproj --nologo -r osx-arm64
+      - name: Real MLX session tests (fail-closed)
+        if: needs.changes.outputs.code == 'true'
+        # The fail-closed switch (review F2 defect 1): with AIRACCOON_REQUIRE_MLX=1 an absent
+        # plugin or rewritten graph FAILS the real-session cases instead of skipping them, so this
+        # run cannot go green without exercising MLX (short-row padding pin + CPU-vector parity).
+        env:
+          AIRACCOON_REQUIRE_MLX: 1
+        run: |
+          dotnet exec tests/AiRaccoon.Tests/bin/Debug/net10.0/osx-arm64/AiRaccoon.Tests.dll --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineMlxSessionTests
+      - name: Upload test stderr log
+        # Host and CLI console logs go to this file, not the job log (tests/AiRaccoon.Tests/TestConsoleLog.cs).
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-mlx-test-stderr
+          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/osx-arm64/test-stderr.log
+          if-no-files-found: ignore
