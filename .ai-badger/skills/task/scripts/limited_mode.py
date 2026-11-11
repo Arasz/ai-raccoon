@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -28,6 +29,7 @@ BLOCK_TEXT = """## ai-badger limited mode (hooks disabled on this machine)
 Your organisation's policy disables Claude Code hooks here, so ai-badger's automatic context, guards and checkpoints do not run. Do them by hand:
 
 - From the project root, at session start and again before opening a PR or finishing a task, run `python3 .ai-badger/skills/task/scripts/limited_mode.py checkin`; when a turn finishes a task, run it with `--end`. A non-zero exit means the check-in did not happen: read its stderr.
+- A subagent must run `checkin --subagent` to avoid reading its parent's mail. The inherited `CLAUDE_CODE_CHILD_SESSION` marker alone does not identify a subagent.
 - Prompt markers (`f:`, `q:`, `i!:` ...) are not expanded, not even by `checkin`: apply them yourself per the Prompt markers section.
 - Every Agent dispatch names its `model` (see `.ai-badger/delegation.md`); nothing checks it.
 - Where the ai-raccoon memory server is configured, search memory (`query`) before repo text search; nothing checks it.
@@ -145,11 +147,23 @@ def reply_lines(stdout):
     return lines
 
 
+def command_invocation(command, windows=None, env=None):
+    """Return the shell invocation for a hook command and its shell flag."""
+    use_windows_shell = os.name == "nt" if windows is None else windows
+    if not use_windows_shell:
+        return command, True
+    environment = os.environ if env is None else env
+    bash = (environment.get("CLAUDE_CODE_GIT_BASH_PATH")
+            or shutil.which("bash", path=environment.get("PATH")) or "bash")
+    return [bash, "-c", command], False
+
+
 def run_command(command, payload, cwd, env):
     """Run one hook command; return True when it exited 0 in time."""
     try:
+        invocation, use_shell = command_invocation(command, env=env)
         result = subprocess.run(
-            command, shell=True, input=payload, capture_output=True, text=True,
+            invocation, shell=use_shell, input=payload, capture_output=True, text=True,
             cwd=cwd, env=env, timeout=TIMEOUT_SECONDS, check=False)
     except subprocess.TimeoutExpired:
         print(f"limited-mode: command timed out after {TIMEOUT_SECONDS}s: {command[:80]}",
@@ -168,7 +182,7 @@ def run_command(command, payload, cwd, env):
 
 def checkin(args):
     """Replay the hook commands for the session start, or the stop with --end."""
-    if os.environ.get("CLAUDE_CODE_CHILD_SESSION"):
+    if args.subagent:
         print("limited-mode: NOT checked in - a subagent must not check in "
               "(it would consume the parent's mail).", file=sys.stderr)
         return 0
@@ -252,6 +266,8 @@ def build_parser():
     sub = parser.add_subparsers(dest="command", required=True)
     check = sub.add_parser("checkin", help="replay the project's hook commands")
     check.add_argument("--end", action="store_true", help="replay Stop instead of SessionStart")
+    check.add_argument("--subagent", action="store_true",
+                       help="skip check-in when the caller is a subagent")
     check.add_argument("--session", help="session id for the hook payload")
     check.add_argument("--hooks", help="path to hooks.json")
     check.add_argument("--root", help="project root")

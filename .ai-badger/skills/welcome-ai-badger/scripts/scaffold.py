@@ -200,7 +200,7 @@ from adjustment_policy import (build_adjustment_context,
                                instruction_only_adjustment_context)  # noqa: E402
 from generated_config import GeneratedConfigRecords  # noqa: E402
 from hook_wiring import HookWiring, merge_hooks  # noqa: E402
-from template_rendering import TemplateRendering, invariant_summary  # noqa: E402
+from template_rendering import TemplateRendering, invariant_summary, lead_first  # noqa: E402
 from agent_files import AgentFiles  # noqa: E402
 from extensions import Extensions  # noqa: E402
 from mcp_tools import McpTools  # noqa: E402
@@ -437,14 +437,15 @@ class Scaffolder:
 
     def collect_invariants(self) -> List[str]:
         """Copy invariant snippets and return their rendered markdown for CLAUDE.md."""
-        rendered: List[str] = []
+        named: List[Tuple[str, str]] = []
         delivered: Set[str] = set()
         for stack in self.stacks:
             for item in self.items(stack, "invariants"):
                 dest = self.copy_file("invariants", stack, item, self.aib / "invariants")
                 text = dest.read_text(encoding="utf-8").strip()
-                rendered.append(invariant_summary(text, item["name"]))
+                named.append((item["name"], invariant_summary(text, item["name"])))
                 delivered.add(item["name"])
+        rendered = lead_first(named)
         append_rendered(rendered, self.aib / "invariants" / "local",
                         delivered, invariant_summary, self.notes)
         return rendered

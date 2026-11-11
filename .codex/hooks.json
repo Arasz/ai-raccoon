@@ -84,7 +84,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "env AI_BADGER_CODEX_HOOK=1 python3 -I -c 'import os,pathlib,runpy,sys; root=pathlib.Path(sys.argv[1]); os.environ['\"'\"'AI_BADGER_PROJECT_DIR'\"'\"']=str(root); script=root/'\"'\"'.ai-badger'\"'\"'/sys.argv[2]; sys.exit(0) if not script.is_file() or not script.resolve().is_relative_to(root) or any(p.is_symlink() for p in (script,*script.parents) if p!=root and root in p.parents) else None; sys.exit(0) if any(p.is_symlink() for tree in (script.parent.parent,root/'\"'\"'.ai-badger/hooks'\"'\"') for p in (tree,*tree.rglob('\"'\"'*'\"'\"'))) else None; sys.path.insert(0,str(script.parent)); runpy.run_path(str(script),run_name='\"'\"'__main__'\"'\"')' /Users/arasz/RiderProjects/ai-raccoon skills/git-work/scripts/git_internals_guard.py",
+            "command": "env AI_BADGER_CODEX_HOOK=1 python3 -I -c 'import os,pathlib,runpy,sys; root=pathlib.Path(sys.argv[1]); os.environ['\"'\"'AI_BADGER_PROJECT_DIR'\"'\"']=str(root); script=root/'\"'\"'.ai-badger'\"'\"'/sys.argv[2]; sys.exit(0) if not script.is_file() or not script.resolve().is_relative_to(root) or any(p.is_symlink() for p in (script,*script.parents) if p!=root and root in p.parents) else None; sys.exit(0) if any(p.is_symlink() for tree in (script.parent.parent,root/'\"'\"'.ai-badger/hooks'\"'\"') for p in (tree,*tree.rglob('\"'\"'*'\"'\"'))) else None; sys.path.insert(0,str(script.parent)); runpy.run_path(str(script),run_name='\"'\"'__main__'\"'\"')' /Users/arasz/RiderProjects/ai-raccoon/.worktrees/den-refresh-0217-3 skills/git-work/scripts/git_internals_guard.py",
             "timeout": 10
           }
         ],
@@ -94,7 +94,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "env AI_BADGER_CODEX_HOOK=1 python3 -I -c 'import os,pathlib,runpy,sys; root=pathlib.Path(sys.argv[1]); os.environ['\"'\"'AI_BADGER_PROJECT_DIR'\"'\"']=str(root); script=root/'\"'\"'.ai-badger'\"'\"'/sys.argv[2]; sys.exit(0) if not script.is_file() or not script.resolve().is_relative_to(root) or any(p.is_symlink() for p in (script,*script.parents) if p!=root and root in p.parents) else None; sys.exit(0) if any(p.is_symlink() for tree in (script.parent.parent,root/'\"'\"'.ai-badger/hooks'\"'\"') for p in (tree,*tree.rglob('\"'\"'*'\"'\"'))) else None; sys.path.insert(0,str(script.parent)); runpy.run_path(str(script),run_name='\"'\"'__main__'\"'\"')' /Users/arasz/RiderProjects/ai-raccoon hooks/codex_memory_first_gate_hook.py /Users/arasz/RiderProjects/ai-raccoon/.ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_hook.py",
+            "command": "env AI_BADGER_CODEX_HOOK=1 python3 -I -c 'import os,pathlib,runpy,sys; root=pathlib.Path(sys.argv[1]); os.environ['\"'\"'AI_BADGER_PROJECT_DIR'\"'\"']=str(root); script=root/'\"'\"'.ai-badger'\"'\"'/sys.argv[2]; sys.exit(0) if not script.is_file() or not script.resolve().is_relative_to(root) or any(p.is_symlink() for p in (script,*script.parents) if p!=root and root in p.parents) else None; sys.exit(0) if any(p.is_symlink() for tree in (script.parent.parent,root/'\"'\"'.ai-badger/hooks'\"'\"') for p in (tree,*tree.rglob('\"'\"'*'\"'\"'))) else None; sys.path.insert(0,str(script.parent)); runpy.run_path(str(script),run_name='\"'\"'__main__'\"'\"')' /Users/arasz/RiderProjects/ai-raccoon/.worktrees/den-refresh-0217-3 hooks/codex_memory_first_gate_hook.py /Users/arasz/RiderProjects/ai-raccoon/.worktrees/den-refresh-0217-3/.ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_hook.py",
             "timeout": 10
           }
         ],
@@ -171,7 +171,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "env AI_BADGER_CODEX_HOOK=1 python3 -I -c 'import os,pathlib,runpy,sys; root=pathlib.Path(sys.argv[1]); os.environ['\"'\"'AI_BADGER_PROJECT_DIR'\"'\"']=str(root); script=root/'\"'\"'.ai-badger'\"'\"'/sys.argv[2]; sys.exit(0) if not script.is_file() or not script.resolve().is_relative_to(root) or any(p.is_symlink() for p in (script,*script.parents) if p!=root and root in p.parents) else None; sys.exit(0) if any(p.is_symlink() for tree in (script.parent.parent,root/'\"'\"'.ai-badger/hooks'\"'\"') for p in (tree,*tree.rglob('\"'\"'*'\"'\"'))) else None; sys.path.insert(0,str(script.parent)); runpy.run_path(str(script),run_name='\"'\"'__main__'\"'\"')' /Users/arasz/RiderProjects/ai-raccoon hooks/codex_memory_first_gate_post_hook.py /Users/arasz/RiderProjects/ai-raccoon/.ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py"
+            "command": "env AI_BADGER_CODEX_HOOK=1 python3 -I -c 'import os,pathlib,runpy,sys; root=pathlib.Path(sys.argv[1]); os.environ['\"'\"'AI_BADGER_PROJECT_DIR'\"'\"']=str(root); script=root/'\"'\"'.ai-badger'\"'\"'/sys.argv[2]; sys.exit(0) if not script.is_file() or not script.resolve().is_relative_to(root) or any(p.is_symlink() for p in (script,*script.parents) if p!=root and root in p.parents) else None; sys.exit(0) if any(p.is_symlink() for tree in (script.parent.parent,root/'\"'\"'.ai-badger/hooks'\"'\"') for p in (tree,*tree.rglob('\"'\"'*'\"'\"'))) else None; sys.path.insert(0,str(script.parent)); runpy.run_path(str(script),run_name='\"'\"'__main__'\"'\"')' /Users/arasz/RiderProjects/ai-raccoon/.worktrees/den-refresh-0217-3 hooks/codex_memory_first_gate_post_hook.py /Users/arasz/RiderProjects/ai-raccoon/.worktrees/den-refresh-0217-3/.ai-badger/skills/ai-raccoon-memory/scripts/memory_first_gate_post_hook.py"
           }
         ],
         "matcher": "^(mcp__.+__)?query$"
@@ -210,7 +210,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "env AI_BADGER_CODEX_HOOK=1 python3 -I -c 'import os,pathlib,runpy,sys; root=pathlib.Path(sys.argv[1]); os.environ['\"'\"'AI_BADGER_PROJECT_DIR'\"'\"']=str(root); script=root/'\"'\"'.ai-badger'\"'\"'/sys.argv[2]; sys.exit(0) if not script.is_file() or not script.resolve().is_relative_to(root) or any(p.is_symlink() for p in (script,*script.parents) if p!=root and root in p.parents) else None; sys.exit(0) if any(p.is_symlink() for tree in (script.parent.parent,root/'\"'\"'.ai-badger/hooks'\"'\"') for p in (tree,*tree.rglob('\"'\"'*'\"'\"'))) else None; sys.path.insert(0,str(script.parent)); runpy.run_path(str(script),run_name='\"'\"'__main__'\"'\"')' /Users/arasz/RiderProjects/ai-raccoon skills/git-work/scripts/git_config_health_hook.py",
+            "command": "env AI_BADGER_CODEX_HOOK=1 python3 -I -c 'import os,pathlib,runpy,sys; root=pathlib.Path(sys.argv[1]); os.environ['\"'\"'AI_BADGER_PROJECT_DIR'\"'\"']=str(root); script=root/'\"'\"'.ai-badger'\"'\"'/sys.argv[2]; sys.exit(0) if not script.is_file() or not script.resolve().is_relative_to(root) or any(p.is_symlink() for p in (script,*script.parents) if p!=root and root in p.parents) else None; sys.exit(0) if any(p.is_symlink() for tree in (script.parent.parent,root/'\"'\"'.ai-badger/hooks'\"'\"') for p in (tree,*tree.rglob('\"'\"'*'\"'\"'))) else None; sys.path.insert(0,str(script.parent)); runpy.run_path(str(script),run_name='\"'\"'__main__'\"'\"')' /Users/arasz/RiderProjects/ai-raccoon/.worktrees/den-refresh-0217-3 skills/git-work/scripts/git_config_health_hook.py",
             "timeout": 10
           }
         ],
@@ -273,7 +273,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "env AI_BADGER_CODEX_HOOK=1 python3 -I -c 'import os,pathlib,runpy,sys; root=pathlib.Path(sys.argv[1]); os.environ['\"'\"'AI_BADGER_PROJECT_DIR'\"'\"']=str(root); script=root/'\"'\"'.ai-badger'\"'\"'/sys.argv[2]; sys.exit(0) if not script.is_file() or not script.resolve().is_relative_to(root) or any(p.is_symlink() for p in (script,*script.parents) if p!=root and root in p.parents) else None; sys.exit(0) if any(p.is_symlink() for tree in (script.parent.parent,root/'\"'\"'.ai-badger/hooks'\"'\"') for p in (tree,*tree.rglob('\"'\"'*'\"'\"'))) else None; sys.path.insert(0,str(script.parent)); runpy.run_path(str(script),run_name='\"'\"'__main__'\"'\"')' /Users/arasz/RiderProjects/ai-raccoon skills/prompt-markers/scripts/user_prompt_hook.py"
+            "command": "env AI_BADGER_CODEX_HOOK=1 python3 -I -c 'import os,pathlib,runpy,sys; root=pathlib.Path(sys.argv[1]); os.environ['\"'\"'AI_BADGER_PROJECT_DIR'\"'\"']=str(root); script=root/'\"'\"'.ai-badger'\"'\"'/sys.argv[2]; sys.exit(0) if not script.is_file() or not script.resolve().is_relative_to(root) or any(p.is_symlink() for p in (script,*script.parents) if p!=root and root in p.parents) else None; sys.exit(0) if any(p.is_symlink() for tree in (script.parent.parent,root/'\"'\"'.ai-badger/hooks'\"'\"') for p in (tree,*tree.rglob('\"'\"'*'\"'\"'))) else None; sys.path.insert(0,str(script.parent)); runpy.run_path(str(script),run_name='\"'\"'__main__'\"'\"')' /Users/arasz/RiderProjects/ai-raccoon/.worktrees/den-refresh-0217-3 skills/prompt-markers/scripts/user_prompt_hook.py"
           }
         ]
       }

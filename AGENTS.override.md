@@ -6,7 +6,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github, ai-raccoon, changelog
-> Scaffolded by ai-badger 0.214.0. Source of truth for this file: `.ai-badger/AGENTS.override.md`.
+> Scaffolded by ai-badger 0.217.3. Source of truth for this file: `.ai-badger/AGENTS.override.md`.
 
 ## Commands
 
@@ -69,6 +69,8 @@ isolate in-progress notes and consolidate on finish; `share_memory` promotes dur
 facts. Keep the docs directory searchable: check `get_watch_status`, then `add_watch`
 (projectId + absolute path) when no watch exists.
 
+Decision tools before 2.6.1 commit but Claude Code rejects the reply (null fields marked required): do not retry — verify and continue with `ai-raccoon decisions task register|record|get|query|export|preview`.
+
 <!-- semantica MCP tools -->
 ## MCP Tools: semantica
 
@@ -105,6 +107,7 @@ No project `.mcp.json` (worktree sessions) → use the CLI twin `task_graph_cli.
 
 Each rule's full text is `.ai-badger/invariants/<name>.md`.
 
+- **Write to the user in Simplified Technical English** (`simplified-technical-english`) — When you write a response, a report, a status update, a question or a hand-back to the user, use the `simplified-technical-english` skill.
 - **Announce parallel work** (`announce-parallel-work`) — When another agent session shares the project, announce started work, opened PRs, review requests and merges on the project bus — read `multi-agent-communication` when parallel work is active.
 - **Diagrams default to Archify** (`archify-diagrams`) — Author architecture, workflow, sequence, data-flow and lifecycle diagrams with the `archify` skill when it is installed.
 - **Ask if a simpler shape would do** (`ask-if-simpler`) — Before calling any design or change finished, ask whether it is over-engineered and what the simpler version would look like.
@@ -129,6 +132,7 @@ Each rule's full text is `.ai-badger/invariants/<name>.md`.
 - **Done means proven** (`proof-of-done`) — Every unit of planned work carries its acceptance criteria and the gate that checks them, named before the work starts.
 - **A check you have not seen fail is not a check** (`prove-the-check-fails`) — Put the defect a gate, test or acceptance criterion exists to catch in front of it, watch it go red, take the defect away and watch it go green — a check that has only ever passed is indistinguishable from one whose comparison can produce a single answer that looks like success.
 - **Reasoning scaffolding minimization** (`reasoning-scaffolding-minimization`) — Avoid step-by-step CoT plans on modern reasoning models unless the task is genuine symbolic reasoning; state the goal and constraints instead of narrating the process.
+- **Record the decision before you build it** (`record-decisions`) — Every change that adds a feature or meaningfully changes how something works gets a decision record before implementation starts, written with the `decision-record` skill in the format this project already keeps: its ADR log, its spec framework, or both as a linked pair.
 - **Screaming architecture** (`screaming-architecture`) — Organize folders and modules by domain/business concept, not by generic technical bucket.
 - **Small commits, early draft PR** (`small-commits-early-draft-pr`) — Commit one coherent work package at a time and push often.
 - **Route state transitions through a state machine** (`state-transitions-through-a-machine`) — Where a domain object has explicit states, make the declared transitions the only way it moves between them, and record what triggered each move.
