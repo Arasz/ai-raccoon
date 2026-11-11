@@ -120,7 +120,7 @@ Memory and code each have their own engine. Both default to the same bundled mod
 
 | Engine | Model | Dimensions | Notes |
 |---|---|---|---|
-| Bundled (default) | `granite-embedding-small-english-r2`, fp16 | 384 | Memory and code. WebGPU on macOS, CPU elsewhere |
+| Bundled (default) | `granite-embedding-small-english-r2`, fp16 | 384 | Memory and code. GPU through WebGPU on macOS, Windows and Linux x64; CPU on linux-arm64 and musl |
 | Downloaded | Any Hugging Face model with a `tokenizer.json` or a WordPiece/SentencePiece vocab, via `model download` | from the model | Memory or code |
 | Remote | Any OpenAI-compatible `/v1/embeddings` endpoint | from the endpoint | Memory only |
 

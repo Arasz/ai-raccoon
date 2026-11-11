@@ -1172,7 +1172,7 @@ fp16 export (dimension 384, pools through the graph's own `sentence_embedding` o
 It is also the code corpus's default engine (`ai-raccoon model code set default`
 activates the same bundled files for code — see [ADR-0108](../adr/0108-one-bundled-engine-granite-small-fp16-on-the-gpu.md)).
 Sessions try the GPU first where the platform's ONNX Runtime build has one — WebGPU on macOS
-(built in) and on Windows/Linux (a packaged plugin, [ADR-0112](../adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md)),
+(built in) and on Windows and Linux x64 (a WebGPU-enabled core bundled in the package, [ADR-0115](../adr/0115-bundle-onnxruntimes-webgpu-core-for-windows-and-linux-x64.md); linux-arm64 stays on the CPU),
 or MLX or CoreML (the Neural Engine) on osx-arm64 ([ADR-0110](../adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md),
 [ADR-0118](../adr/0118-opt-in-coreml-device-on-the-neural-engine.md))
 (`settings model device` forces `cpu`/`gpu`/`mlx`/`coreml`/`cuda [path]`, default `auto`). The files are gitignored
