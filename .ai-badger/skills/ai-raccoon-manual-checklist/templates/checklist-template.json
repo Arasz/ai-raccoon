@@ -355,6 +355,66 @@
       "acceptance-reason": ""
     },
     {
+      "item": "decision-record-and-replay",
+      "expected-result": "register_decision_task then record_decision on a registered scratch project. A record without status is proposed, status=accepted is accepted, and an empty required field is refused as invalid-argument. Resending the same sessionId+requestId returns replayed=true with the same decisionId and revision; judge 'no duplicate' by the export counts, not by the replay flag alone. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-version-conflicts-refused",
+      "expected-result": "Each write guard must be seen refusing: amend with a stale expectedVersion -> decision-conflict naming currentVersion; accepted->proposed -> decision-invalid-transition; link_decisions with a stale expectedProjectRevision -> decision-conflict; amending a superseded decision -> decision-invalid-transition. Pair each refusal with the same call succeeding on fresh values. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-graph-query-and-precedents",
+      "expected-result": "link_decisions depends_on appears in get_decision_graph with both nodes. query_decisions by literal text and by category return only the matching decision, and a no-match term returns [] (negative control). After supersede_decision, find_decision_precedents omits the superseded decision unless includeInactive=true. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-cli-parity-and-export",
+      "expected-result": "ai-raccoon decisions record/query/get --history/preview reach the same records through the server. export --all --output writes a 0600 file whose counts match what was written (decisions, versions, edges); a second export to the same path without --force exits 10. An unregistered project exits 18; a record file naming taskId exits 10 and sends nothing. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-access-mode-read-only",
+      "expected-result": "settings access set <id> ro: record_decision over MCP returns access-denied, the CLI exits 17, projectRevision is unchanged and reads still work. After serve --restart on the same scratch port the project is still ro. Restore rw before any further write step. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-semantica-import",
+      "expected-result": "decisions import-semantica with tests/AiRaccoon.Tests/Resources/Semantica/export-graph-json-0.7.0.json: preview with the legacy tasks unregistered exits 17; a mapping with one decision's status removed exits 17 with a missing-status blocker; the clean preview exits 0 and prints the --apply command; apply creates decisions in their mapped statuses with replayed=false; re-running apply returns replayed=true and leaves the revision unchanged; export shows importRecords equal to entities+relationships. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
       "item": "consistent-live-database-backup",
       "expected-result": "Create a consistent backup before upgrade, validate SQLite integrity, preserve a durable copy and record its digest.",
       "command": "",

@@ -165,6 +165,10 @@ registered in the build in front of you.
 - **File watch** — watch status reflects live registrations, and a restart re-digests a file
   changed without an event, judged against that file's own fingerprint.
 - **Promotion queue** — the promotion list reports candidates accurately.
+- **Decision recording** — register, record, amend, transition, supersede and link decisions over
+  MCP and the `decisions` CLI on a scratch project. A retried request replays instead of writing
+  twice; stale versions, illegal transitions and read-only mode are refused; a Semantica export
+  imports through a blocking preview and replays as a no-op.
 - **Full MCP surface** — every derived tool and prompt is reachable.
 - **Observability** — emitted event ids resolve against the logging event-id reference.
 
