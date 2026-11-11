@@ -46,24 +46,18 @@ The full walkthrough, including indexing your code, is [Get started with AiRacco
 
 ## What's new
 
-- `ai-raccoon decisions import-semantica` previews, then imports, a Semantica export into the native decision graph (2.6.0). [Release notes](docs/changelog/2.6.0-semantica-import.md)
-- A watcher buffer overflow logs one warning and rescans within seconds, and `watch.buffer-size.global` sets the buffer size (2.5.0). [Release notes](docs/changelog/2.5.0-watcher-overflow-rescan.md)
-- Agents record project decisions with versions, status and typed links, and `ai-raccoon decisions export|preview` reads them back by task (2.4.0). [Release notes](docs/changelog/2.4.0-native-decision-graph.md)
-- The log names where ONNX Runtime placed each model's nodes, per execution provider, instead of a generic warning (2.3.0). [Release notes](docs/changelog/2.3.0-onnx-node-placement-log.md)
-- Query hits name their entry kind, so a hit's `entryKind` passes straight into `get_entry` (2.2.0). [Release notes](docs/changelog/2.2.0-entry-kind-on-query-hits.md)
-- **Choose Memory, File, or Code in a query (2.1.0).** `query entryType=memory` searches agent notes and transcripts; `file` selects mirrored documents and `code` selects source. Omit the parameter to search everything. `get_entry` now requires one type, and TTL changes apply only to Memory. [Upgrade notes](docs/changelog/2.1.0-typed-search-memory-ttl.md)
-- **Every MCP tool has a new name, and the old names are gone (2.0.0).** `memory_search` is now `query`, `memory_get` and `code_get` are one `get_entry`, `memory_write` is `add_memory`, and the whole 30-tool surface moved with them. There are no aliases, so a client that calls an old name gets nothing back. The [old → new map](docs/changelog/2.0.0-mcp-tool-surface-renamed.md) is one table. [Breaking changes](docs/reference/breaking-changes.md)
-- The reserved `shared` document target refuses a delete, and every MCP tool now declares the scope it may run in, so the build fails when a tool declares none. (1.63.0) [ADR-0139](docs/adr/0139-attribute-derived-tool-scope.md)
-- Documents outside a repository can use the built-in `shared` target: configure its path scope, then `ai-raccoon watch add shared /absolute/documents`. No project id to mint. (1.62.0) [Changelog](docs/changelog/1.62.0-shared-document-watches.md)
-- **The embed drain's rows-per-run is configurable from 64 to 4096, and what that value costs is written down (1.61.0).** [ADR-0136](docs/adr/0136-the-embed-drain-rows-per-run-runs-from-64-to-4096.md)
-- `ai-raccoon watch add|remove|status` register and inspect watches from a terminal; the watcher indexes Jupyter notebooks (`.ipynb`) by cell and reports the files it skipped, with the reason. (1.59.0) [CLI reference](docs/reference/cli-reference.md)
-- `ai-raccoon encryption 1password` keys the bank from an SSH Key item in 1Password, read through the `op` CLI. (1.58.0) [ADR-0132](docs/adr/0132-1password-cli-as-a-second-bank-key-source.md) · [how-to](docs/how-to/configure-ai-raccoon-server.md#key-the-bank-from-1password)
-- `ai-raccoon project id register | get | check` and the MCP tool `get_project_id` find or register the id a project already uses, before a new one is minted. (1.57.0) [ADR-0127](docs/adr/0127-reads-need-a-registered-project-id.md)
-- On Apple silicon the bundled engine can also run on the Neural Engine, opt-in with `ai-raccoon settings model device coreml`. (1.53.0) [ADR-0118](docs/adr/0118-opt-in-coreml-device-on-the-neural-engine.md) · [how-to](docs/how-to/configure-embedding-engines.md)
-- On Windows and Linux x64 the bundled engine runs on the GPU through WebGPU again, from ONNX Runtime's own WebGPU-enabled core that now ships inside the package; linux-arm64 stays on the CPU. (1.52.0) [ADR-0115](docs/adr/0115-bundle-onnxruntimes-webgpu-core-for-windows-and-linux-x64.md) · [how-to](docs/how-to/configure-embedding-engines.md)
-- The server went from up to a full core of CPU and a 6.8 GB footprint to about 2% of one core and 1.75 GB, and embeds on the GPU with 30-90x less CPU per embed, at unchanged search quality. (1.44.3-1.51.2) [report](docs/work/2026-09-25-performance-cpu-memory-gpu.md)
-- On Windows and Linux x64 the bundled engine can run on CUDA, opt-in with `ai-raccoon settings model device cuda <path>`, unmeasured; the WebGPU plugin shipped in 1.51.0 is off again in 1.51.2. (1.51.0) [ADR-0112](docs/adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md) · [how-to](docs/how-to/configure-embedding-engines.md)
-- An encrypted bank tells a wrong key (exit `21`) from a corrupt file (exit `32`), using a key-check file next to the bank that never holds the key. (1.50.0) [ADR-0111](docs/adr/0111-key-check-sidecar-distinguishes-wrong-key-from-corrupt-bank.md)
+- `ai-raccoon decisions import-semantica` previews, then imports, a Semantica export into the decision graph (2.6.0). [Release notes](docs/changelog/2.6.0-semantica-import.md)
+- A watcher buffer overflow rescans within seconds, and `watch.buffer-size.global` sets the buffer size (2.5.0). [Release notes](docs/changelog/2.5.0-watcher-overflow-rescan.md)
+- Agents record decisions with versions, status and typed links, and `ai-raccoon decisions export|preview` reads them back (2.4.0). [Release notes](docs/changelog/2.4.0-native-decision-graph.md)
+- The log names where ONNX Runtime placed each model's nodes, per execution provider (2.3.0). [Release notes](docs/changelog/2.3.0-onnx-node-placement-log.md)
+- Query hits name their `entryKind`, which passes straight into `get_entry` (2.2.0). [Release notes](docs/changelog/2.2.0-entry-kind-on-query-hits.md)
+- `query entryType=memory|file|code` picks what to search; omit it to search everything (2.1.0). [Upgrade notes](docs/changelog/2.1.0-typed-search-memory-ttl.md)
+- The built-in `shared` target indexes documents outside a repository, with no project id to mint (1.62.0). [Release notes](docs/changelog/1.62.0-shared-document-watches.md)
+- `ai-raccoon watch add|remove|status` manage watches from a terminal, and the watcher indexes Jupyter notebooks by cell (1.59.0). [CLI reference](docs/reference/cli-reference.md)
+- `ai-raccoon encryption 1password` keys the bank from an SSH Key item in 1Password (1.58.0). [ADR-0132](docs/adr/0132-1password-cli-as-a-second-bank-key-source.md)
+- `ai-raccoon project id register|get|check` and the `get_project_id` tool find the id a project already uses (1.57.0). [ADR-0127](docs/adr/0127-reads-need-a-registered-project-id.md)
+- On Apple silicon the bundled engine can run on the Neural Engine, opt-in (1.53.0). [How-to](docs/how-to/configure-embedding-engines.md)
+- On Windows and Linux x64 the bundled engine runs on the GPU through WebGPU (1.52.0). [How-to](docs/how-to/configure-embedding-engines.md)
 
 Older releases: [What's new history](docs/reference/whats-new-history.md). A release tag is not proof of a nuget.org package, see [Releases and publishing](docs/reference/releases-and-publishing.md).
 
@@ -72,6 +66,8 @@ Older releases: [What's new history](docs/reference/whats-new-history.md). A rel
 Upgrading from an older version? Check [Breaking changes](docs/reference/breaking-changes.md) for what to do past each version. The latest one is 2.0.0.
 
 ## Performance
+
+Between 1.44.3 and 1.51.2 the server went from up to a full core of CPU and a 6.8 GB footprint to about 2% of one core and 1.75 GB, and embeds on the GPU with 30-90x less CPU per embed, at unchanged search quality ([report](docs/work/2026-09-25-performance-cpu-memory-gpu.md)).
 
 We can only speak for one chip so far: an Apple M4 (Mac16,12). The numbers below come from `scripts/device-benchmark.py`, which drives the shipped product through the same corpus (225 docs files, 4914 chunks) on each device, three repeats each. Every other Mac, and every Windows or Linux machine, is unmeasured.
 

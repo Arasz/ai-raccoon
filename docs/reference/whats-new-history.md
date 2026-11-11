@@ -1,11 +1,15 @@
 # What's new — history
 
-Older release highlights, archived from the README: 1.6.0 through 1.50.0. Newest at the top.
+Older release highlights, archived from the README: 1.6.0 through 1.63.0. Newest at the top.
 
 For current highlights, see [README.md](../../README.md#whats-new).
 
 ---
 
+- The reserved `shared` document target refuses a delete, and every MCP tool now declares the scope it may run in, so the build fails when a tool declares none. (1.63.0) [ADR-0139](../adr/0139-attribute-derived-tool-scope.md)
+- **The embed drain's rows-per-run is configurable from 64 to 4096, and what that value costs is written down (1.61.0).** [ADR-0136](../adr/0136-the-embed-drain-rows-per-run-runs-from-64-to-4096.md)
+- On Windows and Linux x64 the bundled engine can run on CUDA, opt-in with `ai-raccoon settings model device cuda <path>`, unmeasured; the WebGPU plugin shipped in 1.51.0 is off again in 1.51.2. (1.51.0) [ADR-0112](../adr/0112-webgpu-plugin-off-macos-and-opt-in-cuda.md) · [how-to](../how-to/configure-embedding-engines.md)
+- An encrypted bank tells a wrong key (exit `21`) from a corrupt file (exit `32`), using a key-check file next to the bank that never holds the key. (1.50.0) [ADR-0111](../adr/0111-key-check-sidecar-distinguishes-wrong-key-from-corrupt-bank.md)
 - On Apple silicon the bundled engine can run through the MLX execution provider, opt-in with `ai-raccoon settings model device mlx`. (1.50.0) [ADR-0110](../adr/0110-opt-in-mlx-execution-provider-for-the-bundled-engine.md) · [how-to](../how-to/configure-embedding-engines.md)
 - Code search indexes `.mjs`/`.cjs`, Vue, shell, Terraform/HCL and Gherkin `.feature` files, and ingest skips binary files whatever their extension. (1.49.0) [how-to](../how-to/search-the-code-corpus.md#what-gets-indexed) · [research](../work/2026-09-23-ast-chunking-on-granite-and-magika.md)
 - Code search matches words inside identifiers (`overlap` finds `WatchOverlapResolver`) and indexes HTML, CSS/SCSS and SQL files. (1.48.0) [ADR-0109](../adr/0109-code-fts-carries-a-derived-identifiers-column.md) · [results](../work/2026-09-23-code-retrieval-eval-results.md)
