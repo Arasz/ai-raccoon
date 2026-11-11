@@ -4,7 +4,7 @@
     "branch": "docs/checklist-decision-recording (from origin/main)",
     "commit": "e095edd855082a6dfdfe63f903e8f5d16d70ac00",
     "data-root": "/private/tmp/air-2.6.0-decisions/data",
-    "note": "Scoped pass: decision recording only (ADR-0142 + Semantica import). Packed osx-arm64 into an isolated tool path; scratch data root; ephemeral port 64470; live bank never opened. Scratch server stopped (pid 81024). Drivers: /private/tmp/air-2.6.0-decisions/{mcp.py,scenario.py}."
+    "note": "Scoped pass: decision recording only (ADR-0142 + Semantica import). Packed osx-arm64 into an isolated tool path; scratch data root; ephemeral port 64470; live bank never opened. Scratch server stopped (pid 81024). Drivers: /private/tmp/air-2.6.0-decisions/{mcp.py,scenario.py}. Gap items (unlink, graph bounds, MCP export cap) ran later the same day against the same scratch bank on port 64470 (pid 94785, stopped); driver gaps.py."
   },
   "derived": {
     "version": "2.6.0",
@@ -100,6 +100,36 @@
       "command": "python3 /private/tmp/air-2.6.0-decisions/scenario.py 64470 import; then the --apply command it printed, twice; export_decisions selector all=true",
       "evidence": "preview with semantica-legacy/storage-task unregistered -> exit 17; mapping without status on c1d5977e -> exit 17, canApply false, blocker missing-status at entities[6]; clean preview -> exit 0, canApply true, counts {entities 9, relationships 13, decisions 4, edges 3}, stderr prints --apply --request-id ... --source-digest 290A36C0... --mapping-digest 4850E88C...; apply -> exit 0 replayed=false revision 13; apply again -> exit 0 replayed=true revision 13. export all: imports 22, imported decisions: 'Choose where decisions live' accepted, 'Choose how agents reach decisions' accepted, 'Choose the export default' proposed, 'Zapisać graf w osobnym pliku — 決定' rejected (task storage-task).",
       "observed-result": "The preview blocks until the tasks are registered and every status is chosen. Apply uses the mapped statuses and tasks, and a replay writes nothing. All 22 source records (9 entities + 13 relationships) are kept.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-unlink-keeps-history",
+      "expected-result": "unlink_decisions with a stale expectedProjectRevision -> decision-conflict; with the current revision the edge leaves get_decision_graph but stays in export_decisions with removedAt and removalActor; unlinking a supersedes edge -> decision-invalid-transition (supersession is permanent). (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "python3 /private/tmp/air-2.6.0-decisions/gaps.py 64470",
+      "evidence": "graph before: [depends_on B->A, supersedes C->A]; stale (expected 12, current 13) -> decision-conflict: Decision revision conflict: expected 12, current 13; current -> removedRevision 14, removalReason 'no longer needed'; supersedes -> decision-invalid-transition: A supersession edge is permanent.; graph after: ['supersedes']; export edge: {kind depends_on, removedAt 2026-11-11T13:40:46Z, removalActor checklist}",
+      "observed-result": "The edge is removed from the live graph but kept in history. The stale and the permanent-edge cases are refused.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-graph-bounds",
+      "expected-result": "On a chain X1 depends_on X2 depends_on X3, get_decision_graph from X1 upstream: depth 0 = seed alone with truncated reason depth; depth 1 = 2 nodes, reason depth; depth 2 = 3 nodes, not truncated; maxNodes 2 = 2 nodes, reason nodes. downstream from X1 returns the seed alone (direction control). depth 11 and maxNodes 0 -> invalid-argument. Upstream = edges whose source is the node (DecisionService.Views.cs). (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "python3 /private/tmp/air-2.6.0-decisions/gaps.py 64470",
+      "evidence": "upstream depth 0 -> nodes 1, truncated, reasons [depth]; depth 1 -> nodes 2 edges 1, [depth]; depth 2 -> nodes 3 edges 2, not truncated; depth 2 maxNodes 2 -> nodes 2, [nodes]; downstream depth 2 -> nodes 1; depth 11 -> invalid-argument: ... must be in the range given by <0> and <11>, was <11>; maxNodes 0 -> invalid-argument ... <1> and <501>, was <0>",
+      "observed-result": "Depth and node limits truncate and report the reason; out-of-range values are refused. The refusal text shows an exclusive upper bound ('<0> and <11>, was <11>'), which reads as if 11 were allowed: a wording defect, not a behaviour one. The first driver attempt used downstream and saw the seed alone; that was a driver error about direction, not a product defect.",
+      "status": "pass",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-mcp-export-size-cap",
+      "expected-result": "Record enough decisions in one task to pass 1 MiB (reasoning is capped at 16 000 chars, so about 80 x 15 000). MCP export_decisions of that task -> decision-export-too-large naming the byte size and the CLI command; ai-raccoon decisions export of the same task exits 0 and its counts match what was recorded. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "python3 /private/tmp/air-2.6.0-decisions/gaps.py 64470",
+      "evidence": "50 000-char reasoning -> invalid-argument: ... size less than or equal to 16000; 80 x 15 000 recorded; MCP export -> decision-export-too-large: The export is 1252531 bytes, over the 1048576-byte MCP limit ... Run 'ai-raccoon decisions export --project-id ...'; CLI export -> exit 0, 1299727 bytes, counts {decisions 80, versions 80}",
+      "observed-result": "MCP refuses an oversized export with the size and the way out, and the CLI exports the same task in full.",
       "status": "pass",
       "accepted": null,
       "acceptance-reason": ""

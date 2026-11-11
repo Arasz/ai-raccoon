@@ -415,6 +415,36 @@
       "acceptance-reason": ""
     },
     {
+      "item": "decision-unlink-keeps-history",
+      "expected-result": "unlink_decisions with a stale expectedProjectRevision -> decision-conflict; with the current revision the edge leaves get_decision_graph but stays in export_decisions with removedAt and removalActor; unlinking a supersedes edge -> decision-invalid-transition (supersession is permanent). (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-graph-bounds",
+      "expected-result": "On a chain X1 depends_on X2 depends_on X3, get_decision_graph from X1 upstream: depth 0 = seed alone with truncated reason depth; depth 1 = 2 nodes, reason depth; depth 2 = 3 nodes, not truncated; maxNodes 2 = 2 nodes, reason nodes. downstream from X1 returns the seed alone (direction control). depth 11 and maxNodes 0 -> invalid-argument. Upstream = edges whose source is the node (DecisionService.Views.cs). (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
+      "item": "decision-mcp-export-size-cap",
+      "expected-result": "Record enough decisions in one task to pass 1 MiB (reasoning is capped at 16 000 chars, so about 80 x 15 000). MCP export_decisions of that task -> decision-export-too-large naming the byte size and the CLI command; ai-raccoon decisions export of the same task exits 0 and its counts match what was recorded. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "",
+      "evidence": "",
+      "observed-result": "",
+      "status": "",
+      "accepted": null,
+      "acceptance-reason": ""
+    },
+    {
       "item": "consistent-live-database-backup",
       "expected-result": "Create a consistent backup before upgrade, validate SQLite integrity, preserve a durable copy and record its digest.",
       "command": "",
