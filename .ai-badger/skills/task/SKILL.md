@@ -16,15 +16,14 @@ scope: default
 metadata:
   hermes:
     tags: [task, orchestration, delegation, worktree]
-    related_skills: [create-task-spec, commit-reminder, test-economy, multi-agent-communication]
+    related_skills: [create-task-spec, decision-record, commit-reminder, test-economy, multi-agent-communication]
 ---
 
 # task orchestration skill
 
-Runs one backlog task as a separated, token-tracked unit of work. High-leverage thinking —
-planning and the final quality gate — is delegated to a high-reasoning model; implementation
-models do the hands-on work; the orchestrating session integrates and tracks everything so a
-dead session can be resumed.
+Runs one backlog task as a separated, token-tracked unit of work. Planning and the final
+quality gate go to a high-reasoning model, hands-on work to implementation models; the
+orchestrating session integrates and tracks everything so a dead session can be resumed.
 
 **All project specifics come from `.ai-badger/config.json`** — never hardcode a build command,
 a persona name, or a repository. Tracking data lives in `.ai-badger/task-tracking/` (gitignored).
@@ -46,12 +45,12 @@ derive the loop after analyze — a best-effort match of loop to scope.
 
 ### Low-effort loop
 
-prepare → analyze → plan → plan review → implementation → review implementation →
-apply fixes → pr → gates → close task → reflect → merge
+prepare → analyze → plan → plan review → decision record → implementation →
+review implementation → apply fixes → pr → gates → close task → reflect → merge
 
 ### High-effort loop
 
-prepare → analyze → plan (MoE) → plan review (MoE) → implementation →
+prepare → analyze → plan (MoE) → plan review (MoE) → decision record → implementation →
 review implementation (MoE) → apply fixes → QA: test quality & coverage → pr →
 gates → close task → reflect → merge
 
@@ -69,6 +68,8 @@ Integration step: required in the high-effort variant. The plan carries a join s
 
 **plan review (MoE)** — High-effort: MoE panel (3 experts, subject-matched). At least one expert
 different from plan authoring.
+
+**decision record** — Feature or behaviour change: commit a `decision-record` before code.
 
 **implementation** — Code phase per persona routing. TDD mandatory.
 
@@ -99,8 +100,8 @@ context.
 
     {repo-alias}-{key}
 
-- **repo-alias:** Constant per repo. Examples: `jsaa`, `aib`, `air`, `ahp`. Determined by checking
-  `config.json`'s `sourceControl.repoAlias`, memory, or deriving from repo name.
+- **repo-alias:** Constant per repo (`jsaa`, `aib`): `config.json`'s `sourceControl.repoAlias`,
+  memory, or derived from the repo name.
 - **key:** 5 words conveying purpose. Hyphenated lowercase slug.
 
 Example: `aib-default-loop`.

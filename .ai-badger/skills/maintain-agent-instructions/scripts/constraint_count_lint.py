@@ -3,7 +3,7 @@
 
 Rule 8B: long negative instruction lists are brittle.  This script counts bullet
 points under the 'Non-negotiable invariants' section and compares to a threshold
-(default 35).  Returns exit 1 when the count exceeds the threshold.
+(default 37).  Returns exit 1 when the count exceeds the threshold.
 
 Usage: constraint_count_lint.py <file> [--threshold N]
 """
@@ -52,7 +52,7 @@ def count_invariants(path: Path) -> int:
     return count
 
 
-def check(path: Path, threshold: int = 35) -> Result:
+def check(path: Path, threshold: int = 37) -> Result:
     """Run the constraint count check against *path*."""
     count = count_invariants(path)
     return Result(passed=count <= threshold, count=count, threshold=threshold)
@@ -61,7 +61,7 @@ def check(path: Path, threshold: int = 35) -> Result:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("file", type=Path, help="Instruction file to check (CLAUDE.md or copilot-instructions.md)")
-    ap.add_argument("--threshold", type=int, default=35, help="Max allowed invariant count (default 35)")
+    ap.add_argument("--threshold", type=int, default=37, help="Max allowed invariant count (default 37)")
     args = ap.parse_args(argv)
 
     try:

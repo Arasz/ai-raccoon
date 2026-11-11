@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 import shutil
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import frontmatter as fm
 from _shared import MANAGED_HEADER, _MANAGED_PREFIX
@@ -75,6 +75,17 @@ def invariant_summary(text: str, name: str) -> str:
         return f"{label} — " + opening.replace("\n", "\n  ")
     rule = _rule_sentence(opening)
     return label + (f" — {rule}." if rule else "")
+
+
+# Invariants rendered ahead of the rest: they govern every message an agent writes, so they
+# belong where an agent reads first (critical-instruction-placement).
+LEAD_INVARIANTS = frozenset({"simplified-technical-english"})
+
+
+def lead_first(named: List[Tuple[str, str]]) -> List[str]:
+    """The bullets of `(name, bullet)` pairs, LEAD_INVARIANTS first, the rest in their order."""
+    ordered = sorted(named, key=lambda pair: pair[0] not in LEAD_INVARIANTS)
+    return [bullet for _, bullet in ordered]
 
 
 _ABBREVIATION = re.compile(r"\b(?:e\.g|i\.e|etc|cf|vs|approx)\.$", re.IGNORECASE)

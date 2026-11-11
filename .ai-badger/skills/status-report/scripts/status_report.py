@@ -356,7 +356,7 @@ def render(data: Dict[str, Any]) -> str:
             out.append(f"checklist: {progress['checked']}/{progress['total']} done")
         else:
             out.append("no checkbox items in plan — read the plan file for point states")
-    out.append("loop: prepare > analyze > plan > plan review > implementation > "
+    out.append("loop: prepare > analyze > plan > plan review > decision record > implementation > "
                "review implementation > apply fixes > pr > gates > close task > "
                "reflect > merge")
 
