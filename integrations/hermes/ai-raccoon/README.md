@@ -118,7 +118,7 @@ provider emits both signals itself.
 - `sync_turn` and prefetch run only for primary agents (`agent_context == "primary"`);
   cron and subagent contexts never write to the bank.
 - The plain-MCP ai-raccoon server registration in `~/.hermes/config.yaml` can stay
-  alongside (full 22-tool surface); the provider adds the lifecycle on top of the
+  alongside (full 43-tool surface); the provider adds the lifecycle on top of the
   curated 4-tool surface.
 
 ## Tests
