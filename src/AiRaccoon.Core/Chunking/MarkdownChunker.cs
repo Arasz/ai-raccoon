@@ -18,7 +18,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
     private readonly TokenCount _countTokens;
     private readonly bool _markdown;
 
-    public MarkdownChunker(TokenCount countTokens) : this(countTokens, markdown: true)
+    public MarkdownChunker(TokenCount countTokens) : this(countTokens, true)
     {
     }
 
@@ -30,7 +30,8 @@ public sealed class MarkdownChunker : IMarkdownChunker
         _markdown = markdown;
     }
 
-    public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) => Split(text, maxTokens, overlayTokens, countTokens ?? _countTokens, _markdown);
+    public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null) =>
+        Split(text, maxTokens, overlayTokens, countTokens ?? _countTokens, _markdown);
 
     /// <summary>
     ///     Same units, boundaries and budgets as <see cref="Chunk" /> (docs/adr/0036 untouched) —
@@ -118,8 +119,10 @@ public sealed class MarkdownChunker : IMarkdownChunker
         return contexts;
     }
 
-    /// <summary>A chunk's path is the context of its FIRST contentful new unit (#549/#550: stated
-    /// positively — a chunk that only opens a section claims none); overlay units are never eligible.</summary>
+    /// <summary>
+    ///     A chunk's path is the context of its FIRST contentful new unit (#549/#550: stated
+    ///     positively — a chunk that only opens a section claims none); overlay units are never eligible.
+    /// </summary>
     private static string HeadingPathFor(List<Unit> chunkUnits, int newUnitCount, int cursor, List<string> contexts)
     {
         var newStart = chunkUnits.Count - newUnitCount;
@@ -134,8 +137,10 @@ public sealed class MarkdownChunker : IMarkdownChunker
         return "";
     }
 
-    /// <summary>The leaf of every section the chunk holds content for, in order — one chunk may
-    /// hold several whole sections, and each one's `file#section` anchor must resolve (#549).</summary>
+    /// <summary>
+    ///     The leaf of every section the chunk holds content for, in order — one chunk may
+    ///     hold several whole sections, and each one's `file#section` anchor must resolve (#549).
+    /// </summary>
     private static IReadOnlyList<string> SectionsFor(List<Unit> chunkUnits, int newUnitCount, int cursor, List<string> contexts)
     {
         var newStart = chunkUnits.Count - newUnitCount;
@@ -217,8 +222,10 @@ public sealed class MarkdownChunker : IMarkdownChunker
         return new ChunkBuild(chunkUnits, c, newUnitCount);
     }
 
-    /// <summary>A heading opens the chunk holding its section; a cut section defers whole
-    /// (docs/adr/0048, #538 amendment).</summary>
+    /// <summary>
+    ///     A heading opens the chunk holding its section; a cut section defers whole
+    ///     (docs/adr/0048, #538 amendment).
+    /// </summary>
     private static int DeferOpenSection(List<Unit> chunkUnits, int newUnitCount, List<Unit> units, int cursor)
     {
         var newStart = chunkUnits.Count - newUnitCount;
@@ -275,8 +282,10 @@ public sealed class MarkdownChunker : IMarkdownChunker
         return removeCount;
     }
 
-    /// <summary>Skips blank-only units past the chunk boundary before asking whether real content
-    /// follows: only a real, non-opener unit proves the section continues past the boundary.</summary>
+    /// <summary>
+    ///     Skips blank-only units past the chunk boundary before asking whether real content
+    ///     follows: only a real, non-opener unit proves the section continues past the boundary.
+    /// </summary>
     private static bool SectionContinuesPastChunk(List<Unit> units, int cursor)
     {
         var idx = cursor;
@@ -483,10 +492,10 @@ public sealed class MarkdownChunker : IMarkdownChunker
             run++;
         }
 
-        return new string(marker, run) + "\n";
+        return $"{new string(marker, run)}\n";
     }
 
-    private static string EndWithNewline(string text) => text.EndsWith('\n') ? text : text + "\n";
+    private static string EndWithNewline(string text) => text.EndsWith('\n') ? text : $"{text}\n";
 
     private static void FlushAsLines(List<Unit> units, List<string> lines, int maxTokens, TokenCount countTokens)
     {
@@ -531,14 +540,18 @@ public sealed class MarkdownChunker : IMarkdownChunker
 
     private static bool IsHeadingUnit(Unit unit) => unit.IsHeading;
 
-    /// <summary>The headings DeferOpenSection may cut a section on, and BuildContexts pushes onto
-    /// the heading stack: levels 1-2, never the ingest "## Source:" provenance header — the same
-    /// headings HeadingPathParser keeps (docs/adr/0004).</summary>
+    /// <summary>
+    ///     The headings DeferOpenSection may cut a section on, and BuildContexts pushes onto
+    ///     the heading stack: levels 1-2, never the ingest "## Source:" provenance header — the same
+    ///     headings HeadingPathParser keeps (docs/adr/0004).
+    /// </summary>
     private static bool IsSectionOpenerUnit(Unit unit) => IsHeadingUnit(unit) && HeadingLevel(unit.Lines[0].TrimStart()) <= 2 && !IsSourceProvenanceUnit(unit);
 
-    /// <summary>The (level, text) HeadingStack.Push needs for a unit already known to be a section
-    /// opener — same level scan IsHeadingLine/IsSectionOpenerUnit use, same text HeadingPathParser
-    /// would extract.</summary>
+    /// <summary>
+    ///     The (level, text) HeadingStack.Push needs for a unit already known to be a section
+    ///     opener — same level scan IsHeadingLine/IsSectionOpenerUnit use, same text HeadingPathParser
+    ///     would extract.
+    /// </summary>
     private static Heading SectionOpenerLevelAndText(Unit unit)
     {
         var trimmed = unit.Lines[0].TrimStart();
@@ -550,9 +563,11 @@ public sealed class MarkdownChunker : IMarkdownChunker
 
     private static bool IsBlankUnit(Unit unit) => unit.Lines.Count == 1 && string.IsNullOrWhiteSpace(unit.Lines[0]);
 
-    /// <summary>A unit worth leaving behind after a deferral, or worth labelling a chunk by: not
-    /// blank and not itself a heading (any level) — a lone heading is exactly as unindexable as a
-    /// lone blank line.</summary>
+    /// <summary>
+    ///     A unit worth leaving behind after a deferral, or worth labelling a chunk by: not
+    ///     blank and not itself a heading (any level) — a lone heading is exactly as unindexable as a
+    ///     lone blank line.
+    /// </summary>
     private static bool IsContentfulUnit(Unit unit) => !IsBlankUnit(unit) && !IsHeadingUnit(unit);
 
     /// <summary>ATX heading, levels 1-6 (a bare '#' or '#Text' does not count) — same shape HeadingPathParser parses.</summary>

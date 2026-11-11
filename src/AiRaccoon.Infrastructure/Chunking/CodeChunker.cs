@@ -29,8 +29,9 @@ public sealed class CodeChunker : ICodeChunker
     /// </summary>
     public const int DefaultBudget = EmbeddingService.MaxManifestChunkTokens;
 
-    private readonly TokenCount _countTokens;
     private readonly int _budget;
+
+    private readonly TokenCount _countTokens;
 
     public CodeChunker(ICodeTokenizer tokenizer, int budget = DefaultBudget)
     {
@@ -66,7 +67,7 @@ public sealed class CodeChunker : ICodeChunker
         {
             var boundary = ChooseBoundary(units, cursor, maxTokens);
             var end = VerifyAndShed(units, cursor, boundary, maxTokens, countTokens);
-            var text = string.Concat(units.Skip(cursor).Take(end - cursor + 1).Select(u => u.Text));
+            var text = string.Concat(units.Skip(cursor).Take(end - cursor + 1).Select(static u => u.Text));
             chunks.Add(new CodeChunk(text, units[cursor].LineStart, units[end].LineEnd));
             cursor = end + 1;
         }
@@ -117,7 +118,7 @@ public sealed class CodeChunker : ICodeChunker
     {
         while (end > cursor)
         {
-            var joined = string.Concat(units.Skip(cursor).Take(end - cursor + 1).Select(u => u.Text));
+            var joined = string.Concat(units.Skip(cursor).Take(end - cursor + 1).Select(static u => u.Text));
             if (countTokens(joined) <= maxTokens)
             {
                 return end;
@@ -148,7 +149,7 @@ public sealed class CodeChunker : ICodeChunker
             block.Add(lines[i]);
 
             var atTransition = IsBlank(lines[i]) && i + 1 < lines.Count && !IsBlank(lines[i + 1])
-                               && block.Any(l => !IsBlank(l));
+                               && block.Any(static l => !IsBlank(l));
             if (!atTransition)
             {
                 continue;
@@ -230,7 +231,9 @@ public sealed class CodeChunker : ICodeChunker
 
     private static bool IsBlank(string line) => string.IsNullOrWhiteSpace(line);
 
-    /// <summary>One packable unit: its own line span and the cumulative file-wide brace balance
-    /// right after it ends (a crude, non-AST heuristic — braces inside strings/comments count too).</summary>
+    /// <summary>
+    ///     One packable unit: its own line span and the cumulative file-wide brace balance
+    ///     right after it ends (a crude, non-AST heuristic — braces inside strings/comments count too).
+    /// </summary>
     private sealed record Unit(string Text, int TokenCount, int LineStart, int LineEnd, int EndBalance);
 }

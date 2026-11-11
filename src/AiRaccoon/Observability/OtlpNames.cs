@@ -41,6 +41,11 @@ public static class OtlpNames
     /// <summary>The MCP semantic convention's own name for this measurement (owner ruling D2: adopt).</summary>
     public const string ToolDuration = "mcp.server.operation.duration";
 
+    public const string McpDispatchDelay = "ai_raccoon.mcp.dispatch.delay";
+    public const string McpRequestDuration = "ai_raccoon.mcp.request.duration";
+    public const string McpRequestStartTimestampKey = "ai_raccoon.mcp.request.start_timestamp";
+    public const string McpRequestStartTimestampProperty = McpRequestStartTimestampKey;
+
     public const string QueueQueued = "ai_raccoon.queue.queued";
     public const string QueueEvictions = "ai_raccoon.queue.evictions";
     public const string QueueEvictedScore = "ai_raccoon.queue.eviction.score";

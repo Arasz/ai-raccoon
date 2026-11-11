@@ -9,14 +9,12 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Degradation;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Workspace;
 using AiRaccoon.Observability;
 using AiRaccoon.Prompts;
-using AiRaccoon.Tests;
 using AiRaccoon.Tools;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -1579,7 +1577,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         try
         {
-            await Gate.RequireAsync(string.Empty, AccessRequirement.Write, "add_memory", CancellationToken.None);
+            await Gate.RequireAsync("", AccessRequirement.Write, "add_memory", CancellationToken.None);
         }
         catch (McpException ex)
         {

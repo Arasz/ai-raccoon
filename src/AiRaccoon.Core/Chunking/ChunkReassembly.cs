@@ -11,8 +11,10 @@ namespace AiRaccoon.Core.Chunking;
 /// </summary>
 public static class ChunkReassembly
 {
-    /// <summary>The body exactly as written (its line endings restored), or null when no join of
-    /// <paramref name="rows" /> hashes to the stem of <paramref name="path" />.</summary>
+    /// <summary>
+    ///     The body exactly as written (its line endings restored), or null when no join of
+    ///     <paramref name="rows" /> hashes to the stem of <paramref name="path" />.
+    /// </summary>
     public static string? TryMerge(string path, IReadOnlyList<NoteRow> rows)
     {
         Guard.IsNotNull(path);

@@ -8,7 +8,6 @@ using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
-using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Logging.Testing;

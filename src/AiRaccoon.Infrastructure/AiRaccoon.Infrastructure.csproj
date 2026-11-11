@@ -8,6 +8,7 @@
         <PackageReference Include="Dapper"/>
         <PackageReference Include="HiraokaHyperTools.sqlite-vec"/>
         <PackageReference Include="CommunityToolkit.Diagnostics"/>
+        <PackageReference Include="JetBrains.Annotations"/>
         <PackageReference Include="Microsoft.Bcl.Memory"/>
         <PackageReference Include="Microsoft.Data.Sqlite.Core"/>
         <PackageReference Include="Microsoft.Extensions.AI.Abstractions"/>

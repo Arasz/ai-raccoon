@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Net;
+using AiRaccoon.Hosting;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Hosting.Watchdog;
@@ -20,7 +21,7 @@ namespace AiRaccoon.Setup;
 ///     configured loopback port. Bare launches never reach here — they proxy to the
 ///     backend (ADR-0020); stdio and https have no host path.
 /// </summary>
-internal static partial class McpServerSetup
+internal static class McpServerSetup
 {
     /// <summary>
     ///     Flips ASP.NET Core 10's default off so the hosting request Activity carries OTel
@@ -53,6 +54,7 @@ internal static partial class McpServerSetup
         }
 
         var builder = WebApplication.CreateBuilder([]);
+        builder.Services.AddHttpContextAccessor();
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddInMemoryCollection(
             Environment.GetEnvironmentVariables()
@@ -79,6 +81,8 @@ internal static partial class McpServerSetup
     {
         private WebApplication ConfigureMcpEndpoints(ServerConfig config)
         {
+            webApplication.UseMiddleware<McpRequestTelemetryMiddleware>();
+
             var gated = config.McpToken;
             if (gated != null)
             {

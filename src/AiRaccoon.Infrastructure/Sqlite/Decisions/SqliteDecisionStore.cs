@@ -59,22 +59,6 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
 
     private sealed class Session(SqliteConnection connection, string projectId, bool writable) : IDecisionWriter
     {
-        private CommandDefinition Command(string sql, object? args, CancellationToken ct)
-        {
-            var parameters = new DynamicParameters(args);
-            parameters.Add("projectId", projectId);
-            return new CommandDefinition(sql, parameters, cancellationToken: ct);
-        }
-
-        private async Task<IReadOnlyList<IDictionary<string, object>>> Rows(string sql, object? args, CancellationToken ct) =>
-            (await connection.QueryAsync(Command(sql, args, ct))).Select(row => (IDictionary<string, object>)row).ToArray();
-
-        private async Task Execute(string sql, object args, CancellationToken ct)
-        {
-            Guard.IsTrue(writable, nameof(writable), "A read transaction cannot write decisions.");
-            await connection.ExecuteAsync(Command(sql, args, ct));
-        }
-
         public async Task<long> RevisionAsync(CancellationToken cancellationToken) =>
             await connection.ExecuteScalarAsync<long?>(Command("SELECT revision FROM decision_projects WHERE project_id=@projectId", null, cancellationToken)) ?? 0;
 
@@ -92,7 +76,9 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
             (await Rows("SELECT * FROM decision_versions WHERE project_id=@projectId AND decision_id=@decisionId ORDER BY version", new { decisionId }, cancellationToken)).Select(Version).ToArray();
 
         public async Task<IReadOnlyList<DecisionVersion>> CurrentVersionsAsync(CancellationToken cancellationToken) =>
-            (await Rows("SELECT v.* FROM decision_versions v JOIN decisions d ON d.project_id=v.project_id AND d.decision_id=v.decision_id AND d.current_version=v.version WHERE v.project_id=@projectId ORDER BY v.decision_id", null, cancellationToken)).Select(Version).ToArray();
+            (await Rows(
+                "SELECT v.* FROM decision_versions v JOIN decisions d ON d.project_id=v.project_id AND d.decision_id=v.decision_id AND d.current_version=v.version WHERE v.project_id=@projectId ORDER BY v.decision_id",
+                null, cancellationToken)).Select(Version).ToArray();
 
         public async Task<IReadOnlyList<DecisionVersion>> AllVersionsAsync(CancellationToken cancellationToken) =>
             (await Rows("SELECT * FROM decision_versions WHERE project_id=@projectId ORDER BY decision_id,version", null, cancellationToken)).Select(Version).ToArray();
@@ -114,11 +100,11 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
             }
 
             return (await Rows("""
-                SELECT s.decision_id,bm25(decision_fts) AS raw_rank FROM decision_fts
-                JOIN decision_search s ON s.id=decision_fts.rowid
-                WHERE decision_fts MATCH @match AND s.project_id=@projectId
-                ORDER BY raw_rank,s.decision_id
-                """, new { match }, cancellationToken))
+                               SELECT s.decision_id,bm25(decision_fts) AS raw_rank FROM decision_fts
+                               JOIN decision_search s ON s.id=decision_fts.rowid
+                               WHERE decision_fts MATCH @match AND s.project_id=@projectId
+                               ORDER BY raw_rank,s.decision_id
+                               """, new { match }, cancellationToken))
                 .Select(row => new DecisionSearchHit(Text(row, "decision_id"), Convert.ToDouble(row["raw_rank"], CultureInfo.InvariantCulture))).ToArray();
         }
 
@@ -133,23 +119,23 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
             }
 
             var hits = match is null
-                ? string.Empty
+                ? ""
                 : """
                   WITH hits AS MATERIALIZED (SELECT s.decision_id,bm25(decision_fts) AS raw_rank FROM decision_fts
                       JOIN decision_search s ON s.id=decision_fts.rowid WHERE decision_fts MATCH @match AND s.project_id=@projectId)
                   """;
-            var from = "FROM decision_versions v JOIN decisions d ON d.project_id=v.project_id AND d.decision_id=v.decision_id AND d.current_version=v.version"
-                       + (match is null ? string.Empty : " JOIN hits h ON h.decision_id=v.decision_id");
+            var from =
+                $"FROM decision_versions v JOIN decisions d ON d.project_id=v.project_id AND d.decision_id=v.decision_id AND d.current_version=v.version{(match is null ? "" : " JOIN hits h ON h.decision_id=v.decision_id")}";
             var where = new List<string> { "v.project_id=@projectId" };
             if (filter.TaskIds is not null)
             {
                 where.Add("""
-                    v.decision_id IN (
-                        SELECT decision_id FROM decisions WHERE project_id=@projectId AND origin_task_id IN (SELECT value FROM json_each(@taskIds))
-                        UNION SELECT decision_id FROM decision_versions WHERE project_id=@projectId AND task_id IN (SELECT value FROM json_each(@taskIds))
-                        UNION SELECT source_id FROM decision_edges WHERE project_id=@projectId
-                            AND (task_id IN (SELECT value FROM json_each(@taskIds)) OR removal_task_id IN (SELECT value FROM json_each(@taskIds))))
-                    """);
+                          v.decision_id IN (
+                              SELECT decision_id FROM decisions WHERE project_id=@projectId AND origin_task_id IN (SELECT value FROM json_each(@taskIds))
+                              UNION SELECT decision_id FROM decision_versions WHERE project_id=@projectId AND task_id IN (SELECT value FROM json_each(@taskIds))
+                              UNION SELECT source_id FROM decision_edges WHERE project_id=@projectId
+                                  AND (task_id IN (SELECT value FROM json_each(@taskIds)) OR removal_task_id IN (SELECT value FROM json_each(@taskIds))))
+                          """);
             }
 
             if (filter.Category is not null)
@@ -175,9 +161,9 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
             };
             var condition = string.Join(" AND ", where);
             var total = await connection.ExecuteScalarAsync<int>(Command($"{hits} SELECT COUNT(*) {from} WHERE {condition}", args, cancellationToken));
-            var after = filter.AfterId is null ? string.Empty : " AND v.decision_id>@afterId";
+            var after = filter.AfterId is null ? "" : " AND v.decision_id>@afterId";
             var order = filter.ByRank ? "h.raw_rank,v.decision_id" : "v.decision_id";
-            var rank = match is null ? string.Empty : ",h.raw_rank";
+            var rank = match is null ? "" : ",h.raw_rank";
             var rows = await Rows($"{hits} SELECT v.*{rank} {from} WHERE {condition}{after} ORDER BY {order} LIMIT @take", args, cancellationToken);
             return new DecisionCurrentPage(rows.Select(row => new DecisionCurrentHit(Version(row),
                 match is null ? null : Convert.ToDouble(row["raw_rank"], CultureInfo.InvariantCulture))).ToArray(), total);
@@ -192,11 +178,12 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
 
         public async Task<IReadOnlyList<DecisionImport>> ImportsAsync(CancellationToken cancellationToken) =>
             (await Rows("SELECT * FROM decision_imports WHERE project_id=@projectId ORDER BY source_namespace,external_id", null, cancellationToken))
-            .Select(row => new DecisionImport(Text(row, "source_namespace"), Text(row, "external_id"), Optional(row, "decision_id"), Text(row, "task_id"), Text(row, "source_digest"), Text(row, "raw_payload"), Text(row, "mapping"))).ToArray();
+            .Select(row => new DecisionImport(Text(row, "source_namespace"), Text(row, "external_id"), Optional(row, "decision_id"), Text(row, "task_id"), Text(row, "source_digest"),
+                Text(row, "raw_payload"), Text(row, "mapping"))).ToArray();
 
         public async Task SetRevisionAsync(long revision, CancellationToken cancellationToken)
         {
-            Guard.IsTrue(writable, nameof(writable));
+            Guard.IsTrue(writable);
             Guard.IsGreaterThan(revision, 0L);
             var changed = await connection.ExecuteAsync(Command(
                 "UPDATE decision_projects SET revision=@revision WHERE project_id=@projectId AND revision=@previous",
@@ -207,23 +194,25 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
             }
         }
 
-        public Task AddTaskAsync(DecisionTask task, CancellationToken cancellationToken) => Execute(
-            "INSERT INTO decision_tasks(project_id,task_id,title,registered_order,registered_at,source_ref) VALUES(@projectId,@TaskId,@Title,@RegisteredOrder,@at,@SourceRef)",
-            new { task.TaskId, task.Title, task.RegisteredOrder, at = Iso(task.RegisteredAt), task.SourceRef }, cancellationToken);
+        public Task AddTaskAsync(DecisionTask task, CancellationToken cancellationToken) =>
+            Execute(
+                "INSERT INTO decision_tasks(project_id,task_id,title,registered_order,registered_at,source_ref) VALUES(@projectId,@TaskId,@Title,@RegisteredOrder,@at,@SourceRef)",
+                new { task.TaskId, task.Title, task.RegisteredOrder, at = Iso(task.RegisteredAt), task.SourceRef }, cancellationToken);
 
-        public Task AddRecordAsync(DecisionRecord decision, CancellationToken cancellationToken) => Execute(
-            "INSERT INTO decisions(project_id,decision_id,origin_task_id,current_version,created_at) VALUES(@projectId,@DecisionId,@OriginTaskId,@CurrentVersion,@at)",
-            new { decision.DecisionId, decision.OriginTaskId, decision.CurrentVersion, at = Iso(decision.CreatedAt) }, cancellationToken);
+        public Task AddRecordAsync(DecisionRecord decision, CancellationToken cancellationToken) =>
+            Execute(
+                "INSERT INTO decisions(project_id,decision_id,origin_task_id,current_version,created_at) VALUES(@projectId,@DecisionId,@OriginTaskId,@CurrentVersion,@at)",
+                new { decision.DecisionId, decision.OriginTaskId, decision.CurrentVersion, at = Iso(decision.CreatedAt) }, cancellationToken);
 
         public async Task AddVersionAsync(DecisionVersion version, CancellationToken cancellationToken)
         {
             var content = version.Content;
             await Execute("""
-                INSERT INTO decision_versions(project_id,decision_id,version,task_id,project_revision,title,category,scenario,outcome,reasoning,
-                    alternatives,consequences,confidence,decision_maker,status,valid_from,valid_until,recorded_at,actor,session_id,change_reason,sources)
-                VALUES(@projectId,@DecisionId,@Version,@TaskId,@ProjectRevision,@Title,@Category,@Scenario,@Outcome,@Reasoning,
-                    @alternatives,@consequences,@Confidence,@Maker,@status,@validFrom,@validUntil,@at,@Actor,@SessionId,@ChangeReason,@sources)
-                """, new
+                          INSERT INTO decision_versions(project_id,decision_id,version,task_id,project_revision,title,category,scenario,outcome,reasoning,
+                              alternatives,consequences,confidence,decision_maker,status,valid_from,valid_until,recorded_at,actor,session_id,change_reason,sources)
+                          VALUES(@projectId,@DecisionId,@Version,@TaskId,@ProjectRevision,@Title,@Category,@Scenario,@Outcome,@Reasoning,
+                              @alternatives,@consequences,@Confidence,@Maker,@status,@validFrom,@validUntil,@at,@Actor,@SessionId,@ChangeReason,@sources)
+                          """, new
             {
                 version.DecisionId, version.Version, version.TaskId, version.ProjectRevision,
                 content.Title, content.Category, content.Scenario, content.Outcome, content.Reasoning, content.Confidence, content.Maker,
@@ -235,38 +224,70 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
                 new { version.Version, version.DecisionId }, cancellationToken);
         }
 
-        public Task AddEdgeAsync(DecisionEdge edge, CancellationToken cancellationToken) => Execute("""
-            INSERT INTO decision_edges(project_id,edge_id,source_id,target_id,kind,reason,task_id,created_revision,created_at,actor,session_id)
-            VALUES(@projectId,@EdgeId,@SourceId,@TargetId,@kind,@Reason,@TaskId,@CreatedRevision,@at,@Actor,@SessionId)
-            """, new { edge.EdgeId, edge.SourceId, edge.TargetId, kind = edge.Kind.ToString(), edge.Reason, edge.TaskId, edge.CreatedRevision, at = Iso(edge.CreatedAt), edge.Actor, edge.SessionId }, cancellationToken);
+        public Task AddEdgeAsync(DecisionEdge edge, CancellationToken cancellationToken) =>
+            Execute("""
+                    INSERT INTO decision_edges(project_id,edge_id,source_id,target_id,kind,reason,task_id,created_revision,created_at,actor,session_id)
+                    VALUES(@projectId,@EdgeId,@SourceId,@TargetId,@kind,@Reason,@TaskId,@CreatedRevision,@at,@Actor,@SessionId)
+                    """,
+                new { edge.EdgeId, edge.SourceId, edge.TargetId, kind = edge.Kind.ToString(), edge.Reason, edge.TaskId, edge.CreatedRevision, at = Iso(edge.CreatedAt), edge.Actor, edge.SessionId },
+                cancellationToken);
 
-        public Task RemoveEdgeAsync(DecisionEdge edge, CancellationToken cancellationToken) => Execute("""
-            UPDATE decision_edges SET removed_revision=@RemovedRevision,removed_at=@at,removal_task_id=@RemovalTaskId,
-                removal_reason=@RemovalReason,removal_actor=@RemovalActor,removal_session_id=@RemovalSessionId
-            WHERE project_id=@projectId AND edge_id=@EdgeId AND removed_revision IS NULL
-            """, new { edge.EdgeId, edge.RemovedRevision, at = Iso(edge.RemovedAt), edge.RemovalTaskId, edge.RemovalReason, edge.RemovalActor, edge.RemovalSessionId }, cancellationToken);
+        public Task RemoveEdgeAsync(DecisionEdge edge, CancellationToken cancellationToken) =>
+            Execute("""
+                    UPDATE decision_edges SET removed_revision=@RemovedRevision,removed_at=@at,removal_task_id=@RemovalTaskId,
+                        removal_reason=@RemovalReason,removal_actor=@RemovalActor,removal_session_id=@RemovalSessionId
+                    WHERE project_id=@projectId AND edge_id=@EdgeId AND removed_revision IS NULL
+                    """, new { edge.EdgeId, edge.RemovedRevision, at = Iso(edge.RemovedAt), edge.RemovalTaskId, edge.RemovalReason, edge.RemovalActor, edge.RemovalSessionId }, cancellationToken);
 
-        public Task AddReceiptAsync(string requestId, DecisionReceipt receipt, CancellationToken cancellationToken) => Execute("""
-            INSERT INTO decision_requests(project_id,request_id,canonical_payload_hash,result,committed_revision)
-            VALUES(@projectId,@requestId,@PayloadHash,@ResultJson,@CommittedRevision)
-            """, new { requestId, receipt.PayloadHash, receipt.ResultJson, receipt.CommittedRevision }, cancellationToken);
+        public Task AddReceiptAsync(string requestId, DecisionReceipt receipt, CancellationToken cancellationToken) =>
+            Execute("""
+                    INSERT INTO decision_requests(project_id,request_id,canonical_payload_hash,result,committed_revision)
+                    VALUES(@projectId,@requestId,@PayloadHash,@ResultJson,@CommittedRevision)
+                    """, new { requestId, receipt.PayloadHash, receipt.ResultJson, receipt.CommittedRevision }, cancellationToken);
 
-        public Task AddImportAsync(DecisionImport import, CancellationToken cancellationToken) => Execute("""
-            INSERT INTO decision_imports(project_id,source_namespace,external_id,decision_id,task_id,source_digest,raw_payload,mapping)
-            VALUES(@projectId,@SourceNamespace,@ExternalId,@DecisionId,@TaskId,@SourceDigest,@RawPayload,@Mapping)
-            """, import, cancellationToken);
+        public Task AddImportAsync(DecisionImport import, CancellationToken cancellationToken) =>
+            Execute("""
+                    INSERT INTO decision_imports(project_id,source_namespace,external_id,decision_id,task_id,source_digest,raw_payload,mapping)
+                    VALUES(@projectId,@SourceNamespace,@ExternalId,@DecisionId,@TaskId,@SourceDigest,@RawPayload,@Mapping)
+                    """, import, cancellationToken);
 
-        private static DecisionRecord Record(IDictionary<string, object> row) => new(Text(row, "decision_id"), Text(row, "origin_task_id"), checked((int)Number(row, "current_version")), Time(row, "created_at"));
-        private static DecisionVersion Version(IDictionary<string, object> row) => new(Text(row, "decision_id"), checked((int)Number(row, "version")), Text(row, "task_id"), Number(row, "project_revision"),
-            new DecisionContent(Text(row, "title"), Text(row, "category"), Text(row, "scenario"), Text(row, "outcome"), Text(row, "reasoning"),
-                Optional(row, "confidence") is null ? null : Convert.ToDouble(row["confidence"], CultureInfo.InvariantCulture), Optional(row, "decision_maker"),
-                JsonSerializer.Deserialize<string[]>(Text(row, "alternatives")), JsonSerializer.Deserialize<string[]>(Text(row, "consequences")), JsonSerializer.Deserialize<DecisionSource[]>(Text(row, "sources")),
-                OptionalTime(row, "valid_from"), OptionalTime(row, "valid_until")),
-            Enum.Parse<DecisionStatus>(Text(row, "status")), Time(row, "recorded_at"), Text(row, "actor"), Text(row, "session_id"), Optional(row, "change_reason"));
-        private static DecisionEdge Edge(IDictionary<string, object> row) => new(Text(row, "edge_id"), Text(row, "source_id"), Text(row, "target_id"), Enum.Parse<DecisionEdgeKind>(Text(row, "kind")), Text(row, "reason"), Text(row, "task_id"), Number(row, "created_revision"), Time(row, "created_at"), Text(row, "actor"), Text(row, "session_id"),
-            Optional(row, "removed_revision") is null ? null : Number(row, "removed_revision"), OptionalTime(row, "removed_at"), Optional(row, "removal_task_id"), Optional(row, "removal_reason"), Optional(row, "removal_actor"), Optional(row, "removal_session_id"));
+        private CommandDefinition Command(string sql, object? args, CancellationToken ct)
+        {
+            var parameters = new DynamicParameters(args);
+            parameters.Add("projectId", projectId);
+            return new CommandDefinition(sql, parameters, cancellationToken: ct);
+        }
+
+        private async Task<IReadOnlyList<IDictionary<string, object>>> Rows(string sql, object? args, CancellationToken ct) =>
+            (await connection.QueryAsync(Command(sql, args, ct))).Select(row => (IDictionary<string, object>)row).ToArray();
+
+        private async Task Execute(string sql, object args, CancellationToken ct)
+        {
+            Guard.IsTrue(writable, nameof(writable), "A read transaction cannot write decisions.");
+            await connection.ExecuteAsync(Command(sql, args, ct));
+        }
+
+        private static DecisionRecord Record(IDictionary<string, object> row) =>
+            new(Text(row, "decision_id"), Text(row, "origin_task_id"), checked((int)Number(row, "current_version")), Time(row, "created_at"));
+
+        private static DecisionVersion Version(IDictionary<string, object> row) =>
+            new(Text(row, "decision_id"), checked((int)Number(row, "version")), Text(row, "task_id"), Number(row, "project_revision"),
+                new DecisionContent(Text(row, "title"), Text(row, "category"), Text(row, "scenario"), Text(row, "outcome"), Text(row, "reasoning"),
+                    Optional(row, "confidence") is null ? null : Convert.ToDouble(row["confidence"], CultureInfo.InvariantCulture), Optional(row, "decision_maker"),
+                    JsonSerializer.Deserialize<string[]>(Text(row, "alternatives")), JsonSerializer.Deserialize<string[]>(Text(row, "consequences")),
+                    JsonSerializer.Deserialize<DecisionSource[]>(Text(row, "sources")),
+                    OptionalTime(row, "valid_from"), OptionalTime(row, "valid_until")),
+                Enum.Parse<DecisionStatus>(Text(row, "status")), Time(row, "recorded_at"), Text(row, "actor"), Text(row, "session_id"), Optional(row, "change_reason"));
+
+        private static DecisionEdge Edge(IDictionary<string, object> row) =>
+            new(Text(row, "edge_id"), Text(row, "source_id"), Text(row, "target_id"), Enum.Parse<DecisionEdgeKind>(Text(row, "kind")), Text(row, "reason"), Text(row, "task_id"),
+                Number(row, "created_revision"), Time(row, "created_at"), Text(row, "actor"), Text(row, "session_id"),
+                Optional(row, "removed_revision") is null ? null : Number(row, "removed_revision"), OptionalTime(row, "removed_at"), Optional(row, "removal_task_id"), Optional(row, "removal_reason"),
+                Optional(row, "removal_actor"), Optional(row, "removal_session_id"));
+
         private static string Text(IDictionary<string, object> row, string key) => Convert.ToString(row[key], CultureInfo.InvariantCulture)!;
         private static string? Optional(IDictionary<string, object> row, string key) => row[key] is null or DBNull ? null : Text(row, key);
+
         /// <summary>The FTS match expression ANDing every word of <paramref name="query" />, or null when it has none.</summary>
         private static string? Match(string query)
         {
@@ -279,11 +300,11 @@ public sealed class SqliteDecisionStore(ISqliteConnectionFactory factory, IShare
         {
             if (count == 1)
             {
-                return "\"" + terms[start] + "\"";
+                return $"\"{terms[start]}\"";
             }
 
             var left = count / 2;
-            return "(" + MatchTerms(terms, start, left) + " AND " + MatchTerms(terms, start + left, count - left) + ")";
+            return $"({MatchTerms(terms, start, left)} AND {MatchTerms(terms, start + left, count - left)})";
         }
 
         private static long Number(IDictionary<string, object> row, string key) => Convert.ToInt64(row[key], CultureInfo.InvariantCulture);

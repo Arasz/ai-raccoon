@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Extensions.Hosting;

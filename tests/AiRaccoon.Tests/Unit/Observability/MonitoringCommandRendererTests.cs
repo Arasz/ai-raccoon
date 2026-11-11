@@ -23,7 +23,7 @@ public class MonitoringCommandRendererTests
         // every meter the container creates. The value is everything after the flag, so a
         // duplicated "--counters " cannot hide: the limit keeps the remainder whole, and the
         // equality then fails.
-        var countersValue = result.Split("--counters ", 2, StringSplitOptions.None)[1];
+        var countersValue = result.Split("--counters ", 2)[1];
         countersValue.ShouldBe(string.Join(',', OtlpNames.Meters));
     }
 

@@ -4,7 +4,6 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Access;
 using AiRaccoon.Projects;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Projects;
 using AiRaccoon.Setup;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.DependencyInjection;

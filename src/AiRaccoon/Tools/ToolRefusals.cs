@@ -3,7 +3,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Decisions;
-using AiRaccoon.Decisions;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
@@ -11,6 +10,7 @@ using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Decisions;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using FluentValidation;
@@ -29,6 +29,34 @@ namespace AiRaccoon.Tools;
 /// </summary>
 internal static partial class ToolRefusals
 {
+    /// <summary>
+    ///     The wire prefix for a call cancelled while its request connection was still live.
+    ///     Kept out of <see cref="RefusalPrefixes" /> on purpose: <see cref="PrefixFor" /> matches
+    ///     the exact type, so a table entry could not cover the <see cref="OperationCanceledException" />
+    ///     hierarchy (notably <see cref="TaskCanceledException" />) — the filter catches the base
+    ///     type explicitly instead. The doc-drift test concats this with the two tables above.
+    /// </summary>
+    internal const string CancelledPrefix = "cancelled";
+
+    /// <summary>
+    ///     The wire prefix for a transient SQLITE_BUSY (5) / SQLITE_LOCKED (6) — another writer holds
+    ///     the bank's write lock past the busy timeout (WP12's write-lock convoy). Special-cased in
+    ///     <see cref="Filter" /> rather than tabled in <see cref="RefusalPrefixes" /> because the
+    ///     condition depends on <c>SqliteErrorCode</c>, not the exception type: the same
+    ///     <c>SqliteException</c> also carries real faults (26, "file is not a database") that must
+    ///     stay unmapped. The doc-drift test concats this with the two tables above.
+    /// </summary>
+    internal const string BankBusyPrefix = "bank-busy";
+
+    /// <summary>
+    ///     The wire prefix for a call that named a tool this server does not have. The SDK throws
+    ///     <see cref="McpProtocolException" /> for a name it cannot resolve, and the MCP protocol
+    ///     says a tool error belongs in the result (<c>CallToolResult.IsError</c>) where a model
+    ///     can read it and call again — so the name is answered here, with the tool to call
+    ///     instead when the name was renamed (ADR-0140).
+    /// </summary>
+    internal const string UnknownToolPrefix = "unknown-tool";
+
     /// <summary>The one table both <see cref="PrefixFor" /> and its tests read — no second hand-kept copy.</summary>
     internal static readonly IReadOnlyDictionary<Type, string> RefusalPrefixes = new Dictionary<Type, string>
     {
@@ -89,9 +117,6 @@ internal static partial class ToolRefusals
     /// </summary>
     internal static readonly IReadOnlyCollection<string> DirectThrowPrefixes = ["invalid-params"];
 
-    /// <summary>The decision tools' own refusal kinds, mapped by <see cref="DecisionRefusals" /> rather than by exception type.</summary>
-    internal static IReadOnlyCollection<string> DecisionPrefixes => DecisionErrorKinds.All;
-
     /// <summary>
     ///     The remedy clause appended to a mapped refusal whose own message names none — what an
     ///     agent relays to its human (F53). Access-denied is absent on purpose: MemoryAccessGuard,
@@ -104,40 +129,15 @@ internal static partial class ToolRefusals
         ["watching-disabled"] = " Run 'ai-raccoon settings watch enable <projectId|*> true' to enable it."
     };
 
-    /// <summary>The remedy clause for a refusal prefix, or empty when the prefix has none.</summary>
-    internal static string RemedyFor(string prefix) => RefusalRemedies.GetValueOrDefault(prefix, string.Empty);
-
-    /// <summary>
-    ///     The wire prefix for a call cancelled while its request connection was still live.
-    ///     Kept out of <see cref="RefusalPrefixes" /> on purpose: <see cref="PrefixFor" /> matches
-    ///     the exact type, so a table entry could not cover the <see cref="OperationCanceledException" />
-    ///     hierarchy (notably <see cref="TaskCanceledException" />) — the filter catches the base
-    ///     type explicitly instead. The doc-drift test concats this with the two tables above.
-    /// </summary>
-    internal const string CancelledPrefix = "cancelled";
-
-    /// <summary>
-    ///     The wire prefix for a transient SQLITE_BUSY (5) / SQLITE_LOCKED (6) — another writer holds
-    ///     the bank's write lock past the busy timeout (WP12's write-lock convoy). Special-cased in
-    ///     <see cref="Filter" /> rather than tabled in <see cref="RefusalPrefixes" /> because the
-    ///     condition depends on <c>SqliteErrorCode</c>, not the exception type: the same
-    ///     <c>SqliteException</c> also carries real faults (26, "file is not a database") that must
-    ///     stay unmapped. The doc-drift test concats this with the two tables above.
-    /// </summary>
-    internal const string BankBusyPrefix = "bank-busy";
-
-    /// <summary>
-    ///     The wire prefix for a call that named a tool this server does not have. The SDK throws
-    ///     <see cref="McpProtocolException" /> for a name it cannot resolve, and the MCP protocol
-    ///     says a tool error belongs in the result (<c>CallToolResult.IsError</c>) where a model
-    ///     can read it and call again — so the name is answered here, with the tool to call
-    ///     instead when the name was renamed (ADR-0140).
-    /// </summary>
-    internal const string UnknownToolPrefix = "unknown-tool";
-
     /// <summary>Expected refusals remain visible at Warning without being logged as errors.</summary>
     private static readonly HashSet<string> WarningPrefixes =
         ["sync-network", "sync-corrupt-file", "sync-tampered-remote", "unknown-hash", "embedding-install-replaced", "code-engine-unloadable", "bank-busy"];
+
+    /// <summary>The decision tools' own refusal kinds, mapped by <see cref="DecisionRefusals" /> rather than by exception type.</summary>
+    internal static IReadOnlyCollection<string> DecisionPrefixes => DecisionErrorKinds.All;
+
+    /// <summary>The remedy clause for a refusal prefix, or empty when the prefix has none.</summary>
+    internal static string RemedyFor(string prefix) => RefusalRemedies.GetValueOrDefault(prefix, "");
 
     /// <summary>
     ///     The wire prefix for a known refusal, or null when the exception is a genuine failure.
@@ -180,13 +180,13 @@ internal static partial class ToolRefusals
                 // Answered like the live-token case. The SDK's send of it throws on this dead token, and
                 // CancelledRequestLogging drops the stack-trace warn that send logs — 914/915 is the record.
                 LogTimedOut(request, Stopwatch.GetElapsedTime(started));
-                return CancelledResult(request.Params?.Name ?? string.Empty);
+                return CancelledResult(request.Params?.Name ?? "");
             }
             catch (OperationCanceledException)
             {
                 return Cancelled(request);
             }
-            catch (Exception ex) when (DecisionTools.Names.Contains(request.Params?.Name ?? string.Empty)
+            catch (Exception ex) when (DecisionTools.Names.Contains(request.Params?.Name ?? "")
                                        && DecisionRefusals.For(ex) is { } refusal)
             {
                 // The decision tools refuse exactly as their HTTP routes do: one shared mapping.
@@ -247,7 +247,7 @@ internal static partial class ToolRefusals
         var logger = request.Services?.GetService<ILoggerFactory>()?.CreateLogger("AiRaccoon.Tools.ToolRefusals");
         if (logger is not null)
         {
-            Log.ToolFailed(logger, request.Params?.Name ?? string.Empty, exception.GetType().Name, exception);
+            Log.ToolFailed(logger, request.Params?.Name ?? "", exception.GetType().Name, exception);
         }
 
         return new CallToolResult
@@ -265,21 +265,23 @@ internal static partial class ToolRefusals
     /// </summary>
     private static CallToolResult Cancelled(RequestContext<CallToolRequestParams> request)
     {
-        var toolName = request.Params?.Name ?? string.Empty;
+        var toolName = request.Params?.Name ?? "";
         const string reason = "request was cancelled";
         var logger = request.Services?.GetService<ILoggerFactory>()?.CreateLogger("AiRaccoon.Tools.ToolRefusals");
         if (logger is not null)
         {
             Log.ToolCancelled(logger, toolName, reason);
         }
+
         return CancelledResult(toolName);
     }
 
-    private static CallToolResult CancelledResult(string toolName) => new()
-    {
-        IsError = true,
-        Content = [new TextContentBlock { Text = $"{CancelledPrefix}: tool '{toolName}' request was cancelled" }]
-    };
+    private static CallToolResult CancelledResult(string toolName) =>
+        new()
+        {
+            IsError = true,
+            Content = [new TextContentBlock { Text = $"{CancelledPrefix}: tool '{toolName}' request was cancelled" }]
+        };
 
     /// <summary>
     ///     Logs which call the caller gave up on, after how long, and how long its query was — the
@@ -293,7 +295,7 @@ internal static partial class ToolRefusals
             return;
         }
 
-        var name = request.Params?.Name ?? string.Empty;
+        var name = request.Params?.Name ?? "";
         var elapsedMs = (long)elapsed.TotalMilliseconds;
         if (request.Params?.Arguments is { } arguments
             && arguments.TryGetValue("query", out var value)
@@ -322,7 +324,7 @@ internal static partial class ToolRefusals
 
     private static CallToolResult UnknownTool(RequestContext<CallToolRequestParams> request)
     {
-        var name = request.Params?.Name ?? string.Empty;
+        var name = request.Params?.Name ?? "";
         return Refused(request, UnknownToolGuidance.Message(name), UnknownToolGuidance.Reason(name), LogLevel.Information);
     }
 
@@ -334,11 +336,11 @@ internal static partial class ToolRefusals
         {
             if (level == LogLevel.Warning)
             {
-                Log.ToolRefusedAtWarning(logger, request.Params?.Name ?? string.Empty, reason);
+                Log.ToolRefusedAtWarning(logger, request.Params?.Name ?? "", reason);
             }
             else
             {
-                Log.ToolRefused(logger, request.Params?.Name ?? string.Empty, reason);
+                Log.ToolRefused(logger, request.Params?.Name ?? "", reason);
             }
         }
 

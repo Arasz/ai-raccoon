@@ -14,9 +14,9 @@ public static class SqliteEncryptionInit
 
     /// <summary>Idempotent: sets and freezes the sqlite3mc provider.</summary>
     /// <remarks>
-    /// SQLITE_CONFIG_MEMSTATUS off: with it on, every SQLite malloc/free takes one process-wide
-    /// mutex, so concurrent connections serialize on allocation. Must precede the library's
-    /// initialization, which the first connection triggers.
+    ///     SQLITE_CONFIG_MEMSTATUS off: with it on, every SQLite malloc/free takes one process-wide
+    ///     mutex, so concurrent connections serialize on allocation. Must precede the library's
+    ///     initialization, which the first connection triggers.
     /// </remarks>
     public static void EnsureInitialized()
     {

@@ -86,7 +86,7 @@ public sealed class DeviceSwitchTests(DeviceSwitchTests.SharedDataRoot dataRoot,
             new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),
             NoOpMeasurementRecorder.Instance, TimeProvider.System,
             new InfrastructureOptions { DataRoot = root, Scope = InstallScope.User }, store);
-        var generator = service.CreateGenerator(new EmbeddingSettings("local", null, null, null)).ShouldBeAssignableTo<ILocalEmbeddingGenerator>()!;
+        var generator = service.CreateGenerator(new EmbeddingSettings("local", null, null, null)).ShouldBeAssignableTo<ILocalEmbeddingGenerator>();
         return (generator, logger);
     }
 

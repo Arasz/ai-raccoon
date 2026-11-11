@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Shouldly;
 using Xunit;

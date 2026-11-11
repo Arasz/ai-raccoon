@@ -48,7 +48,7 @@ internal static class PromotionContentEvidence
 
     internal static ContentEvidence Evaluate(
         string value, ProvenanceArchetype archetype, string projectId, IReadOnlyList<string> allProjectIds) =>
-        Evaluate(CandidateFeatureExtractor.Extract(value ?? string.Empty, projectId, allProjectIds), archetype);
+        Evaluate(CandidateFeatureExtractor.Extract(value ?? "", projectId, allProjectIds), archetype);
 
     internal static ContentEvidence Evaluate(CandidateFeatures f, ProvenanceArchetype archetype)
     {
@@ -181,7 +181,7 @@ internal static class PromotionContentEvidence
     /// <summary>Curated durable note; still checked for status shape (session dumps mis-filed as notes).</summary>
     internal static ContentEvidence EvaluateAutoMemoryNote(
         string value, string projectId, IReadOnlyList<string> allProjectIds) =>
-        EvaluateAutoMemoryNote(CandidateFeatureExtractor.Extract(value ?? string.Empty, projectId, allProjectIds));
+        EvaluateAutoMemoryNote(CandidateFeatureExtractor.Extract(value ?? "", projectId, allProjectIds));
 
     internal static ContentEvidence EvaluateAutoMemoryNote(CandidateFeatures f)
     {

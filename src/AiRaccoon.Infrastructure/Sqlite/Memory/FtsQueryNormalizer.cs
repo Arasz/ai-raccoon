@@ -10,6 +10,18 @@ namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 /// </summary>
 internal static partial class FtsQueryNormalizer
 {
+    /// <summary>
+    ///     A query term longer than this matches by its first this-many characters: a term longer than a
+    ///     whole chunk is stored hard-cut, and only its first piece is guaranteed to hold this much of its start.
+    /// </summary>
+    public const int PrefixLength = 64;
+
+    /// <summary>
+    ///     Above this many raw tokens, an OR join drops stopwords and repeats and keeps the first this-many
+    ///     distinct terms, so a pasted dump costs about as much as a sentence.
+    /// </summary>
+    public const int MaxOrTerms = SearchDefaults.MaxKeywordTerms;
+
     // Ordinal is safe (and measurably faster than OrdinalIgnoreCase — see
     // SearchValuesVsHashSetBenchmark) because every token is lowercased before the
     // membership checks below; the sets themselves are all-lowercase ASCII.
@@ -24,14 +36,6 @@ internal static partial class FtsQueryNormalizer
             "was", "were", "being", "a", "an", "in", "on", "at", "to",
             "for", "of", "by", "with", "from"
         ], StringComparison.Ordinal);
-
-    /// <summary>A query term longer than this matches by its first this-many characters: a term longer than a
-    /// whole chunk is stored hard-cut, and only its first piece is guaranteed to hold this much of its start.</summary>
-    public const int PrefixLength = 64;
-
-    /// <summary>Above this many raw tokens, an OR join drops stopwords and repeats and keeps the first this-many
-    /// distinct terms, so a pasted dump costs about as much as a sentence.</summary>
-    public const int MaxOrTerms = SearchDefaults.MaxKeywordTerms;
 
     public static FtsQueryPlan BuildPlan(string query)
     {
@@ -64,16 +68,16 @@ internal static partial class FtsQueryNormalizer
         if (tokens.Count <= 4)
         {
             return new FtsQueryPlan(
-                string.Join(" AND ", tokens.Select(Term)),
-                string.Join(" OR ", orTerms.Concat(bigrams)),
-                tokens.Count)
-            { MatchesAllTerms = true };
+                    string.Join(" AND ", tokens.Select(Term)),
+                    string.Join(" OR ", orTerms.Concat(bigrams)),
+                    tokens.Count)
+                { MatchesAllTerms = true };
         }
 
         return new FtsQueryPlan(string.Join(" OR ", orTerms), null, tokens.Count);
     }
 
-    private static string Term(string token) => token.Length > PrefixLength ? token[..PrefixLength] + "*" : token;
+    private static string Term(string token) => token.Length > PrefixLength ? $"{token[..PrefixLength]}*" : token;
 
     [GeneratedRegex(@"[\p{L}\p{N}_]+", RegexOptions.CultureInvariant)]
     private static partial Regex TokenRegex();

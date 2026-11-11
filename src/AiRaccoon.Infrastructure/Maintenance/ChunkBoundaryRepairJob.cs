@@ -42,7 +42,8 @@ public sealed partial class ChunkBoundaryRepairJob(
     private static partial class Log
     {
         [LoggerMessage(EventId = 447, Level = LogLevel.Information,
-            Message = "Chunk boundary repair: {Reingested} file(s) re-ingested, {Groups} group(s) re-chunked into {Rows} row(s), {Unproven} note(s) left as stored (text order not provable from the rows), {Repositioned} file(s) renumbered in place")]
+            Message =
+                "Chunk boundary repair: {Reingested} file(s) re-ingested, {Groups} group(s) re-chunked into {Rows} row(s), {Unproven} note(s) left as stored (text order not provable from the rows), {Repositioned} file(s) renumbered in place")]
         public static partial void Repaired(ILogger logger, int reingested, int groups, int rows, int unproven, int repositioned);
     }
 }

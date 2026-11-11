@@ -8,7 +8,5 @@ public sealed class ProjectNameAmbiguousException(string name, IReadOnlyList<str
     public IReadOnlyList<string> ProjectIds { get; } = projectIds;
 
     private static string BuildMessage(string name, IReadOnlyList<string> projectIds) =>
-        $"{projectIds.Count} projects are registered under the name '{ProjectIdText.Printable(name)}': " +
-        $"{string.Join(", ", projectIds.Select(id => ProjectIdText.Printable(id)))}. " +
-        "Ask the user which one to use and pass that id as projectId.";
+        $"{projectIds.Count} projects are registered under the name '{ProjectIdText.Printable(name)}': {string.Join(", ", projectIds.Select(static id => ProjectIdText.Printable(id)))}. Ask the user which one to use and pass that id as projectId.";
 }

@@ -103,7 +103,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
     [RetryFact]
     public void ResolveChunkBudgetFor_ManifestWith8192Window_IsCappedAt510()
     {
-        var dir = WriteManifestDir(Manifest(8192), ("vocab.txt", "vocab"), ("model.onnx", "model"));
+        var dir = WriteManifestDir(Manifest(), ("vocab.txt", "vocab"), ("model.onnx", "model"));
 
         Service().ResolveChunkBudgetFor(new EmbeddingSettings("local", dir, null, null))
             .ShouldBe(EmbeddingService.MaxManifestChunkTokens, "ctx − 2 = 8190, capped at the D6 constant 510");
@@ -112,7 +112,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
     [RetryFact]
     public void ResolveChunkBudgetFor_ManifestWithExplicitChunkTokens_WinsOverThe510Cap()
     {
-        var manifest = Manifest(8192);
+        var manifest = Manifest();
         manifest["chunkTokens"] = 700;
         var dir = WriteManifestDir(manifest, ("vocab.txt", "vocab"), ("model.onnx", "model"));
 
@@ -178,7 +178,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
     public void TrimQueryToWindow_ManifestModel_TrimsToTheSameCap()
     {
         var vocab = BundledModel.ResolveVocabPath();
-        var dir = WriteManifestDir(Manifest(8192, vocabSha: ShaOfFile(vocab)), ("vocab.txt", File.ReadAllText(vocab)), ("model.onnx", "model"));
+        var dir = WriteManifestDir(Manifest(vocabSha: ShaOfFile(vocab)), ("vocab.txt", File.ReadAllText(vocab)), ("model.onnx", "model"));
         var service = Service();
         var settings = new EmbeddingSettings("local", dir, null, null);
         var longQuery = string.Join(' ', Enumerable.Repeat(
@@ -196,14 +196,14 @@ public sealed class EmbeddingServiceManifestBudgetTests
     public void TrimQueryToWindow_ManifestModel_AtTheCap_IsNotTrimmed()
     {
         var vocab = BundledModel.ResolveVocabPath();
-        var dir = WriteManifestDir(Manifest(8192, vocabSha: ShaOfFile(vocab)), ("vocab.txt", File.ReadAllText(vocab)), ("model.onnx", "model"));
+        var dir = WriteManifestDir(Manifest(vocabSha: ShaOfFile(vocab)), ("vocab.txt", File.ReadAllText(vocab)), ("model.onnx", "model"));
         var service = Service();
         var settings = new EmbeddingSettings("local", dir, null, null);
         var tokenizer = service.ResolveTokenizer(settings)!;
         var filler = string.Join(' ', Enumerable.Repeat(
             "how does the retrieval pipeline weigh full text against vectors when the corpus is large", 40));
         var atCap = AiRaccoon.Core.Chunking.TokenBudget.Trim(filler,
-            EmbeddingService.MaxManifestChunkTokens, new AiRaccoon.Core.Chunking.TokenCount(text => tokenizer.CountTokens(text)));
+            EmbeddingService.MaxManifestChunkTokens, text => tokenizer.CountTokens(text));
 
         var result = service.TrimQueryToWindow(settings, atCap);
 
@@ -266,7 +266,7 @@ public sealed class EmbeddingServiceManifestBudgetTests
         var tokenizer = Service().ResolveTokenizer(settings);
 
         tokenizer.ShouldBeOfType<SentencePieceEmbeddingTokenizer>();
-        tokenizer!.SpecialTokenReservation.ShouldBe(2);
+        tokenizer.SpecialTokenReservation.ShouldBe(2);
         tokenizer.CountTokens("The quick brown fox jumps over the lazy dog.").ShouldBeGreaterThan(0);
     }
 

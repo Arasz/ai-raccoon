@@ -110,13 +110,13 @@ internal static partial class ProvenanceArchetypeClassifier
 
     internal static ProvenanceArchetype Classify(string path, string? sourceFile, string value)
     {
-        var (_, isMirror) = TurnMirrorPrefix.Split(value ?? string.Empty);
+        var (_, isMirror) = TurnMirrorPrefix.Split(value ?? "");
         if (isMirror)
         {
             return ProvenanceArchetype.TurnMirror;
         }
 
-        var src = sourceFile ?? string.Empty;
+        var src = sourceFile ?? "";
         if (TranscriptSource().IsMatch(src))
         {
             return ProvenanceArchetype.Transcript;
@@ -125,7 +125,7 @@ internal static partial class ProvenanceArchetypeClassifier
         // The store mints a hex filename for every agent write, so a hex `path` means "organic
         // write", not "document chunk" — checked before any source_file-shaped routing, since
         // source_file on such a row is a citation, not a provenance (METHOD.md §7).
-        var rawPath = path ?? string.Empty;
+        var rawPath = path ?? "";
         if (string.IsNullOrEmpty(sourceFile) || HexName().IsMatch(Basename(rawPath.ToLowerInvariant())))
         {
             return ProvenanceArchetype.OrganicNote;

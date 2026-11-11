@@ -2,7 +2,6 @@ using System.Net;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
-using AiRaccoon.Tests.Unit.Setup;
 using NSubstitute;
 using Shouldly;
 using Xunit;

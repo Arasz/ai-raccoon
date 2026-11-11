@@ -67,6 +67,12 @@ public sealed class ToolGate(
     }
 
     /// <summary>
+    ///     The envelope every tool returns: the payload plus what is waiting for the calling
+    ///     project — the whole bank only when the call itself named no project.
+    /// </summary>
+    public async Task<ApiEnvelope<T>> WrapAsync<T>(string? projectId, T data, CancellationToken cancellationToken) => new(data, await queue.GetMetaAsync(projectId, cancellationToken));
+
+    /// <summary>
     ///     The blank-id branch: consult the resolver when one is wired — its Resolved id re-enters
     ///     the normal canonicalize/access/registration chain unchanged — and refuse Ambiguous or
     ///     None with the probed working directory in the message. With no resolver wired, the same
@@ -83,21 +89,11 @@ public sealed class ToolGate(
                     return resolved.ProjectId;
                 case ProjectIdResolution.Ambiguous ambiguous:
                     throw new McpException(
-                        $"invalid-params: projectId is ambiguous from cwd {Environment.CurrentDirectory}: " +
-                        $"candidates {string.Join(", ", ambiguous.SortedIds)}");
+                        $"invalid-params: projectId is ambiguous from cwd {Environment.CurrentDirectory}: candidates {string.Join(", ", ambiguous.SortedIds)}");
             }
         }
 
         throw new McpException(
-            $"invalid-params: projectId is required (no registered project's scope contains cwd " +
-            $"{Environment.CurrentDirectory}; pass projectId explicitly, or register this directory with " +
-            "add_watch / settings ingest scope add)");
+            $"invalid-params: projectId is required (no registered project's scope contains cwd {Environment.CurrentDirectory}; pass projectId explicitly, or register this directory with add_watch / settings ingest scope add)");
     }
-
-    /// <summary>
-    ///     The envelope every tool returns: the payload plus what is waiting for the calling
-    ///     project — the whole bank only when the call itself named no project.
-    /// </summary>
-    public async Task<ApiEnvelope<T>> WrapAsync<T>(string? projectId, T data, CancellationToken cancellationToken) =>
-        new(data, await queue.GetMetaAsync(projectId, cancellationToken));
 }

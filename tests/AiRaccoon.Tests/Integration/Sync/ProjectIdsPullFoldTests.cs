@@ -1,9 +1,7 @@
-using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Tests.TestHelpers;

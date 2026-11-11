@@ -37,8 +37,8 @@ public sealed class OnnxEmbeddingGeneratorSpecTests : IAsyncLifetime
     [RetryFact]
     public async Task ClsPooling_SelectsTheFirstTokenRow_AndNormalizes()
     {
-        using var mean = Build("mean", "l2");
-        using var cls = Build("cls", "l2");
+        using var mean = Build();
+        using var cls = Build("cls");
         const string text = "Memory retrieval ranking evidence for the CLS pooling probe";
 
         var meanVector = (await mean.GenerateAsync([text], cancellationToken: TestContext.Current.CancellationToken))[0].Vector.ToArray();

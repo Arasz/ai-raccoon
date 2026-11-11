@@ -7,8 +7,11 @@ namespace AiRaccoon.Infrastructure.Decisions;
 public sealed record SemanticaMappingRecord(string? ExternalId, string? TaskId, string? Status, string? Title);
 
 /// <summary>The operator-written mapping from a Semantica export to native tasks, statuses and edge kinds.</summary>
-public sealed record SemanticaMapping(string SourceNamespace, string LegacyTaskId,
-    IReadOnlyDictionary<string, string> EdgeKinds, IReadOnlyDictionary<string, SemanticaMappingRecord> Records)
+public sealed record SemanticaMapping(
+    string SourceNamespace,
+    string LegacyTaskId,
+    IReadOnlyDictionary<string, string> EdgeKinds,
+    IReadOnlyDictionary<string, SemanticaMappingRecord> Records)
 {
     private const string Parameter = "mapping";
 
@@ -45,14 +48,11 @@ public sealed record SemanticaMapping(string SourceNamespace, string LegacyTaskI
             Optional(element, "status", where), Optional(element, "title", where));
     }
 
-    private static string? Optional(JsonElement element, string name, string where) =>
-        element.TryGetProperty(name, out var value) ? Required(value, $"{where}.{name}") : null;
+    private static string? Optional(JsonElement element, string name, string where) => element.TryGetProperty(name, out var value) ? Required(value, $"{where}.{name}") : null;
 
-    private static string Required(JsonElement element, string where) =>
-        SemanticaJson.ReadString(element) ?? throw new ArgumentException($"{where} must be a string.", Parameter);
+    private static string Required(JsonElement element, string where) => SemanticaJson.ReadString(element) ?? throw new ArgumentException($"{where} must be a string.", Parameter);
 
-    private static JsonElement Property(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var value) ? value : throw new ArgumentException($"{name} is required.", Parameter);
+    private static JsonElement Property(JsonElement element, string name) => element.TryGetProperty(name, out var value) ? value : throw new ArgumentException($"{name} is required.", Parameter);
 
     private static IEnumerable<JsonProperty> Object(JsonElement element, string where) =>
         element.ValueKind == JsonValueKind.Object ? element.EnumerateObject() : throw new ArgumentException($"{where} must be a JSON object.", Parameter);

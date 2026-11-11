@@ -1,9 +1,8 @@
-using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.CommandLine;
 using System.Net;
 using AiRaccoon.Infrastructure.Assets;
-using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Infrastructure.Embedding.Download;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
@@ -69,14 +68,12 @@ internal sealed class ModelDownloadCommands(
             }
 
             await streams.WriteOutputLineAsync(
-                $"downloaded {repoId}@{revision} to {targetDir} ({result.DownloadedFiles.Count} file(s)); {EmbeddingManifest.FileName} written. " +
-                (activationHint ? $"Activate with 'ai-raccoon model embedding set local {targetDir}' (or 'ai-raccoon model code set local {targetDir}'). " : string.Empty) +
-                "Trust note: the SHA-256 pins were captured from Hugging Face's LFS oids before download — the first pin trusts the channel once; registry pins are the reviewed tier (plan D8).");
+                $"downloaded {repoId}@{revision} to {targetDir} ({result.DownloadedFiles.Count} file(s)); {EmbeddingManifest.FileName} written. {(activationHint ? $"Activate with 'ai-raccoon model embedding set local {targetDir}' (or 'ai-raccoon model code set local {targetDir}'). " : "")}Trust note: the SHA-256 pins were captured from Hugging Face's LFS oids before download — the first pin trusts the channel once; registry pins are the reviewed tier (plan D8).");
             return ErrorCode.Ok.Success;
         }
         catch (Exception ex) when (ex is ModelDownloadRejectedException or ModelDownloadPlanException or ModelDownloadException
                                        or HfApiException or OnnxProbeException or HttpRequestException
-                                   || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+                                   || ex is OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
             await streams.WriteErrorLineAsync($"ai-raccoon: {ex.Message}");
             return FailureCode(ex);
@@ -105,8 +102,10 @@ internal sealed class ModelDownloadCommands(
             _ => ErrorCode.Model.HubUnreachable
         };
 
-    /// <summary>Prompts on stderr (stdout stays parseable) and reads the answer from stdin;
-    /// EOF or anything but y/yes refuses the download.</summary>
+    /// <summary>
+    ///     Prompts on stderr (stdout stays parseable) and reads the answer from stdin;
+    ///     EOF or anything but y/yes refuses the download.
+    /// </summary>
     private static bool PromptConfirm(StandardStreams streams, string message)
     {
         streams.Error.WriteLine($"{message} [y/N] ");

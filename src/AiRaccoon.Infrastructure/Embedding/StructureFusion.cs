@@ -37,19 +37,15 @@ public static class StructureFusion
     ///     engine's relevance floor maps to 0 (ADR-0108). Ties, such as rows the floor clamps to 0,
     ///     order by raw content similarity, then ordinal hash.
     /// </summary>
-    public static IReadOnlyList<FusedRank> Rank(
-        IEnumerable<VectorHit> content, IEnumerable<VectorHit> structure, double alpha, int limit, double similarityFloor = 0.0)
+    public static IReadOnlyList<FusedRank> Rank(IEnumerable<VectorHit> content, IEnumerable<VectorHit> structure, double alpha, int limit, double similarityFloor = 0.0)
     {
-        ArgumentNullException.ThrowIfNull(content);
-        ArgumentNullException.ThrowIfNull(structure);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
-
         var rawContentSims = content
-            .GroupBy(hit => hit.Hash, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First().Sim, StringComparer.Ordinal);
+            .GroupBy(static hit => hit.Hash, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.First().Sim, StringComparer.Ordinal);
+
         var structureSims = structure
-            .GroupBy(hit => hit.Hash, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => Rescale(group.First().Sim, similarityFloor), StringComparer.Ordinal);
+            .GroupBy(static hit => hit.Hash, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, group => Rescale(group.First().Sim, similarityFloor), StringComparer.Ordinal);
 
         return
         [
@@ -60,14 +56,13 @@ public static class StructureFusion
                     var hasContent = rawContentSims.TryGetValue(hash, out var rawContent);
                     var structureSim = structureSims.TryGetValue(hash, out var sim) ? sim : (double?)null;
                     var contentSim = hasContent ? Rescale(rawContent, similarityFloor) : 0.0;
-                    return (Rank: new FusedRank(hash, Fused(contentSim, structureSim, alpha)),
-                        RawContent: hasContent ? rawContent : double.NegativeInfinity);
+                    return (Rank: new FusedRank(hash, Fused(contentSim, structureSim, alpha)), RawContent: hasContent ? rawContent : double.NegativeInfinity);
                 })
-                .OrderByDescending(ranked => ranked.Rank.Score)
-                .ThenByDescending(ranked => ranked.RawContent)
-                .ThenBy(ranked => ranked.Rank.Hash, StringComparer.Ordinal)
+                .OrderByDescending(static ranked => ranked.Rank.Score)
+                .ThenByDescending(static ranked => ranked.RawContent)
+                .ThenBy(static ranked => ranked.Rank.Hash, StringComparer.Ordinal)
                 .Take(limit)
-                .Select(ranked => ranked.Rank)
+                .Select(static ranked => ranked.Rank)
         ];
     }
 }

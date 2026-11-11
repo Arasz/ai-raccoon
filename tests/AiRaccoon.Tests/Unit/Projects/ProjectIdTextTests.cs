@@ -31,7 +31,7 @@ public sealed class ProjectIdTextTests
     [Fact]
     public void LoneSurrogate_IsEscaped()
     {
-        var printable = ProjectIdText.Printable("bad" + '\ud800' + "name");
+        var printable = ProjectIdText.Printable("bad\ud800name");
 
         printable.ShouldContain("\\uD800");
         printable.Any(IsUnsafe).ShouldBeFalse($"a raw unsafe rune survived: {printable}");

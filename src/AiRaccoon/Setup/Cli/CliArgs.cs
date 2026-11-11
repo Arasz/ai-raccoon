@@ -14,8 +14,10 @@ internal static class CliArgs
 {
     private const string VersionOptionAction = "VersionOptionAction";
 
-    /// <summary>Shared with CliRendering, which re-parses the resolved command path plus
-    /// "--help" to render help for a recognised-but-incomplete command.</summary>
+    /// <summary>
+    ///     Shared with CliRendering, which re-parses the resolved command path plus
+    ///     "--help" to render help for a recognised-but-incomplete command.
+    /// </summary>
     internal static readonly ParserConfiguration ParserConfiguration = new() { EnablePosixBundling = true };
 
     /// <summary>Parses args; never writes anything (stdout stays reserved for the stdio protocol).</summary>
@@ -95,11 +97,12 @@ internal static class CliArgs
         errors.Add($"Cannot parse argument '{raw}' as --transport: expected proxy|http.");
     }
 
-    private static bool NamesRemovedTransport(RootCliOptions options) =>
-        options is { IsTransportExplicit: true, Transport: McpTransport.Stdio or McpTransport.Https };
+    private static bool NamesRemovedTransport(RootCliOptions options) => options is { IsTransportExplicit: true, Transport: McpTransport.Stdio or McpTransport.Https };
 
-    /// <summary>Raw --transport value, last occurrence wins (handles --transport v, --transport=v
-    /// and --transport:v, case-preserved for the rejection echo).</summary>
+    /// <summary>
+    ///     Raw --transport value, last occurrence wins (handles --transport v, --transport=v
+    ///     and --transport:v, case-preserved for the rejection echo).
+    /// </summary>
     private static string? TransportValue(string[] args)
     {
         string? value = null;
@@ -127,9 +130,11 @@ internal static class CliArgs
         return value;
     }
 
-    /// <summary>System.CommandLine 2.0.10 reports some parse errors (e.g. a missing required
-    /// argument) twice in one ParseResult.Errors — collapse to one message per distinct text
-    /// so nothing downstream has to.</summary>
+    /// <summary>
+    ///     System.CommandLine 2.0.10 reports some parse errors (e.g. a missing required
+    ///     argument) twice in one ParseResult.Errors — collapse to one message per distinct text
+    ///     so nothing downstream has to.
+    /// </summary>
     private static List<string> DistinctErrors(ParseResult parseResult) => [.. parseResult.Errors.Select(e => e.Message).Distinct(StringComparer.Ordinal)];
 
     /// <summary>

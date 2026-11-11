@@ -25,7 +25,8 @@ public sealed class QualityTools(
         "servedRank is the 1-based rank the file was served at, when known; rank-only telemetry " +
         "is section-ambiguous under kind=both by design.")]
     public async Task<ApiEnvelope<FollowThroughResult>> RecordFollowThrough(
-        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description("The correlationId returned by the preceding query call.")]
         string correlationId,
         [Description("Absolute path of the file the agent read.")]
@@ -49,7 +50,8 @@ public sealed class QualityTools(
         "Updates the existing quality record keyed by correlationId; the record must belong to this project, " +
         "and recorded is false when none does.")]
     public async Task<ApiEnvelope<GradeResult>> RecordGrade(
-        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description("The correlationId returned by the preceding query call.")]
         string correlationId,
         [Description("Usefulness grade 1-5 (5=best).")]
@@ -68,9 +70,11 @@ public sealed class QualityTools(
 
     [McpServerTool(Name = TnGetQualityReport)]
     [McpToolScope(ToolScope.All)]
-    [Description("Aggregated search-quality metrics: total searches, follow-through searches, graded searches, average grade, coverage rate, searches/day. Window defaults to last 7 days (absolute DateTimeOffset). Project id defaults to working-directory project. Aggregate — no per-row grades included.")]
+    [Description(
+        "Aggregated search-quality metrics: total searches, follow-through searches, graded searches, average grade, coverage rate, searches/day. Window defaults to last 7 days (absolute DateTimeOffset). Project id defaults to working-directory project. Aggregate — no per-row grades included.")]
     public async Task<ApiEnvelope<SearchQualityMetrics>> GetQualityReport(
-        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description("Window start as absolute DateTimeOffset; defaults to 7 days before now.")]
         DateTimeOffset? from = null,
         CancellationToken cancellationToken = default)

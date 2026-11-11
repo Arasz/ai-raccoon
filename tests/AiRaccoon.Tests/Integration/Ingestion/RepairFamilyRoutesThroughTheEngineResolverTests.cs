@@ -10,7 +10,6 @@ using Microsoft.Extensions.Logging.Testing;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
-using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
@@ -100,7 +99,7 @@ public sealed class RepairFamilyRoutesThroughTheEngineResolverTests
     }
 
     private static IFileTypeMatcher Matcher() => new FileTypeMatcher(
-        [new MarkdownFileTypeHandler(new MarkdownChunker(new TokenCount(new O200kTokenizer().CountTokens)))]);
+        [new MarkdownFileTypeHandler(new MarkdownChunker(new O200kTokenizer().CountTokens))]);
 
     private static EmbeddingService Service() =>
         new(new FakeLogger<EmbeddingService>(), new LocalTokenizer(), new EmbeddingTokenizerFactory(), new EmbeddingManifestLoader(new EmbeddingManifestSerializer(), new EmbeddingManifestValidator()),

@@ -141,7 +141,7 @@ internal sealed class DyingBackend : IDisposable
 
         if (request.Line.StartsWith($"POST {ShutdownEndpoint.Path}", StringComparison.Ordinal))
         {
-            return ("202 Accepted", string.Empty, false);
+            return ("202 Accepted", "", false);
         }
 
         return ("401 Unauthorized", """{"jsonrpc":"2.0","id":null,"error":{"code":-32001,"message":"nope"}}""", true);

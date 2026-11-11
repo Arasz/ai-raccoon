@@ -75,8 +75,7 @@ internal static class IdentityProofEndpoint
         }
     }
 
-    private static IResult Refuse(string error) =>
-        Results.Json(new ErrorBody(error), statusCode: StatusCodes.Status400BadRequest);
+    private static IResult Refuse(string error) => Results.Json(new ErrorBody(error), statusCode: StatusCodes.Status400BadRequest);
 
     /// <summary>The parsed challenge, or null for a body that is not the frozen request shape.</summary>
     private static async Task<Challenge?> ReadChallengeAsync(HttpRequest request,
@@ -133,7 +132,8 @@ internal static class IdentityProofEndpoint
     private sealed record ProofBody(
         [property: JsonPropertyName("v")] int V,
         [property: JsonPropertyName("keyId")] string KeyId,
-        [property: JsonPropertyName("signature")] string Signature);
+        [property: JsonPropertyName("signature")]
+        string Signature);
 
     private sealed record ErrorBody(
         [property: JsonPropertyName("error")] string Error);

@@ -10,39 +10,34 @@ namespace AiRaccoon.Infrastructure.Embedding;
 /// </summary>
 public sealed partial class EmbedDrainReporter(IMeasurementRecorder measurements, TimeProvider timeProvider)
 {
-    /// <summary>Progress heartbeat stride: the lease TTL, so a drain that renews is a drain that
-    /// reports — one 1013 per stride crossed, O(elapsed time) not O(rows).</summary>
+    /// <summary>
+    ///     Progress heartbeat stride: the lease TTL, so a drain that renews is a drain that
+    ///     reports — one 1013 per stride crossed, O(elapsed time) not O(rows).
+    /// </summary>
     internal static TimeSpan ProgressStride => SqliteModelMigrationLease.LeaseTtl;
 
     public void PassStarted(ILogger logger, EmbedCorpus corpus) => Log.DrainStarted(logger, corpus);
 
     /// <summary>The migration relay's start line — Information, with the rows owed (LANE P4).</summary>
-    public void MigrationStarted(ILogger logger, EmbedCorpus corpus, long owed) =>
-        Log.MigrationDrainStarted(logger, corpus, owed);
+    public void MigrationStarted(ILogger logger, EmbedCorpus corpus, long owed) => Log.MigrationDrainStarted(logger, corpus, owed);
 
     public void MigrationLeaseHeld(ILogger logger, EmbedCorpus corpus) => Log.MigrationDrainLeaseHeld(logger, corpus);
 
-    public void MigrationAlreadyFinished(ILogger logger, EmbedCorpus corpus) =>
-        Log.MigrationAlreadyFinished(logger, corpus);
+    public void MigrationAlreadyFinished(ILogger logger, EmbedCorpus corpus) => Log.MigrationAlreadyFinished(logger, corpus);
 
     public void MigrationNoProvider(ILogger logger, EmbedCorpus corpus) => Log.MigrationDrainNoProvider(logger, corpus);
 
-    public void MigrationResumedAfterStall(ILogger logger, EmbedCorpus corpus, string previousOwner, TimeSpan age) =>
-        Log.MigrationDrainResumedAfterStall(logger, corpus, previousOwner, age);
+    public void MigrationResumedAfterStall(ILogger logger, EmbedCorpus corpus, string previousOwner, TimeSpan age) => Log.MigrationDrainResumedAfterStall(logger, corpus, previousOwner, age);
 
-    public void MigrationProgress(ILogger logger, EmbedCorpus corpus, int rows, TimeSpan elapsed) =>
-        Log.MigrationDrainProgress(logger, corpus, rows, elapsed);
+    public void MigrationProgress(ILogger logger, EmbedCorpus corpus, int rows, TimeSpan elapsed) => Log.MigrationDrainProgress(logger, corpus, rows, elapsed);
 
-    public void PassFailed(ILogger logger, EmbedCorpus corpus, Exception exception) =>
-        Log.DrainFailed(logger, corpus, exception);
+    public void PassFailed(ILogger logger, EmbedCorpus corpus, Exception exception) => Log.DrainFailed(logger, corpus, exception);
 
     public void SkippedCoalesced(ILogger logger) => Log.DrainSkippedCoalesced(logger);
 
-    public void InvalidRowsPerRunSetting(ILogger logger, string value, int min, int max) =>
-        Log.InvalidRowsPerRunSetting(logger, value, min, max);
+    public void InvalidRowsPerRunSetting(ILogger logger, string value, int min, int max) => Log.InvalidRowsPerRunSetting(logger, value, min, max);
 
-    public void SelfReSignalNotQueued(ILogger logger, EmbedCorpus corpus) =>
-        Log.SelfReSignalNotQueued(logger, corpus);
+    public void SelfReSignalNotQueued(ILogger logger, EmbedCorpus corpus) => Log.SelfReSignalNotQueued(logger, corpus);
 
     /// <summary>
     ///     The finish line and its two series — one computation, two destinations. Both call

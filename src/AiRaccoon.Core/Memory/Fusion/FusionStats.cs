@@ -18,6 +18,7 @@ public sealed record FusionStats(
     ///     exported series would orphan its stored metric rows: add, never rename.
     /// </summary>
     public const string TopStrengthMetric = "search.fusion.top_strength";
+
     public const string TopMarginMetric = "search.fusion.top_margin";
     public const string LegsFiredMetric = "search.fusion.legs_fired";
 

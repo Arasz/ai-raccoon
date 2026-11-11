@@ -11,16 +11,20 @@ public sealed class IgnoreRules : IEquatable<IgnoreRules>
     private static readonly StringComparison SegmentComparison =
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
-    /// <summary>Pattern lines use `/` (gitignore convention); candidate paths handed in by callers
-    /// are host-native (<see cref="Path.DirectorySeparatorChar" />) — both split the same way.</summary>
+    /// <summary>
+    ///     Pattern lines use `/` (gitignore convention); candidate paths handed in by callers
+    ///     are host-native (<see cref="Path.DirectorySeparatorChar" />) — both split the same way.
+    /// </summary>
     private static readonly char[] PathSeparators = ['/', '\\'];
 
-    /// <summary>The exact text this instance was parsed from — value equality is defined over it
-    /// (not the parsed pattern list, which has no natural equality) so callers can cheaply detect
-    /// a changed ignore file between two loads (e.g. WatchCatchUp's mid-scan re-check).</summary>
-    private readonly string _source;
-
     private readonly IReadOnlyList<IgnorePattern> _patterns;
+
+    /// <summary>
+    ///     The exact text this instance was parsed from — value equality is defined over it
+    ///     (not the parsed pattern list, which has no natural equality) so callers can cheaply detect
+    ///     a changed ignore file between two loads (e.g. WatchCatchUp's mid-scan re-check).
+    /// </summary>
+    private readonly string _source;
 
     private IgnoreRules(string source, IReadOnlyList<IgnorePattern> patterns)
     {
@@ -29,9 +33,11 @@ public sealed class IgnoreRules : IEquatable<IgnoreRules>
     }
 
     /// <summary>No rules — nothing is ever ignored (missing ignore file resolves here).</summary>
-    public static IgnoreRules Empty { get; } = new(string.Empty, []);
+    public static IgnoreRules Empty { get; } = new("", []);
 
     public bool HasRules => _patterns.Count > 0;
+
+    public bool Equals(IgnoreRules? other) => other is not null && string.Equals(_source, other._source, StringComparison.Ordinal);
 
     /// <summary>One pattern per line; blank lines and `#` comments are inert; `\r\n`/`\r` normalized first.</summary>
     public static IgnoreRules Parse(string content)
@@ -48,7 +54,7 @@ public sealed class IgnoreRules : IEquatable<IgnoreRules>
                 continue;
             }
 
-            (patterns ??= []).Add(IgnorePattern.Parse(line));
+            (patterns ??= []).Add(IgnorePattern.CoreParse(line));
         }
 
         return patterns is null ? Empty : new IgnoreRules(content, patterns);
@@ -78,8 +84,6 @@ public sealed class IgnoreRules : IEquatable<IgnoreRules>
         return false;
     }
 
-    public bool Equals(IgnoreRules? other) => other is not null && string.Equals(_source, other._source, StringComparison.Ordinal);
-
     public override bool Equals(object? obj) => Equals(obj as IgnoreRules);
 
     public override int GetHashCode() => _source.GetHashCode(StringComparison.Ordinal);
@@ -102,12 +106,10 @@ public sealed class IgnoreRules : IEquatable<IgnoreRules>
             _directoryOnly = directoryOnly;
         }
 
-        public static IgnorePattern Parse(string line)
+        public static IgnorePattern CoreParse(string line)
         {
             var directoryOnly = line.EndsWith('/');
             var body = directoryOnly ? line[..^1] : line;
-            // A slash anywhere (leading or interior) anchors the pattern to the root; only a
-            // pattern with no slash at all matches at any depth (gitignore convention).
             var anchored = body.Contains('/', StringComparison.Ordinal);
             var trimmed = body.StartsWith('/') ? body[1..] : body;
             var segments = trimmed.Split('/', StringSplitOptions.RemoveEmptyEntries);
@@ -121,8 +123,6 @@ public sealed class IgnoreRules : IEquatable<IgnoreRules>
                 return MatchesAt(0, pathSegments, isDirectory);
             }
 
-            // Unanchored (no slash in the source line) is always a single segment — try it at
-            // every depth, exactly the gitignore "matches at any level below the root" rule.
             for (var start = 0; start < pathSegments.Length; start++)
             {
                 if (MatchesAt(start, pathSegments, isDirectory))
@@ -170,9 +170,11 @@ public sealed class IgnoreRules : IEquatable<IgnoreRules>
             return false;
         }
 
-        /// <summary>True when the pattern segments (from <paramref name="pi" />) exactly consume
-        /// path segments [<paramref name="from" />, <paramref name="to" />), honoring `**` as
-        /// zero-or-more segments.</summary>
+        /// <summary>
+        ///     True when the pattern segments (from <paramref name="pi" />) exactly consume
+        ///     path segments [<paramref name="from" />, <paramref name="to" />), honoring `**` as
+        ///     zero-or-more segments.
+        /// </summary>
         private static bool Consumes(string[] pattern, int pi, string[] path, int from, int to)
         {
             while (true)
@@ -206,8 +208,10 @@ public sealed class IgnoreRules : IEquatable<IgnoreRules>
             }
         }
 
-        /// <summary>Classic two-pointer wildcard match: `*` is the only special character,
-        /// standing for any run of characters (possibly empty) within this one segment.</summary>
+        /// <summary>
+        ///     Classic two-pointer wildcard match: `*` is the only special character,
+        ///     standing for any run of characters (possibly empty) within this one segment.
+        /// </summary>
         private static bool SegmentMatches(string globSegment, string pathSegment)
         {
             int p = 0, t = 0, star = -1, match = 0;

@@ -1,8 +1,6 @@
 using System.Collections;
 using System.Reflection;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Memory.Filtering;
-using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;

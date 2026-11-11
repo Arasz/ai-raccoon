@@ -7,7 +7,6 @@ using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
-using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 

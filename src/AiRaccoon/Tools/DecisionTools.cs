@@ -41,19 +41,6 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
     /// </summary>
     internal static JsonSerializerOptions SerializerOptions { get; } = CreateSerializerOptions();
 
-    private static JsonSerializerOptions CreateSerializerOptions()
-    {
-        var options = new JsonSerializerOptions(McpJsonUtilities.DefaultOptions)
-        {
-            DefaultIgnoreCondition = JsonIgnoreCondition.Never
-        };
-        options.Converters.Insert(0, new DecisionEnumConverter<DecisionEdgeKind>());
-        options.Converters.Insert(0, new DecisionEnumConverter<DecisionStatus>());
-        options.Converters.Insert(0, new DecisionEnumConverter<DecisionDirection>());
-        options.MakeReadOnly();
-        return options;
-    }
-
     /// <summary>The decision tool names, read from this class's tool attributes.</summary>
     internal static IReadOnlySet<string> Names { get; } = typeof(DecisionTools).GetMethods()
         .Select(method => method.GetCustomAttributes(typeof(McpServerToolAttribute), false).OfType<McpServerToolAttribute>().SingleOrDefault()?.Name)
@@ -71,6 +58,19 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
                 .Select(parameter => parameter.Name!)
                 .ToHashSet(StringComparer.Ordinal),
             StringComparer.Ordinal);
+
+    private static JsonSerializerOptions CreateSerializerOptions()
+    {
+        var options = new JsonSerializerOptions(McpJsonUtilities.DefaultOptions)
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.Never
+        };
+        options.Converters.Insert(0, new DecisionEnumConverter<DecisionEdgeKind>());
+        options.Converters.Insert(0, new DecisionEnumConverter<DecisionStatus>());
+        options.Converters.Insert(0, new DecisionEnumConverter<DecisionDirection>());
+        options.MakeReadOnly();
+        return options;
+    }
 
     /// <summary>
     ///     The CallToolFilter that refuses a decision tool call naming an argument the tool does not take, as the
@@ -99,7 +99,8 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         [Description(SessionIdText)] string sessionId,
         [Description(RequestIdText)] string requestId,
         [Description("Short task title.")] string title,
-        [Description("Optional link to the task in a tracker.")] string? sourceRef = null,
+        [Description("Optional link to the task in a tracker.")]
+        string? sourceRef = null,
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
     {
@@ -117,18 +118,28 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         [Description(SessionIdText)] string sessionId,
         [Description(RequestIdText)] string requestId,
         [Description("Short decision title.")] string title,
-        [Description("Decision category, e.g. architecture.")] string category,
-        [Description("The situation the decision answers.")] string scenario,
+        [Description("Decision category, e.g. architecture.")]
+        string category,
+        [Description("The situation the decision answers.")]
+        string scenario,
         [Description("What was decided.")] string outcome,
         [Description("Why it was decided.")] string reasoning,
-        [Description("Initial status: proposed (default) or accepted.")] DecisionStatus status = DecisionStatus.Proposed,
-        [Description("Confidence from 0 to 1.")] double? confidence = null,
-        [Description("Who made the decision.")] string? maker = null,
-        [Description("Alternatives considered (up to 20).")] IReadOnlyList<string>? alternatives = null,
-        [Description("Expected consequences (up to 20).")] IReadOnlyList<string>? consequences = null,
-        [Description("Evidence sources (up to 20), each with uri and description.")] IReadOnlyList<DecisionSource>? sources = null,
-        [Description("When the decision starts to apply (ISO 8601).")] DateTimeOffset? validFrom = null,
-        [Description("When the decision stops applying (ISO 8601).")] DateTimeOffset? validUntil = null,
+        [Description("Initial status: proposed (default) or accepted.")]
+        DecisionStatus status = DecisionStatus.Proposed,
+        [Description("Confidence from 0 to 1.")]
+        double? confidence = null,
+        [Description("Who made the decision.")]
+        string? maker = null,
+        [Description("Alternatives considered (up to 20).")]
+        IReadOnlyList<string>? alternatives = null,
+        [Description("Expected consequences (up to 20).")]
+        IReadOnlyList<string>? consequences = null,
+        [Description("Evidence sources (up to 20), each with uri and description.")]
+        IReadOnlyList<DecisionSource>? sources = null,
+        [Description("When the decision starts to apply (ISO 8601).")]
+        DateTimeOffset? validFrom = null,
+        [Description("When the decision stops applying (ISO 8601).")]
+        DateTimeOffset? validUntil = null,
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
     {
@@ -143,13 +154,17 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
     [Description("Replaces a decision's content with a new version; identity and status stay. Refuses a stale expectedVersion.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionVersion>>> Amend(
         [Description(ProjectIdText)] string projectId,
-        [Description("The decision to amend.")] string decisionId,
+        [Description("The decision to amend.")]
+        string decisionId,
         [Description(TaskIdText)] string taskId,
         [Description(SessionIdText)] string sessionId,
         [Description(RequestIdText)] string requestId,
-        [Description("The version you last read.")] int expectedVersion,
-        [Description("Why the content changes.")] string changeReason,
-        [Description("The complete replacement content (title, category, scenario, outcome, reasoning and optional fields).")] DecisionContent content,
+        [Description("The version you last read.")]
+        int expectedVersion,
+        [Description("Why the content changes.")]
+        string changeReason,
+        [Description("The complete replacement content (title, category, scenario, outcome, reasoning and optional fields).")]
+        DecisionContent content,
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
     {
@@ -164,13 +179,17 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
     [Description("Moves a decision to accepted, rejected or deprecated when the transition is legal. Use supersede_decision to replace one.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionVersion>>> Transition(
         [Description(ProjectIdText)] string projectId,
-        [Description("The decision to transition.")] string decisionId,
+        [Description("The decision to transition.")]
+        string decisionId,
         [Description(TaskIdText)] string taskId,
         [Description(SessionIdText)] string sessionId,
         [Description(RequestIdText)] string requestId,
-        [Description("The version you last read.")] int expectedVersion,
-        [Description("accepted, rejected or deprecated.")] DecisionStatus targetStatus,
-        [Description("Why the status changes.")] string changeReason,
+        [Description("The version you last read.")]
+        int expectedVersion,
+        [Description("accepted, rejected or deprecated.")]
+        DecisionStatus targetStatus,
+        [Description("Why the status changes.")]
+        string changeReason,
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
     {
@@ -188,10 +207,14 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         [Description(TaskIdText)] string taskId,
         [Description(SessionIdText)] string sessionId,
         [Description(RequestIdText)] string requestId,
-        [Description("The accepted decision that replaces the other.")] string replacementId,
-        [Description("The accepted decision being replaced.")] string replacedId,
-        [Description("The replacement's version you last read.")] int expectedReplacementVersion,
-        [Description("The replaced decision's version you last read.")] int expectedReplacedVersion,
+        [Description("The accepted decision that replaces the other.")]
+        string replacementId,
+        [Description("The accepted decision being replaced.")]
+        string replacedId,
+        [Description("The replacement's version you last read.")]
+        int expectedReplacementVersion,
+        [Description("The replaced decision's version you last read.")]
+        int expectedReplacedVersion,
         [Description("Why it is replaced.")] string reason,
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
@@ -210,11 +233,16 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         [Description(TaskIdText)] string taskId,
         [Description(SessionIdText)] string sessionId,
         [Description(RequestIdText)] string requestId,
-        [Description("The decision the edge starts at.")] string sourceId,
-        [Description("The decision the edge points to.")] string targetId,
-        [Description("depends_on, supports or contradicts.")] DecisionEdgeKind kind,
-        [Description("Why the decisions are linked.")] string reason,
-        [Description("The project revision you last read.")] long expectedProjectRevision,
+        [Description("The decision the edge starts at.")]
+        string sourceId,
+        [Description("The decision the edge points to.")]
+        string targetId,
+        [Description("depends_on, supports or contradicts.")]
+        DecisionEdgeKind kind,
+        [Description("Why the decisions are linked.")]
+        string reason,
+        [Description("The project revision you last read.")]
+        long expectedProjectRevision,
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
     {
@@ -233,8 +261,10 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         [Description(TaskIdText)] string taskId,
         [Description(SessionIdText)] string sessionId,
         [Description(RequestIdText)] string requestId,
-        [Description("Why the edge is removed.")] string reason,
-        [Description("The project revision you last read.")] long expectedProjectRevision,
+        [Description("Why the edge is removed.")]
+        string reason,
+        [Description("The project revision you last read.")]
+        long expectedProjectRevision,
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
     {
@@ -250,8 +280,10 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
     public async Task<ApiEnvelope<DecisionResult<DecisionDetails>>> Get(
         [Description(ProjectIdText)] string projectId,
         [Description("The decision to read.")] string decisionId,
-        [Description("A specific version; the current one when omitted.")] int? version = null,
-        [Description("Include every version.")] bool includeHistory = false,
+        [Description("A specific version; the current one when omitted.")]
+        int? version = null,
+        [Description("Include every version.")]
+        bool includeHistory = false,
         CancellationToken cancellationToken = default)
     {
         var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, TnGetDecision, cancellationToken);
@@ -264,12 +296,16 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
     [Description("Searches current decisions by literal text, category, status and task selector, a page at a time ordered by id.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionQueryResult>>> Query(
         [Description(ProjectIdText)] string projectId,
-        [Description("Literal search text (1-2000 chars); omit to list by id.")] string? query = null,
+        [Description("Literal search text (1-2000 chars); omit to list by id.")]
+        string? query = null,
         [Description("Only this category.")] string? category = null,
-        [Description("Only these statuses; all when omitted.")] IReadOnlyList<DecisionStatus>? statuses = null,
-        [Description("Tasks to search: one of last (newest N tasks), all, or taskIds. The whole project when omitted.")] DecisionTaskSelector? selector = null,
+        [Description("Only these statuses; all when omitted.")]
+        IReadOnlyList<DecisionStatus>? statuses = null,
+        [Description("Tasks to search: one of last (newest N tasks), all, or taskIds. The whole project when omitted.")]
+        DecisionTaskSelector? selector = null,
         [Description("Page size, 1-100.")] int limit = 20,
-        [Description("Return decisions after this id (from nextAfterId).")] string? afterId = null,
+        [Description("Return decisions after this id (from nextAfterId).")]
+        string? afterId = null,
         CancellationToken cancellationToken = default)
     {
         var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, TnQueryDecisions, cancellationToken);
@@ -282,10 +318,12 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
     [Description("Finds accepted, currently valid decisions ranked by text match to a scenario. You judge whether each applies.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionQueryResult>>> Precedents(
         [Description(ProjectIdText)] string projectId,
-        [Description("The situation to match (1-2000 chars).")] string scenario,
+        [Description("The situation to match (1-2000 chars).")]
+        string scenario,
         [Description("Only this category.")] string? category = null,
         [Description("How many, 1-20.")] int limit = 5,
-        [Description("Include proposed, rejected, superseded, deprecated and expired decisions.")] bool includeInactive = false,
+        [Description("Include proposed, rejected, superseded, deprecated and expired decisions.")]
+        bool includeInactive = false,
         CancellationToken cancellationToken = default)
     {
         var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, TnFindDecisionPrecedents, cancellationToken);
@@ -298,11 +336,15 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
     [Description("Walks the edges around one decision and returns nodes, typed edges and what was truncated.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionGraph>>> Graph(
         [Description(ProjectIdText)] string projectId,
-        [Description("The decision to start from.")] string decisionId,
-        [Description("upstream, downstream or both.")] DecisionDirection direction = DecisionDirection.Upstream,
+        [Description("The decision to start from.")]
+        string decisionId,
+        [Description("upstream, downstream or both.")]
+        DecisionDirection direction = DecisionDirection.Upstream,
         [Description("How many hops, 0-10.")] int depth = 2,
-        [Description("Most nodes returned, 1-500.")] int maxNodes = 100,
-        [Description("Also follow supports and contradicts edges.")] bool includeContext = false,
+        [Description("Most nodes returned, 1-500.")]
+        int maxNodes = 100,
+        [Description("Also follow supports and contradicts edges.")]
+        bool includeContext = false,
         CancellationToken cancellationToken = default)
     {
         var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, TnGetDecisionGraph, cancellationToken);
@@ -315,7 +357,8 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
     [Description("Returns the complete selected snapshot as JSON. An export over 1 MiB is refused with decision-export-too-large; use the 'ai-raccoon decisions export' command for it.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionExport>>> Export(
         [Description(ProjectIdText)] string projectId,
-        [Description("Tasks to export: one of last (newest N tasks), all, or taskIds. The newest task when omitted.")] DecisionTaskSelector? selector = null,
+        [Description("Tasks to export: one of last (newest N tasks), all, or taskIds. The newest task when omitted.")]
+        DecisionTaskSelector? selector = null,
         CancellationToken cancellationToken = default)
     {
         var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, TnExportDecisions, cancellationToken);
@@ -330,10 +373,14 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
     [Description("Returns a compact text summary of the selected decisions and their direct links, with explicit omission counts.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionPreview>>> Preview(
         [Description(ProjectIdText)] string projectId,
-        [Description("Tasks to preview: one of last (newest N tasks), all, or taskIds. The newest task when omitted.")] DecisionTaskSelector? selector = null,
-        [Description("Most decisions shown, 1-100.")] int maxDecisions = 20,
-        [Description("Most edges shown, 0-200.")] int maxEdges = 30,
-        [Description("Text budget in characters, 1000-50000.")] int maxChars = 12000,
+        [Description("Tasks to preview: one of last (newest N tasks), all, or taskIds. The newest task when omitted.")]
+        DecisionTaskSelector? selector = null,
+        [Description("Most decisions shown, 1-100.")]
+        int maxDecisions = 20,
+        [Description("Most edges shown, 0-200.")]
+        int maxEdges = 30,
+        [Description("Text budget in characters, 1000-50000.")]
+        int maxChars = 12000,
         CancellationToken cancellationToken = default)
     {
         var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, TnPreviewDecisions, cancellationToken);

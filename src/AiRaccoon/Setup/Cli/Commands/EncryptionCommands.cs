@@ -18,12 +18,32 @@ namespace AiRaccoon.Setup.Cli.Commands;
 /// </summary>
 public sealed partial class EncryptionCommands
 {
+    /// <summary>Env vars an operator can set to offer their own project/secret id as the interactive default, instead of the fallback placeholder.</summary>
+    public const string ProjectIdEnvVar = "AIRACCOON_BITWARDEN_PROJECT_ID";
+
+    public const string SecretIdEnvVar = "AIRACCOON_BITWARDEN_SECRET_ID";
+
+    /// <summary>Env var an operator can set to offer their own 1Password secret reference as the interactive default.</summary>
+    public const string OnePasswordReferenceEnvVar = "AIRACCOON_1PASSWORD_REFERENCE";
+
+    // Obviously fake — no default should identify a real vault entry (no hardcoded secrets).
+    private const string FallbackProjectId = "00000000-0000-0000-0000-000000000000";
+    private const string FallbackSecretId = "11111111-1111-1111-1111-111111111111";
+    private const string FallbackReference = "op://example-vault/example-item/private key?ssh-format=openssh";
+    private const string ReferencePrefix = "op://";
+
+    private const string NotAKeyHint =
+        "use an SSH Key item and add ?ssh-format=openssh to the reference so op returns the OpenSSH private key";
+
+    private static readonly TimeSpan PresenceTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan BitwardenFetchTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan OnePasswordFetchTimeout = TimeSpan.FromSeconds(30);
     private readonly ISqliteConnectionFactory _bankConnectionFactory;
     private readonly ICliSecretManager _bws;
-    private readonly ICliSecretManager _op;
     private readonly IEncryptionKeyProvider _env;
-    private readonly IEncryptionSourceSidecar _sidecar;
     private readonly ILogger<EncryptionCommands> _logger;
+    private readonly ICliSecretManager _op;
+    private readonly IEncryptionSourceSidecar _sidecar;
 
     public EncryptionCommands(
         ISqliteConnectionFactory bank,
@@ -47,26 +67,11 @@ public sealed partial class EncryptionCommands
         _logger = logger;
     }
 
-    /// <summary>Env vars an operator can set to offer their own project/secret id as the interactive default, instead of the fallback placeholder.</summary>
-    public const string ProjectIdEnvVar = "AIRACCOON_BITWARDEN_PROJECT_ID";
+    private static string DefaultProjectId => Environment.GetEnvironmentVariable(ProjectIdEnvVar) is { Length: > 0 } value ? value : FallbackProjectId;
 
-    public const string SecretIdEnvVar = "AIRACCOON_BITWARDEN_SECRET_ID";
+    private static string DefaultReference => Environment.GetEnvironmentVariable(OnePasswordReferenceEnvVar) is { Length: > 0 } value ? value : FallbackReference;
 
-    /// <summary>Env var an operator can set to offer their own 1Password secret reference as the interactive default.</summary>
-    public const string OnePasswordReferenceEnvVar = "AIRACCOON_1PASSWORD_REFERENCE";
-
-    // Obviously fake — no default should identify a real vault entry (no hardcoded secrets).
-    private const string FallbackProjectId = "00000000-0000-0000-0000-000000000000";
-    private const string FallbackSecretId = "11111111-1111-1111-1111-111111111111";
-    private const string FallbackReference = "op://example-vault/example-item/private key?ssh-format=openssh";
-    private const string ReferencePrefix = "op://";
-
-    private const string NotAKeyHint =
-        "use an SSH Key item and add ?ssh-format=openssh to the reference so op returns the OpenSSH private key";
-
-    private static readonly TimeSpan PresenceTimeout = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan BitwardenFetchTimeout = TimeSpan.FromSeconds(15);
-    private static readonly TimeSpan OnePasswordFetchTimeout = TimeSpan.FromSeconds(30);
+    private static string DefaultSecretId => Environment.GetEnvironmentVariable(SecretIdEnvVar) is { Length: > 0 } value ? value : FallbackSecretId;
 
     private static string RotationWarning(string source) =>
         source == OnePasswordEncryptionKeyProvider.EncryptionSource
@@ -75,12 +80,6 @@ public sealed partial class EncryptionCommands
 
     private static string MismatchText(string source) =>
         $"ai-raccoon: encryption mismatch: the bank cannot be opened with the {source} key — if the secret was rotated, the bank must be rekeyed (run 'ai-raccoon encryption {source}')";
-
-    private static string DefaultProjectId => Environment.GetEnvironmentVariable(ProjectIdEnvVar) is { Length: > 0 } value ? value : FallbackProjectId;
-
-    private static string DefaultReference => Environment.GetEnvironmentVariable(OnePasswordReferenceEnvVar) is { Length: > 0 } value ? value : FallbackReference;
-
-    private static string DefaultSecretId => Environment.GetEnvironmentVariable(SecretIdEnvVar) is { Length: > 0 } value ? value : FallbackSecretId;
 
     public async Task<int> BitwardenAsync(ParseResult parseResult, IMemoryStore store,
         StandardStreams streams,

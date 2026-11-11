@@ -22,32 +22,30 @@ internal sealed record CorpusEngineProbe(
     string PendingSql,
     string NotConfiguredRemedy)
 {
-    public string Label => Corpus.ToString().ToLowerInvariant();
-
     public static readonly CorpusEngineProbe Memory = new(
         EmbedCorpus.Memory,
-        ProviderKey: EmbeddingSettingsKeys.Provider,
-        ModelKey: EmbeddingSettingsKeys.Model,
-        BaseUrlKey: EmbeddingSettingsKeys.BaseUrl,
-        ApiKeyKey: EmbeddingSettingsKeys.ApiKey,
-        PendingTable: "entries",
-        PendingSql: MemorySql.CountPendingEmbed,
-        NotConfiguredRemedy:
-            $"not configured — run '{EmbeddingEngineSetup.DefaultModelCommand}' to enable semantic memory search");
+        EmbeddingSettingsKeys.Provider,
+        EmbeddingSettingsKeys.Model,
+        EmbeddingSettingsKeys.BaseUrl,
+        EmbeddingSettingsKeys.ApiKey,
+        "entries",
+        MemorySql.CountPendingEmbed,
+        $"not configured — run '{EmbeddingEngineSetup.DefaultModelCommand}' to enable semantic memory search");
 
     public static readonly CorpusEngineProbe Code = new(
         EmbedCorpus.Code,
-        ProviderKey: null,
-        ModelKey: EmbeddingSettingsKeys.CodeModel,
-        BaseUrlKey: null,
-        ApiKeyKey: null,
-        PendingTable: "code_entries",
-        PendingSql: MemorySql.CountPendingCodeEmbed,
-        NotConfiguredRemedy:
-            $"not configured — run '{CodeEngineSetup.DefaultModelCommand}' to enable semantic code search");
+        null,
+        EmbeddingSettingsKeys.CodeModel,
+        null,
+        null,
+        "code_entries",
+        MemorySql.CountPendingCodeEmbed,
+        $"not configured — run '{CodeEngineSetup.DefaultModelCommand}' to enable semantic code search");
 
     /// <summary>Both corpora in report order — the list the report iterates, so a third corpus is one descriptor, not a fourth copy of the grammar.</summary>
     public static readonly IReadOnlyList<CorpusEngineProbe> All = [Memory, Code];
+
+    public string Label => Corpus.ToString().ToLowerInvariant();
 }
 
 /// <summary>
@@ -73,6 +71,5 @@ internal static class CorpusEngineLines
                 ? $"{probe.Label} engine: {probe.NotConfiguredRemedy}"
                 : $"{probe.Label} engine: {state.Value}{(state.Detail is null ? "" : $" ({state.Detail})")}{(state.Suffix is null ? "" : $" — {state.Suffix}")}";
 
-    internal static string PendingLine(CorpusEngineProbe probe, CorpusEngineState state) =>
-        $"{probe.Label} rows pending: {state.PendingRows?.ToString(CultureInfo.InvariantCulture) ?? "unreadable"}";
+    internal static string PendingLine(CorpusEngineProbe probe, CorpusEngineState state) => $"{probe.Label} rows pending: {state.PendingRows?.ToString(CultureInfo.InvariantCulture) ?? "unreadable"}";
 }

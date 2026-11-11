@@ -12,6 +12,7 @@ public sealed partial class DecisionService
         var chars = 0;
         var textBudget = options.MaxChars - RuneCount(projectId);
         var limit = textBudget - 400;
+
         bool Append(string value, int? ceiling = null)
         {
             var length = RuneCount(value);
@@ -57,7 +58,7 @@ public sealed partial class DecisionService
 
             displayed.Add(current.DecisionId);
             abbreviated += (RuneCount(Display(current.Content.Outcome)) > 240 ? 1 : 0)
-                + (RuneCount(Display(current.Content.Reasoning)) > 240 ? 1 : 0);
+                           + (RuneCount(Display(current.Content.Reasoning)) > 240 ? 1 : 0);
         }
 
         var shownBoundaries = new HashSet<string>(StringComparer.Ordinal);
@@ -97,7 +98,8 @@ public sealed partial class DecisionService
         var shown = new DecisionPreviewCounts(shownTasks, displayed.Count, shownBoundaries.Count, shownEdges);
         var omitted = new DecisionPreviewCounts(total.Tasks - shown.Tasks, total.Decisions - shown.Decisions,
             total.BoundaryNodes - shown.BoundaryNodes, total.Edges - shown.Edges);
-        text.Append($"Shown tasks {shown.Tasks}/{total.Tasks}, decisions {shown.Decisions}/{total.Decisions}, boundary nodes {shown.BoundaryNodes}/{total.BoundaryNodes}, edges {shown.Edges}/{total.Edges}; omitted tasks {omitted.Tasks}, decisions {omitted.Decisions}, boundary nodes {omitted.BoundaryNodes}, edges {omitted.Edges}; abbreviated fields {abbreviated}.\n");
+        text.Append(
+            $"Shown tasks {shown.Tasks}/{total.Tasks}, decisions {shown.Decisions}/{total.Decisions}, boundary nodes {shown.BoundaryNodes}/{total.BoundaryNodes}, edges {shown.Edges}/{total.Edges}; omitted tasks {omitted.Tasks}, decisions {omitted.Decisions}, boundary nodes {omitted.BoundaryNodes}, edges {omitted.Edges}; abbreviated fields {abbreviated}.\n");
         return new DecisionPreview(text.ToString(), total, shown, omitted, abbreviated);
     }
 
@@ -118,6 +120,6 @@ public sealed partial class DecisionService
     {
         var display = Display(value);
         var runes = display.EnumerateRunes().Take(maximum + 1).ToArray();
-        return runes.Length <= maximum ? display : string.Concat(runes.Take(maximum - 1).Select(rune => rune.ToString())) + "…";
+        return runes.Length <= maximum ? display : $"{string.Concat(runes.Take(maximum - 1).Select(rune => rune.ToString()))}…";
     }
 }

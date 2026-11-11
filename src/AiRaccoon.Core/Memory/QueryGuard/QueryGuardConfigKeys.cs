@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace AiRaccoon.Core.Memory.QueryGuard;
 
 /// <summary>Settings keys for the read-path query guard: the kill switch and shadow mode (mirrors AiRaccoon.Core.Memory.Filtering.NoiseConfigKeys).</summary>
@@ -14,12 +16,6 @@ public static class QueryGuardConfigKeys
 
     public const bool DefaultShadow = false;
 
-    /// <summary>On unless the setting explicitly says "false": an absent or unreadable value keeps the default.</summary>
-    public static bool ParseEnabled(string? value) => !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>Off unless the setting explicitly says "true": an absent or unreadable value keeps the default.</summary>
-    public static bool ParseShadow(string? value) => string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
-
     // Structural detector (docs/adr/0041): a third input to the warn tier, gated separately from
     // the regex guard above because it is new and unproven where the regex tiers are
     // evidence-backed (docs/adr/0040). Default off on both paths, per the record's own
@@ -27,9 +23,6 @@ public static class QueryGuardConfigKeys
     public const string StructuralEnabledGlobal = "queryGuard.structural.enabled.global";
 
     public const bool DefaultStructuralEnabled = false;
-
-    /// <summary>Off unless the setting explicitly says "true": an absent or unreadable value keeps the default.</summary>
-    public static bool ParseStructuralEnabled(string? value) => string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     ///     The score threshold applied by <see cref="Structural.StructuralQueryGuardPolicy" />.
@@ -45,9 +38,6 @@ public static class QueryGuardConfigKeys
 
     public const double DefaultStructuralThreshold = 0.98939822280316;
 
-    /// <summary>Falls back to <see cref="DefaultStructuralThreshold" /> when unset or unparsable.</summary>
-    public static double ParseStructuralThreshold(string? value) => double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed : DefaultStructuralThreshold;
-
     /// <summary>
     ///     Records which target FPR <see cref="DefaultStructuralThreshold" /> was calibrated for —
     ///     read by nothing at runtime; it exists so the threshold setting is never a number without
@@ -59,6 +49,18 @@ public static class QueryGuardConfigKeys
 
     public const double DefaultStructuralTargetFpr = 0.02;
 
+    /// <summary>On unless the setting explicitly says "false": an absent or unreadable value keeps the default.</summary>
+    public static bool ParseEnabled(string? value) => !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Off unless the setting explicitly says "true": an absent or unreadable value keeps the default.</summary>
+    public static bool ParseShadow(string? value) => string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Off unless the setting explicitly says "true": an absent or unreadable value keeps the default.</summary>
+    public static bool ParseStructuralEnabled(string? value) => string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Falls back to <see cref="DefaultStructuralThreshold" /> when unset or unparsable.</summary>
+    public static double ParseStructuralThreshold(string? value) => double.TryParse(value, CultureInfo.InvariantCulture, out var parsed) ? parsed : DefaultStructuralThreshold;
+
     /// <summary>Falls back to <see cref="DefaultStructuralTargetFpr" /> when unset or unparsable.</summary>
-    public static double ParseStructuralTargetFpr(string? value) => double.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var parsed) ? parsed : DefaultStructuralTargetFpr;
+    public static double ParseStructuralTargetFpr(string? value) => double.TryParse(value, CultureInfo.InvariantCulture, out var parsed) ? parsed : DefaultStructuralTargetFpr;
 }

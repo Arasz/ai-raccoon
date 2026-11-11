@@ -24,18 +24,22 @@ public sealed class HfTreeClient
 {
     private static readonly Regex NextLinkPattern = new("<([^>]+)>;\\s*rel=\"next\"", RegexOptions.Compiled);
 
-    private readonly HttpClient _http;
-
-    /// <summary>The shared client (downloads and raw fetches go through the same handler).</summary>
-    internal HttpClient Http => _http;
-
-    public string Endpoint { get; }
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true
+    };
 
     public HfTreeClient(HttpClient http, string endpoint = "https://huggingface.co")
     {
-        _http = http;
+        Http = http;
         Endpoint = endpoint.TrimEnd('/');
     }
+
+    /// <summary>The shared client (downloads and raw fetches go through the same handler).</summary>
+    internal HttpClient Http { get; }
+
+    public string Endpoint { get; }
 
     public async Task<IReadOnlyList<HfTreeEntry>> GetTreeAsync(string repoId, string revision, CancellationToken cancellationToken)
     {
@@ -43,12 +47,11 @@ public sealed class HfTreeClient
         var url = $"{Endpoint}/api/models/{repoId}/tree/{revision}?recursive=true&expand=true";
         while (url is not null)
         {
-            using var response = await _http.GetAsync(url, cancellationToken);
+            using var response = await Http.GetAsync(url, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 throw new HfApiException(
-                    $"could not resolve '{repoId}' at revision '{revision}' on Hugging Face (HTTP {(int)response.StatusCode}). " +
-                    "Check the repo id and revision, then retry.", statusCode: response.StatusCode);
+                    $"could not resolve '{repoId}' at revision '{revision}' on Hugging Face (HTTP {(int)response.StatusCode}). Check the repo id and revision, then retry.", statusCode: response.StatusCode);
             }
 
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -72,7 +75,7 @@ public sealed class HfTreeClient
             throw new HfApiException($"the tree listing for '{repoId}' at '{revision}' is not valid JSON", ex);
         }
 
-        return (dto ?? []).Select(e => new HfTreeEntry(e.Path ?? string.Empty, e.Type ?? "file", e.Size, e.Lfs?.Oid));
+        return (dto ?? []).Select(e => new HfTreeEntry(e.Path ?? "", e.Type ?? "file", e.Size, e.Lfs?.Oid));
     }
 
     /// <summary>Follows <c>&lt;url&gt;; rel="next"</c> — the HF pagination contract for trees &gt; 1000 entries.</summary>
@@ -87,12 +90,6 @@ public sealed class HfTreeClient
         var match = NextLinkPattern.Match(link);
         return match.Success ? match.Groups[1].Value : null;
     }
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true
-    };
 
     private sealed class TreeEntryDto
     {

@@ -37,13 +37,13 @@ public sealed class VacuumJob(Func<SqliteConnection, CancellationToken, Task<Tim
 {
     public const string JobName = "vacuum";
 
+    private TimeSpan? _resolved;
+
     public string Name => JobName;
 
     public string DisplayName => "compact the bank";
 
     public TimeSpan? Interval => _resolved ?? MaintenanceJobDefaults.VacuumInterval;
-
-    private TimeSpan? _resolved;
 
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -152,8 +152,8 @@ public sealed class MetricsRetentionJob(TimeProvider timeProvider) : IMaintenanc
         var days = await ReadRetentionDaysAsync(connection, cancellationToken);
         var cutoff = timeProvider.GetUtcNow().AddDays(-days).ToUnixTimeSeconds();
         await connection.ExecuteAsync(new CommandDefinition(
-                "DELETE FROM metrics WHERE recorded_at < @cutoff",
-                new { cutoff }, cancellationToken: cancellationToken));
+            "DELETE FROM metrics WHERE recorded_at < @cutoff",
+            new { cutoff }, cancellationToken: cancellationToken));
         // A reaper only deletes; it never leaves a row needing an embedding.
         return false;
     }

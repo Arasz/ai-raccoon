@@ -59,8 +59,10 @@ public static class StoredOrderChain
         return rows.Where(row => !row.Reproduced && !kept.Contains(row.Id)).Select(row => row.Id).ToHashSet();
     }
 
-    /// <summary>Every offset at which each value occurs in <paramref name="text" />, overlaps included, found in one
-    /// vectorized pass over the text rather than one pass per value.</summary>
+    /// <summary>
+    ///     Every offset at which each value occurs in <paramref name="text" />, overlaps included, found in one
+    ///     vectorized pass over the text rather than one pass per value.
+    /// </summary>
     private static Dictionary<string, List<int>> Occurrences(string text, IEnumerable<string> values)
     {
         var distinct = values.Distinct(StringComparer.Ordinal).ToArray();

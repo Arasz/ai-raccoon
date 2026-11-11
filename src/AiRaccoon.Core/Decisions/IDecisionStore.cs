@@ -19,10 +19,12 @@ public interface IDecisionReader
 
     /// <summary>The decisions that have any version recorded under one of <paramref name="taskIds" />.</summary>
     Task<IReadOnlySet<string>> VersionedByAsync(IReadOnlyCollection<string> taskIds, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<DecisionSearchHit>> SearchAsync(string query, CancellationToken cancellationToken);
 
     /// <summary>One page of the current versions <paramref name="filter" /> keeps, and how many it keeps before AfterId and Take.</summary>
     Task<DecisionCurrentPage> FindCurrentAsync(DecisionCurrentFilter filter, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<DecisionEdge>> EdgesAsync(CancellationToken cancellationToken);
     Task<DecisionReceipt?> ReceiptAsync(string requestId, CancellationToken cancellationToken);
     Task<IReadOnlyList<DecisionImport>> ImportsAsync(CancellationToken cancellationToken);
@@ -33,8 +35,15 @@ public interface IDecisionReader
 ///     outgoing edge of; Search keeps full-text hits and ranks them; ActiveAt keeps versions valid at that instant. The
 ///     page is ordered by decision id, or by rank then decision id when ByRank, and starts after AfterId.
 /// </summary>
-public sealed record DecisionCurrentFilter(string? Search = null, IReadOnlyCollection<string>? TaskIds = null, string? Category = null,
-    IReadOnlyCollection<DecisionStatus>? Statuses = null, DateTimeOffset? ActiveAt = null, string? AfterId = null, int Take = 20, bool ByRank = false);
+public sealed record DecisionCurrentFilter(
+    string? Search = null,
+    IReadOnlyCollection<string>? TaskIds = null,
+    string? Category = null,
+    IReadOnlyCollection<DecisionStatus>? Statuses = null,
+    DateTimeOffset? ActiveAt = null,
+    string? AfterId = null,
+    int Take = 20,
+    bool ByRank = false);
 
 public sealed record DecisionCurrentHit(DecisionVersion Version, double? Rank);
 

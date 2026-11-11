@@ -13,7 +13,7 @@ public sealed class BinaryContentTests
     public void Text_IsNotBinary() => BinaryContent.IsBinary("class Program\n{\n}\n").ShouldBeFalse();
 
     [Fact]
-    public void Empty_IsNotBinary() => BinaryContent.IsBinary(string.Empty).ShouldBeFalse();
+    public void Empty_IsNotBinary() => BinaryContent.IsBinary("").ShouldBeFalse();
 
     [Fact]
     public void NulNearTheStart_IsBinary() => BinaryContent.IsBinary("MZ\u0090\0\u0003\0").ShouldBeTrue();

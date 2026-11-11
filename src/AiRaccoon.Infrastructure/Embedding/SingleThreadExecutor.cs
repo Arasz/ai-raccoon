@@ -12,13 +12,6 @@ internal sealed class SingleThreadExecutor : IDisposable
 {
     private readonly BlockingCollection<Action> _queue = new();
     private readonly Thread _thread;
-    private bool _disposed;
-
-    /// <summary>Test hook: whether <see cref="Dispose" /> has run.</summary>
-    internal bool IsDisposed => _disposed;
-
-    /// <summary>Test hook: whether the dedicated thread is still running.</summary>
-    internal bool IsThreadAlive => _thread.IsAlive;
 
     public SingleThreadExecutor(string name)
     {
@@ -26,9 +19,28 @@ internal sealed class SingleThreadExecutor : IDisposable
         _thread.Start();
     }
 
+    /// <summary>Test hook: whether <see cref="Dispose" /> has run.</summary>
+    internal bool IsDisposed { get; private set; }
+
+    /// <summary>Test hook: whether the dedicated thread is still running.</summary>
+    internal bool IsThreadAlive => _thread.IsAlive;
+
+    public void Dispose()
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        IsDisposed = true;
+        _queue.CompleteAdding();
+        _thread.Join();
+        _queue.Dispose();
+    }
+
     public T Run<T>(Func<T> work)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
         var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
         _queue.Add(() =>
         {
@@ -42,19 +54,6 @@ internal sealed class SingleThreadExecutor : IDisposable
             }
         });
         return completion.Task.GetAwaiter().GetResult();
-    }
-
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _disposed = true;
-        _queue.CompleteAdding();
-        _thread.Join();
-        _queue.Dispose();
     }
 
     private void Loop()

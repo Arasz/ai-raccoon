@@ -1,4 +1,3 @@
-using AiRaccoon.Setup;
 using Shouldly;
 using Xunit;
 

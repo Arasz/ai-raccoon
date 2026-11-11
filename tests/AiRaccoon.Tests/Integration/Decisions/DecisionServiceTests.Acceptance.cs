@@ -166,7 +166,8 @@ public sealed partial class DecisionServiceTests
         long revision = 0;
         for (var i = 0; i < 4; i++)
         {
-            var recorded = await service.RecordAsync("a", new DecisionWrite("task", "s", "record-" + i.ToString(CultureInfo.InvariantCulture)), new DecisionContent("Paw " + i.ToString(CultureInfo.InvariantCulture), "c", "s", paws, paws), cancellationToken: ct);
+            var recorded = await service.RecordAsync("a", new DecisionWrite("task", "s", $"record-{i.ToString(CultureInfo.InvariantCulture)}"), new DecisionContent(
+                $"Paw {i.ToString(CultureInfo.InvariantCulture)}", "c", "s", paws, paws), cancellationToken: ct);
             ids.Add(recorded.Value.DecisionId);
             revision = recorded.ProjectRevision;
         }
@@ -222,8 +223,8 @@ public sealed partial class DecisionServiceTests
         var title = string.Concat(Enumerable.Repeat("🐾", 90));
         for (var i = 0; i < count; i++)
         {
-            var id = "empty-" + i.ToString(CultureInfo.InvariantCulture);
-            await service.RegisterTaskAsync("a", new DecisionWrite(id, "s", "register-" + id), title, cancellationToken: ct);
+            var id = $"empty-{i.ToString(CultureInfo.InvariantCulture)}";
+            await service.RegisterTaskAsync("a", new DecisionWrite(id, "s", $"register-{id}"), title, cancellationToken: ct);
         }
 
         var preview = (await service.PreviewAsync("a", new DecisionPreviewOptions(new DecisionTaskSelector(all: true), MaxChars: 1000), ct)).Value;

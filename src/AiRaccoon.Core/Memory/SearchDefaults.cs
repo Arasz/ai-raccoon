@@ -13,7 +13,9 @@ public static class SearchDefaults
     public const int Limit = 8;
     public const double MinRelativeScore = 0.6;
 
-    /// <summary>The most terms a keyword (FTS) OR join carries; a longer query keeps its first this-many
-    /// distinct content words (ADR-0126).</summary>
+    /// <summary>
+    ///     The most terms a keyword (FTS) OR join carries; a longer query keeps its first this-many
+    ///     distinct content words (ADR-0126).
+    /// </summary>
     public const int MaxKeywordTerms = 64;
 }

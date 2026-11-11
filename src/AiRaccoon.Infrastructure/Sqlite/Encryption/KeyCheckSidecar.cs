@@ -177,7 +177,7 @@ public sealed class KeyCheckSidecar
     /// </summary>
     private static bool IsRawKeyLiteral(string key)
     {
-        if (key.Length < 4 || (key[0] != 'x' && key[0] != 'X') || key[1] != '\'' || key[^1] != '\'')
+        if (key.Length < 4 || key[0] != 'x' && key[0] != 'X' || key[1] != '\'' || key[^1] != '\'')
         {
             return false;
         }

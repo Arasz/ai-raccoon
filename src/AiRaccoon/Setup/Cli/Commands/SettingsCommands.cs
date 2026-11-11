@@ -1,19 +1,15 @@
-using AiRaccoon.Infrastructure.Embedding.Manifest;
 using System.ClientModel;
 using System.CommandLine;
 using System.Globalization;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
-using AiRaccoon.Core.Embedding;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Embedding.Download;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Settings;
-using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
@@ -140,8 +136,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         if (baseUrl is not null && !BaseUrlValidation.IsUsableHttpUrl(baseUrl))
         {
             await streams.WriteErrorLineAsync(
-                $"ai-raccoon: model embedding set openai: '{baseUrl}' is not a usable absolute http(s) URL; " +
-                "pass a full URL such as https://api.example.com/v1. Nothing has been changed.");
+                $"ai-raccoon: model embedding set openai: '{baseUrl}' is not a usable absolute http(s) URL; pass a full URL such as https://api.example.com/v1. Nothing has been changed.");
             return ErrorCode.Model.BadBaseUrl;
         }
 
@@ -201,28 +196,24 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
         catch (ClientResultException ex) when (ex.Status is 401 or 403)
         {
             throw new EmbeddingEndpointUnreachableException(
-                $"The embedding endpoint for '{model}' rejected the API key (HTTP {ex.Status}). " +
-                "Check the --api-key value and re-run; nothing has been changed.", ex);
+                $"The embedding endpoint for '{model}' rejected the API key (HTTP {ex.Status}). Check the --api-key value and re-run; nothing has been changed.", ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             throw new EmbeddingEndpointUnreachableException(
-                $"The embedding endpoint for '{model}' could not be reached, so its output dimension is unknown: " +
-                $"{ex.Message}. Fix the endpoint or the API key and re-run; nothing has been changed.", ex);
+                $"The embedding endpoint for '{model}' could not be reached, so its output dimension is unknown: {ex.Message}. Fix the endpoint or the API key and re-run; nothing has been changed.", ex);
         }
 
         if (declared is not null && declared.Value != probed)
         {
             throw new EmbeddingDimensionMismatchException(
-                $"Declared --dims {declared.Value} but '{model}' returns {probed}-dimension embeddings. " +
-                $"Re-run with --dims {probed}, or point at a model that matches; nothing has been changed.");
+                $"Declared --dims {declared.Value} but '{model}' returns {probed}-dimension embeddings. Re-run with --dims {probed}, or point at a model that matches; nothing has been changed.");
         }
 
         if (declared is null && probed != DefaultRemoteDimensions)
         {
             throw new EmbeddingDimensionMismatchException(
-                $"'{model}' returns {probed}-dimension embeddings, not the assumed {DefaultRemoteDimensions}. " +
-                $"Re-run with --dims {probed} so the bank's vector index can be rebuilt to match.");
+                $"'{model}' returns {probed}-dimension embeddings, not the assumed {DefaultRemoteDimensions}. Re-run with --dims {probed} so the bank's vector index can be rebuilt to match.");
         }
 
         return declared;
@@ -802,8 +793,7 @@ public sealed class SettingsCommands(IRemoteDimensionProbe? dimensionProbe = nul
             await store.GetSettingAsync(QueryGuardConfigKeys.StructuralEnabledGlobal, cancellationToken));
         var threshold = QueryGuardConfigKeys.ParseStructuralThreshold(
             await store.GetSettingAsync(QueryGuardConfigKeys.StructuralThresholdGlobal, cancellationToken));
-        await streams.WriteOutputLineAsync($"enabled: {enabled}  shadow: {shadow}  " +
-                                           $"structural: {structural}  threshold: {threshold.ToString(CultureInfo.InvariantCulture)}");
+        await streams.WriteOutputLineAsync($"enabled: {enabled}  shadow: {shadow}  structural: {structural}  threshold: {threshold.ToString(CultureInfo.InvariantCulture)}");
         return 0;
     }
 

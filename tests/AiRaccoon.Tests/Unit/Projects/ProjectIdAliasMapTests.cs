@@ -250,7 +250,7 @@ public sealed class ProjectIdAliasMapTests
     [Fact]
     public void Fold_OfABlankInput_ReturnsItUnchanged()
     {
-        ProjectIdAliasMap.Default.Fold(string.Empty).ShouldBe(string.Empty);
+        ProjectIdAliasMap.Default.Fold("").ShouldBe("");
     }
 
     private const string GuidLoser = "0719fdbe-632c-4eb8-906c-0a652463cd95";

@@ -68,9 +68,9 @@ public sealed partial class SqliteMemoryStore
         try
         {
             var rows = (await connection.QueryAsync<SearchRow>(
-                    new CommandDefinition(
-                        MemorySql.SearchByTypes(entryTypes).Replace("{filter}", contextFilter.Filter), queryParameters,
-                        cancellationToken: cancellationToken))).ToList();
+                new CommandDefinition(
+                    MemorySql.SearchByTypes(entryTypes).Replace("{filter}", contextFilter.Filter), queryParameters,
+                    cancellationToken: cancellationToken))).ToList();
 
             foreach (var row in rows)
             {
@@ -119,7 +119,7 @@ public sealed partial class SqliteMemoryStore
     internal static IReadOnlyList<MemorySearchResult> BuildFtsResults(IReadOnlyList<SearchRow> rows) =>
     [
         .. rows.Select(row => new MemorySearchResult(
-            row.Hash, row.Ranking, row.Path, string.Empty,
+            row.Hash, row.Ranking, row.Path, "",
             row.SourceFile, row.ChunkIndex, row.TotalChunks, EntryKind: row.EntryKind))
     ];
 }

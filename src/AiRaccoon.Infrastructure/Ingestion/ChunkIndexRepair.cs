@@ -25,11 +25,11 @@ public sealed class ChunkIndexRepair(IFileTypeMatcher fileTypeMatcher, IEmbeddin
         var (maxTokens, overlayTokens, countTokens) = await _scanner.BudgetAsync(connection, cancellationToken);
 
         var groups = (await connection.QueryAsync<long>(new CommandDefinition(
-                $"""
-                 SELECT MIN(id) FROM entries
-                 WHERE source_file IS NOT NULL
-                 GROUP BY {MemorySql.ContextKeyExpression("")}, source_file
-                 """, cancellationToken: cancellationToken))).ToList();
+            $"""
+             SELECT MIN(id) FROM entries
+             WHERE source_file IS NOT NULL
+             GROUP BY {MemorySql.ContextKeyExpression("")}, source_file
+             """, cancellationToken: cancellationToken))).ToList();
 
         var repositioned = 0;
         var setUnknown = 0;

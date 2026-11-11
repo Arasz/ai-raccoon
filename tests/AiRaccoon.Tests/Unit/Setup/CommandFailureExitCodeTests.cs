@@ -347,9 +347,9 @@ public sealed class CommandFailureExitCodeTests
     private sealed class FakeStatusResponse(int status) : PipelineResponse
     {
         public override int Status { get; } = status;
-        public override string ReasonPhrase => string.Empty;
+        public override string ReasonPhrase => "";
         public override Stream? ContentStream { get; set; }
-        public override BinaryData Content => BinaryData.FromString(string.Empty);
+        public override BinaryData Content => BinaryData.FromString("");
         protected override PipelineResponseHeaders HeadersCore => FakeHeaders.Instance;
         public override void Dispose()
         {

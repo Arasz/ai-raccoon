@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.SearchQuality;
 using Dapper;
@@ -20,6 +21,7 @@ public sealed partial class SqliteSearchQualityService(
 
     /// <summary>Compact Stage-1 feature JSON: camel-case keys, no indentation.</summary>
     private static readonly JsonSerializerOptions ResultFeaturesJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
     /// <summary>Best-effort: never throws (docs/plans/2026-08-15-performance-metrics-implementation.md, WP1 tool-size step).</summary>
     public async Task RecordSearchSafeAsync(
         string correlationId,
@@ -32,7 +34,7 @@ public sealed partial class SqliteSearchQualityService(
         IReadOnlyList<string> topSourceFiles,
         CancellationToken ct = default,
         IReadOnlyList<RetrievalEvidence>? evidence = null,
-        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
+        EntryType? entryTypes = null)
     {
         try
         {
@@ -64,7 +66,7 @@ public sealed partial class SqliteSearchQualityService(
         // P6b: the P4 sidecar joined to the served rows in served order. Persisted as compact
         // JSON on the same single INSERT — never a per-result statement (M6/G5).
         IReadOnlyList<RetrievalEvidence>? evidence = null,
-        AiRaccoon.Core.Memory.EntryType? entryTypes = null)
+        EntryType? entryTypes = null)
     {
         if (kind is not ("memory" or "code" or "both"))
         {
@@ -101,48 +103,6 @@ public sealed partial class SqliteSearchQualityService(
                 CreatedAt = now
             });
     }
-
-    /// <summary>
-    ///     Stage-1 per-result features (plan §5, P6b): hashes, strengths, leg names/ranks,
-    ///     cosines — never values or snippets. Null or empty evidence writes NULL (the
-    ///     top_source_files precedent in the caller). Non-finite doubles become null: Core stays
-    ///     JSON-free while System.Text.Json refuses to emit them, so the sanitize lives here (M2).
-    /// </summary>
-    private static string? SerializeResultFeatures(IReadOnlyList<RetrievalEvidence>? evidence)
-    {
-        if (evidence is null || evidence.Count == 0)
-        {
-            return null;
-        }
-
-        var rows = new List<ResultFeatureRow>(evidence.Count);
-        foreach (var item in evidence)
-        {
-            var legs = new List<LegFeatureRow>(item.Legs.Count);
-            foreach (var leg in item.Legs)
-            {
-                legs.Add(new LegFeatureRow(leg.LegName, leg.Rank));
-            }
-
-            rows.Add(new ResultFeatureRow(
-                item.Hash,
-                double.IsFinite(item.FusionStrength) ? item.FusionStrength : null,
-                legs,
-                item.Cosine is { } cosine && double.IsFinite(cosine) ? cosine : null));
-        }
-
-        return JsonSerializer.Serialize(rows, ResultFeaturesJson);
-    }
-
-    /// <summary>One served row's features: the <c>result_features</c> JSON element shape.</summary>
-    private sealed record ResultFeatureRow(
-        string Hash,
-        double? Strength,
-        IReadOnlyList<LegFeatureRow> Legs,
-        double? Cosine);
-
-    /// <summary>One leg's ordinal vote, mirroring <see cref="LegRank" />.</summary>
-    private sealed record LegFeatureRow(string Name, int Rank);
 
     public async Task<bool> RecordFollowThroughAsync(
         string projectId,
@@ -191,45 +151,6 @@ public sealed partial class SqliteSearchQualityService(
                 Files = JsonSerializer.Serialize(entries)
             });
         return updated > 0;
-    }
-
-    /// <summary>
-    ///     Decodes a <c>follow_through_files</c> cell: uniform object rows, with a per-element
-    ///     fallback for legacy plain-string rows (pre-P4 writers, including the file-watcher
-    ///     hook, which still appends bare strings). Unknown element shapes are skipped.
-    /// </summary>
-    private static List<FollowThroughEntry> DecodeFollowThrough(string? cell)
-    {
-        if (string.IsNullOrEmpty(cell))
-        {
-            return [];
-        }
-
-        using var document = JsonDocument.Parse(cell);
-        var entries = new List<FollowThroughEntry>();
-        foreach (var element in document.RootElement.EnumerateArray())
-        {
-            if (element.ValueKind == JsonValueKind.String)
-            {
-                entries.Add(new FollowThroughEntry(element.GetString() ?? string.Empty, null));
-            }
-            else if (element.ValueKind == JsonValueKind.Object
-                && element.TryGetProperty("path", out var pathProperty)
-                && pathProperty.GetString() is { } path)
-            {
-                int? rank = null;
-                if (element.TryGetProperty("rank", out var rankProperty)
-                    && rankProperty.ValueKind == JsonValueKind.Number
-                    && rankProperty.TryGetInt32(out var parsed))
-                {
-                    rank = parsed;
-                }
-
-                entries.Add(new FollowThroughEntry(path, rank));
-            }
-        }
-
-        return entries;
     }
 
     public async Task<bool> RecordGradeAsync(
@@ -299,9 +220,90 @@ public sealed partial class SqliteSearchQualityService(
         // Retention is global, so no project filter: idx_sq_project_time leads with project_id and
         // serves ReadMetricsAsync, not this — SQLite skip-scans or scans here.
         return await connection.ExecuteAsync(
-                new CommandDefinition("DELETE FROM search_quality WHERE created_at < @cutoff",
-                    new { cutoff }, cancellationToken: cancellationToken));
+            new CommandDefinition("DELETE FROM search_quality WHERE created_at < @cutoff",
+                new { cutoff }, cancellationToken: cancellationToken));
     }
+
+    /// <summary>
+    ///     Stage-1 per-result features (plan §5, P6b): hashes, strengths, leg names/ranks,
+    ///     cosines — never values or snippets. Null or empty evidence writes NULL (the
+    ///     top_source_files precedent in the caller). Non-finite doubles become null: Core stays
+    ///     JSON-free while System.Text.Json refuses to emit them, so the sanitize lives here (M2).
+    /// </summary>
+    private static string? SerializeResultFeatures(IReadOnlyList<RetrievalEvidence>? evidence)
+    {
+        if (evidence is null || evidence.Count == 0)
+        {
+            return null;
+        }
+
+        var rows = new List<ResultFeatureRow>(evidence.Count);
+        foreach (var item in evidence)
+        {
+            var legs = new List<LegFeatureRow>(item.Legs.Count);
+            foreach (var leg in item.Legs)
+            {
+                legs.Add(new LegFeatureRow(leg.LegName, leg.Rank));
+            }
+
+            rows.Add(new ResultFeatureRow(
+                item.Hash,
+                double.IsFinite(item.FusionStrength) ? item.FusionStrength : null,
+                legs,
+                item.Cosine is { } cosine && double.IsFinite(cosine) ? cosine : null));
+        }
+
+        return JsonSerializer.Serialize(rows, ResultFeaturesJson);
+    }
+
+    /// <summary>
+    ///     Decodes a <c>follow_through_files</c> cell: uniform object rows, with a per-element
+    ///     fallback for legacy plain-string rows (pre-P4 writers, including the file-watcher
+    ///     hook, which still appends bare strings). Unknown element shapes are skipped.
+    /// </summary>
+    private static List<FollowThroughEntry> DecodeFollowThrough(string? cell)
+    {
+        if (string.IsNullOrEmpty(cell))
+        {
+            return [];
+        }
+
+        using var document = JsonDocument.Parse(cell);
+        var entries = new List<FollowThroughEntry>();
+        foreach (var element in document.RootElement.EnumerateArray())
+        {
+            if (element.ValueKind == JsonValueKind.String)
+            {
+                entries.Add(new FollowThroughEntry(element.GetString() ?? "", null));
+            }
+            else if (element.ValueKind == JsonValueKind.Object
+                     && element.TryGetProperty("path", out var pathProperty)
+                     && pathProperty.GetString() is { } path)
+            {
+                int? rank = null;
+                if (element.TryGetProperty("rank", out var rankProperty)
+                    && rankProperty.ValueKind == JsonValueKind.Number
+                    && rankProperty.TryGetInt32(out var parsed))
+                {
+                    rank = parsed;
+                }
+
+                entries.Add(new FollowThroughEntry(path, rank));
+            }
+        }
+
+        return entries;
+    }
+
+    /// <summary>One served row's features: the <c>result_features</c> JSON element shape.</summary>
+    private sealed record ResultFeatureRow(
+        string Hash,
+        double? Strength,
+        IReadOnlyList<LegFeatureRow> Legs,
+        double? Cosine);
+
+    /// <summary>One leg's ordinal vote, mirroring <see cref="LegRank" />.</summary>
+    private sealed record LegFeatureRow(string Name, int Rank);
 
     private static partial class Log
     {

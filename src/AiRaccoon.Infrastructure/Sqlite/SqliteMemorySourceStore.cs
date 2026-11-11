@@ -47,27 +47,27 @@ public sealed class SqliteMemorySourceStore(ISqliteConnectionFactory factory) : 
         };
 
         await connection.ExecuteAsync(
-                new CommandDefinition(
-                    """
-                    INSERT OR IGNORE INTO memory_source (source_type, source_locator, section, heading_path)
-                    VALUES (@sourceType, @sourceLocator, @section, @headingPath);
-                    """,
-                    new { sourceType = sourceTypeText, sourceLocator, section, headingPath },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                """
+                INSERT OR IGNORE INTO memory_source (source_type, source_locator, section, heading_path)
+                VALUES (@sourceType, @sourceLocator, @section, @headingPath);
+                """,
+                new { sourceType = sourceTypeText, sourceLocator, section, headingPath },
+                cancellationToken: cancellationToken));
 
         var row = await connection.QueryFirstOrDefaultAsync<SourceRow>(
-                new CommandDefinition(
-                    """
-                    SELECT id AS Id, source_type AS SourceType, source_locator AS SourceLocator,
-                           section AS Section, heading_path AS HeadingPath
-                    FROM memory_source
-                    WHERE source_type = @sourceType
-                      AND source_locator = @sourceLocator
-                      AND COALESCE(section, '') IS COALESCE(@section, '')
-                    LIMIT 1;
-                    """,
-                    new { sourceType = sourceTypeText, sourceLocator, section },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                """
+                SELECT id AS Id, source_type AS SourceType, source_locator AS SourceLocator,
+                       section AS Section, heading_path AS HeadingPath
+                FROM memory_source
+                WHERE source_type = @sourceType
+                  AND source_locator = @sourceLocator
+                  AND COALESCE(section, '') IS COALESCE(@section, '')
+                LIMIT 1;
+                """,
+                new { sourceType = sourceTypeText, sourceLocator, section },
+                cancellationToken: cancellationToken));
 
         if (row is null)
         {

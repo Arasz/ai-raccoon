@@ -6,9 +6,11 @@ namespace AiRaccoon.Infrastructure.Embedding;
 /// <summary>Reads a model directory's manifest and turns it into the engine descriptor.</summary>
 public interface IEmbeddingManifestLoader
 {
-    /// <summary>Loads, validates and maps <see cref="EmbeddingManifest.FileName" />; throws with an
-    /// actionable message when the directory has no manifest, it fails the D1 contract, or a pinned
-    /// file is missing from disk.</summary>
+    /// <summary>
+    ///     Loads, validates and maps <see cref="EmbeddingManifest.FileName" />; throws with an
+    ///     actionable message when the directory has no manifest, it fails the D1 contract, or a pinned
+    ///     file is missing from disk.
+    /// </summary>
     EngineDescriptor Load(string modelDirectory);
 }
 
@@ -34,10 +36,7 @@ public sealed class EmbeddingManifestLoader(
         if (!File.Exists(manifestPath))
         {
             throw new EmbeddingModelRejectedException(
-                $"Configured embedding model directory '{modelDirectory}' has no {EmbeddingManifest.FileName}. " +
-                $"A local model directory must contain a {EmbeddingManifest.FileName} describing its files, tokenizer, " +
-                "pooling and dimensions — run 'ai-raccoon model download <repo-id>' to create one, or point " +
-                "embedding.model at a .onnx file for the legacy path.");
+                $"Configured embedding model directory '{modelDirectory}' has no {EmbeddingManifest.FileName}. A local model directory must contain a {EmbeddingManifest.FileName} describing its files, tokenizer, pooling and dimensions — run 'ai-raccoon model download <repo-id>' to create one, or point embedding.model at a .onnx file for the legacy path.");
         }
 
         EmbeddingManifest manifest;
@@ -54,8 +53,7 @@ public sealed class EmbeddingManifestLoader(
         if (errors.Count > 0)
         {
             throw new EmbeddingModelRejectedException(
-                $"Manifest '{manifestPath}' fails the v1 contract:{Environment.NewLine}  - " +
-                string.Join($"{Environment.NewLine}  - ", errors));
+                $"Manifest '{manifestPath}' fails the v1 contract:{Environment.NewLine}  - {string.Join($"{Environment.NewLine}  - ", errors)}");
         }
 
         var files = manifest.Tokenizer.Files.Concat(manifest.Onnx.Files).Concat(manifest.ProvenanceFiles ?? []).ToList();
@@ -65,17 +63,14 @@ public sealed class EmbeddingManifestLoader(
             if (!File.Exists(path))
             {
                 throw new EmbeddingModelRejectedException(
-                    $"Manifest '{manifestPath}' declares file '{file.Path}' but it is missing from '{modelDirectory}'. " +
-                    "Re-run 'ai-raccoon model download' to restore the model directory.");
+                    $"Manifest '{manifestPath}' declares file '{file.Path}' but it is missing from '{modelDirectory}'. Re-run 'ai-raccoon model download' to restore the model directory.");
             }
 
             var actual = hasher.Sha256OfFile(path);
             if (!actual.Equals(file.Sha256, StringComparison.OrdinalIgnoreCase))
             {
                 throw new EmbeddingModelRejectedException(
-                    $"Manifest '{manifestPath}' pins '{file.Path}' to sha256 {file.Sha256}, but the file on disk hashes " +
-                    $"to {actual}. The model directory may have been tampered with or partially replaced — re-run " +
-                    "'ai-raccoon model download' to restore a clean copy.");
+                    $"Manifest '{manifestPath}' pins '{file.Path}' to sha256 {file.Sha256}, but the file on disk hashes to {actual}. The model directory may have been tampered with or partially replaced — re-run 'ai-raccoon model download' to restore a clean copy.");
             }
         }
 

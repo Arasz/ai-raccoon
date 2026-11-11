@@ -1,7 +1,6 @@
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
-using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;

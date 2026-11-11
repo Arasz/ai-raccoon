@@ -37,7 +37,7 @@ public class BuildStampTests
     {
         var stamp = BuildStamp.Parse(null, null);
 
-        stamp.Version.ShouldBe(string.Empty);
+        stamp.Version.ShouldBe("");
         stamp.Commit.ShouldBe(BuildStamp.UnknownCommit);
     }
 
@@ -68,7 +68,7 @@ public class BuildStampTests
     [Fact]
     public void Parse_EmptyCommitTimestampText_CommitTimestampIsNull()
     {
-        var stamp = BuildStamp.Parse("1.15.0+sha", string.Empty);
+        var stamp = BuildStamp.Parse("1.15.0+sha", "");
 
         stamp.CommitTimestamp.ShouldBeNull();
     }

@@ -73,8 +73,10 @@ public static class TokenBudget
         return 0;
     }
 
-    /// <summary>Binary search (token count is non-decreasing in prefix length for every tokenizer this
-    /// project uses) for the longest prefix within the budget.</summary>
+    /// <summary>
+    ///     Binary search (token count is non-decreasing in prefix length for every tokenizer this
+    ///     project uses) for the longest prefix within the budget.
+    /// </summary>
     private static int LongestPrefix(string text, int maxTokens, TokenCount countTokens)
     {
         var lo = 0;

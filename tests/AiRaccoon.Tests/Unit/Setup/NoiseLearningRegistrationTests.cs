@@ -62,12 +62,12 @@ public sealed class NoiseLearningRegistrationTests : IDisposable
 
         var shadowField = typeof(SqliteMemoryStore).GetField("_noiseShadowObserver", BindingFlags.NonPublic | BindingFlags.Instance);
         shadowField.ShouldNotBeNull("SqliteMemoryStore must keep a _noiseShadowObserver field for this DI-wiring check to hold");
-        shadowField!.GetValue(store).ShouldBeOfType<NoiseShadowObserver>(
+        shadowField.GetValue(store).ShouldBeOfType<NoiseShadowObserver>(
             "production DI must select SqliteMemoryStore's 9-arg constructor, not silently fall back to NoOpNoiseShadowObserver");
 
         var entryStoreField = typeof(SqliteMemoryStore).GetField("_noiseEntryStore", BindingFlags.NonPublic | BindingFlags.Instance);
         entryStoreField.ShouldNotBeNull("SqliteMemoryStore must keep a _noiseEntryStore field for this DI-wiring check to hold");
-        entryStoreField!.GetValue(store).ShouldBeOfType<SqliteNoiseEntryStore>(
+        entryStoreField.GetValue(store).ShouldBeOfType<SqliteNoiseEntryStore>(
             "production DI must select SqliteMemoryStore's 9-arg constructor, not silently fall back to NoOpNoiseEntryStore");
     }
 }

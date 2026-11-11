@@ -6,7 +6,8 @@ Ask the running server how it is performing — no OpenTelemetry collector requi
 
 ## What this is, and what it is not
 
-AiRaccoon records a measurement for every MCP tool call, every `query` phase
+AiRaccoon records a measurement for every MCP tool call, the HTTP-to-tool dispatch delay and
+request duration for each HTTP `POST /mcp`, every `query` phase
 (`search.open`, `search.embed`, `search.fts`, `search.vector`, `search.fusion`, `search.affinity`,
 `search.adjustment`, `search.snippets`, `search.bump`), and one measured total per search (`search.total` — not itself
 a phase; see [Reading `search.*` series](#reading-search-series) below), persists them in a
@@ -65,9 +66,9 @@ A few things worth knowing before reading a report:
   tool inventory plus `SearchTimings.SeriesNames` — the nine `query` phases and the
   measured `search.total` — so a tool or phase nothing has called yet still appears, at
   `count: 0`, rather than being silently omitted.
-- **Four series families are discovered by prefix, scoped to whatever project id you ask
-  `get_engine_statistics` for** (`MetricsConfigKeys.InternalSeriesPrefixes`: `job.`, `drain.`,
-  `write.`, `search.query.`) — no `count: 0` placeholder if nothing in that family was recorded
+- **Internal series families are discovered by the prefixes in
+  `MetricsConfigKeys.InternalSeriesPrefixes`, scoped to the project id you ask
+  `get_engine_statistics` for** — no `count: 0` placeholder if nothing in that family was recorded
   for that project in the window, unlike the fixed tool/phase list above.
   - `job.<name>.duration_ms` on every completed maintenance-job run, `job.<name>.rows` for a job
     that reports an outstanding-row count (#477) — `<name>` is dynamic (one per job).
@@ -85,6 +86,11 @@ A few things worth knowing before reading a report:
     replace records `rows = 0` with a real `held_ms`** — the claim transaction's own authoritative
     re-check still takes and releases the lock even when it declines; the common no-race decline
     (fingerprint unchanged) never reaches the lock at all and records nothing.
+  - `mcp.dispatch.delay_ms` measures from the `/mcp` middleware to MCP tool filter entry. It
+    includes protocol parsing and any wait before dispatch. It is not a pure queue measurement.
+  - `mcp.request.duration_ms` measures from entry to the `/mcp` middleware through response
+    completion. It is stored under `__self_metrics__`, so use that project id to read it. It includes
+    requests that do not call a tool.
 
   `job.*`, `drain.*` and `search.query.*` are bank-wide — none of a maintenance job, an
   embed-drain pass, or the embedding engine's query-trim path has a project id — so they only

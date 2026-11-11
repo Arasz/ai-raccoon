@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Infrastructure.Sqlite.Memory;
 using Shouldly;
 using Xunit;
@@ -75,7 +74,7 @@ public sealed class EvidenceCarryChainTests
         fused.Results[0].Hash.ShouldBe("lone");
 
         var merged = SearchResultMerger.Merge(
-            fused.Results, Limit, 0.0, K, ShippedLambda, double.PositiveInfinity, DocScoreFormula.Max);
+            fused.Results, Limit, 0.0, K, ShippedLambda);
         merged[0].Hash.ShouldBe("c4", "affinity must genuinely reorder, or this test proves nothing");
         merged.Select(result => result.Hash).ShouldNotBe(fused.Results.Select(result => result.Hash));
 
@@ -115,7 +114,7 @@ public sealed class EvidenceCarryChainTests
         var fused = Fuse(Legs());
 
         var merged = SearchResultMerger.Merge(
-            fused.Results, Limit, 0.0, K, ShippedLambda, 0.01, DocScoreFormula.Max);
+            fused.Results, Limit, 0.0, K, ShippedLambda, 0.01);
         merged.Select(result => result.Hash).ShouldNotContain("c4");
         merged.Count.ShouldBeLessThan(fused.Results.Count);
 
@@ -141,7 +140,7 @@ public sealed class EvidenceCarryChainTests
         var fused = Fuse(Legs());
 
         var merged = SearchResultMerger.Merge(
-            fused.Results, Limit, 0.99, K, ShippedLambda, double.PositiveInfinity, DocScoreFormula.Max);
+            fused.Results, Limit, 0.99, K, ShippedLambda);
         merged.Select(result => result.Hash).ShouldBe(["c4"]);
 
         var envelope = new Core.Memory.SearchResults(
@@ -164,9 +163,9 @@ public sealed class EvidenceCarryChainTests
         var fused = Fuse((fts, vector));
 
         var servedPlain = SearchResultMerger.Merge(
-            plain, Limit, 0.0, K, ShippedLambda, double.PositiveInfinity, DocScoreFormula.Max);
+            plain, Limit, 0.0, K, ShippedLambda);
         var servedWired = SearchResultMerger.Merge(
-            fused.Results, Limit, 0.0, K, ShippedLambda, double.PositiveInfinity, DocScoreFormula.Max);
+            fused.Results, Limit, 0.0, K, ShippedLambda);
 
         servedWired.ShouldBe(servedPlain);
     }
@@ -202,6 +201,6 @@ public sealed class EvidenceCarryChainTests
         var envelope = new Core.Memory.SearchResults(rows, SearchTimings.Empty);
         envelope.EvidenceByHash.ShouldBeNull();
         envelope.Stats.ShouldBeNull();
-        envelope.ShouldBe(new Core.Memory.SearchResults(rows, SearchTimings.Empty, null, null, null));
+        envelope.ShouldBe(new Core.Memory.SearchResults(rows, SearchTimings.Empty));
     }
 }

@@ -7,7 +7,7 @@ namespace AiRaccoon.Infrastructure.Sqlite;
 /// </summary>
 internal static class PathSubtree
 {
-    public static string Low(string path) => path + "/";
+    public static string Low(string path) => $"{path}/";
 
-    public static string High(string path) => path + "0";
+    public static string High(string path) => $"{path}0";
 }

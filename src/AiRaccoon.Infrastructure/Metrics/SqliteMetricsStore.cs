@@ -129,7 +129,7 @@ public sealed partial class SqliteMetricsStore(ISqliteConnectionFactory factory,
     private static bool IsAllowedTag(JsonProperty property) =>
         AllowedTagKeys.Contains(property.Name)
         && property.Value.ValueKind == JsonValueKind.String
-        && AllowedPhaseValues.Contains(property.Value.GetString() ?? string.Empty);
+        && AllowedPhaseValues.Contains(property.Value.GetString() ?? "");
 
     private static partial class Log
     {

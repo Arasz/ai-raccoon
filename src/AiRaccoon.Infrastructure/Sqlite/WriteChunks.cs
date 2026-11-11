@@ -22,46 +22,46 @@ internal static class WriteChunks
             CancellationToken cancellationToken)
         {
             var exists = await connection.ExecuteScalarAsync<long?>(
-                    new CommandDefinition(MemorySql.EntryExistsByPathAndHashInBucket,
-                        new
-                        {
-                            hash,
-                            path,
-                            scope = bucket.Scope,
-                            projectId = bucket.ProjectId,
-                            contextLabel = bucket.ContextLabel,
-                            workspaceId = bucket.WorkspaceId
-                        }, cancellationToken: cancellationToken)) is not null;
+                new CommandDefinition(MemorySql.EntryExistsByPathAndHashInBucket,
+                    new
+                    {
+                        hash,
+                        path,
+                        scope = bucket.Scope,
+                        projectId = bucket.ProjectId,
+                        contextLabel = bucket.ContextLabel,
+                        workspaceId = bucket.WorkspaceId
+                    }, cancellationToken: cancellationToken)) is not null;
             if (exists)
             {
                 return;
             }
 
             await connection.ExecuteAsync(
-                    new CommandDefinition(MemorySql.InsertEntry,
-                        new
-                        {
-                            hash,
-                            path,
-                            value = chunk,
-                            sourceFile = source.SourceLocator is { Length: > 0 } ? source.SourceLocator : null,
-                            section = request.Section,
-                            scope = bucket.Scope,
-                            projectId = bucket.ProjectId,
-                            contextLabel = bucket.ContextLabel,
-                            workspaceId = bucket.WorkspaceId,
-                            agentId = request.AgentId,
-                            createdAt = now,
-                            updatedAt = now,
-                            sourceId = source.Id,
-                            // An agent write is a memory, whatever it cites (see the write path).
-                            entryType = entryTypeClassifier.ToStoredValue(EntryKind.Memory),
-                            // Position unknown here — this is an append to a (ctx, source_file) group, not
-                            // a re-chunk of a whole document; RecomputeChunkColumnsForContext fills it in.
-                            chunkIndex = -1,
-                            totalChunks = 0
-                        },
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(MemorySql.InsertEntry,
+                    new
+                    {
+                        hash,
+                        path,
+                        value = chunk,
+                        sourceFile = source.SourceLocator is { Length: > 0 } ? source.SourceLocator : null,
+                        section = request.Section,
+                        scope = bucket.Scope,
+                        projectId = bucket.ProjectId,
+                        contextLabel = bucket.ContextLabel,
+                        workspaceId = bucket.WorkspaceId,
+                        agentId = request.AgentId,
+                        createdAt = now,
+                        updatedAt = now,
+                        sourceId = source.Id,
+                        // An agent write is a memory, whatever it cites (see the write path).
+                        entryType = entryTypeClassifier.ToStoredValue(EntryKind.Memory),
+                        // Position unknown here — this is an append to a (ctx, source_file) group, not
+                        // a re-chunk of a whole document; RecomputeChunkColumnsForContext fills it in.
+                        chunkIndex = -1,
+                        totalChunks = 0
+                    },
+                    cancellationToken: cancellationToken));
         }
     }
 }

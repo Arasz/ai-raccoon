@@ -14,10 +14,12 @@ public static class DynamicParametersExtensions
         {
             names.Add(EntryKindWireNames.Memory);
         }
+
         if ((types & EntryType.File) != 0)
         {
             names.Add(EntryKindWireNames.File);
         }
+
         return names.ToArray();
     }
 

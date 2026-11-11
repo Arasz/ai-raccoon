@@ -3,7 +3,6 @@ using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.Integration.Retrieval;
-using AiRaccoon.Tests.Unit.Retrieval;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;

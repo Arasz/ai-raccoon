@@ -119,8 +119,7 @@ comment convention:
 
 `src` and `alt` are required — a block missing either **fails the build**, naming the image id
 and the missing field, the same refusal `DETAILS` already uses rather than shipping a broken
-`<img>`. `caption`, `width` and `height` are optional; when given, `width`/`height` must be a
-**positive whole number of intrinsic pixels**. Non-numeric, zero, negative, fractional and blank
+`<img>`. `caption`, `width` and `height` are optional; when given, `width`/`height` must be a **positive whole number of intrinsic pixels**. Non-numeric, zero, negative, fractional and blank
 values all fail the build — each of them renders while reserving no space, which is the one thing
 the attribute is there to do.
 
@@ -145,20 +144,20 @@ the two most recent parser bugs were exactly that shape.
 
 ## Files
 
-| File                                                | Purpose                                          |
-|-----------------------------------------------------|--------------------------------------------------|
-| `content/articles/*.md`                             | Source Markdown articles with YAML frontmatter   |
-| `frontend/scripts/build-articles.mjs`               | Converter: MD → TypeScript Article object        |
-| `frontend/scripts/tests/test-build-articles.mjs`    | TDD tests for the converter                      |
-| `frontend/scripts/diagram-layout.mjs`               | Dagre layout + SVG rendering for DiagramBlock    |
-| `frontend/src/app/models/article.ts`                | TypeScript types + helper functions              |
-| `frontend/src/app/models/blog-category.ts`          | `BLOG_CATEGORIES` taxonomy + derived `BlogCategory` type |
-| `frontend/src/app/data/articles/*.data.ts`          | Generated Article objects (one per article)      |
-| `frontend/src/app/data/articles/articles.provider.ts` | Generated barrel over full articles (reader route only) |
-| `frontend/src/app/data/articles/articles.meta.ts`   | Generated metadata + `BLOG_POSTS` for listings   |
-| `frontend/src/app/components/article-renderer/`     | Renders Article objects to HTML                  |
-| `frontend/src/app/components/chart-renderer/`       | Renders ChartBlock via ApexCharts                |
-| `frontend/src/app/components/diagram-renderer/`     | Renders DiagramBlock's build-time SVG            |
+| File                                                  | Purpose                                                  |
+|-------------------------------------------------------|----------------------------------------------------------|
+| `content/articles/*.md`                               | Source Markdown articles with YAML frontmatter           |
+| `frontend/scripts/build-articles.mjs`                 | Converter: MD → TypeScript Article object                |
+| `frontend/scripts/tests/test-build-articles.mjs`      | TDD tests for the converter                              |
+| `frontend/scripts/diagram-layout.mjs`                 | Dagre layout + SVG rendering for DiagramBlock            |
+| `frontend/src/app/models/article.ts`                  | TypeScript types + helper functions                      |
+| `frontend/src/app/models/blog-category.ts`            | `BLOG_CATEGORIES` taxonomy + derived `BlogCategory` type |
+| `frontend/src/app/data/articles/*.data.ts`            | Generated Article objects (one per article)              |
+| `frontend/src/app/data/articles/articles.provider.ts` | Generated barrel over full articles (reader route only)  |
+| `frontend/src/app/data/articles/articles.meta.ts`     | Generated metadata + `BLOG_POSTS` for listings           |
+| `frontend/src/app/components/article-renderer/`       | Renders Article objects to HTML                          |
+| `frontend/src/app/components/chart-renderer/`         | Renders ChartBlock via ApexCharts                        |
+| `frontend/src/app/components/diagram-renderer/`       | Renders DiagramBlock's build-time SVG                    |
 
 ## Creating a New Article
 

@@ -70,7 +70,7 @@ public sealed class EntryTypeRuleParityTests
         var sqlKinds = new List<string>();
         await using (var select = connection.CreateCommand())
         {
-            select.CommandText = $"SELECT {MemorySql.EntryTypeFromShape(string.Empty)} FROM rows";
+            select.CommandText = $"SELECT {MemorySql.EntryTypeFromShape("")} FROM rows";
             await using var reader = await select.ExecuteReaderAsync(TestContext.Current.CancellationToken);
             while (await reader.ReadAsync(TestContext.Current.CancellationToken))
             {
@@ -126,7 +126,7 @@ public sealed class EntryTypeRuleParityTests
         var sqlKinds = new List<string?>();
         await using (var select = connection.CreateCommand())
         {
-            select.CommandText = $"SELECT {MemorySql.EntryTypeFromDeclarationOrShape(string.Empty)} FROM rows";
+            select.CommandText = $"SELECT {MemorySql.EntryTypeFromDeclarationOrShape("")} FROM rows";
             await using var reader = await select.ExecuteReaderAsync(TestContext.Current.CancellationToken);
             while (await reader.ReadAsync(TestContext.Current.CancellationToken))
             {

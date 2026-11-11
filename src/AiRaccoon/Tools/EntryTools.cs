@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
+using ModelContextProtocol;
 using ModelContextProtocol.Server;
 
 namespace AiRaccoon.Tools;
@@ -16,8 +17,8 @@ public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch
     [McpToolScope(ToolScope.All)]
     [Description("Reads one entry by hash from the required single entryType: memory, file, or code. A hash absent from the selected type is unknown-hash; other types are never used as fallback.")]
     public async Task<ApiEnvelope<GetEntryResult>> GetEntry(
-        [Description("The project id; every memory operation is scoped to a project.")]
-        [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id; every memory operation is scoped to a project.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description("The content hash to read.")]
         string hash,
         [Description("Required single entry type: memory, file, or code. Composite types are refused.")]
@@ -34,22 +35,22 @@ public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch
         }
         catch (ArgumentException ex)
         {
-            throw new ModelContextProtocol.McpException($"invalid-params: {ex.Message}");
+            throw new McpException($"invalid-params: {ex.Message}");
         }
 
         GetEntryResult result;
         if (requested == EntryType.Code)
         {
             var code = await codeSearch.GetAsync(canonical, hash, cancellationToken)
-                ?? throw new UnknownHashException(hash, canonical);
+                       ?? throw new UnknownHashException(hash, canonical);
             result = new GetEntryResult(code.Hash, code.Value, code.Path, null, 0, code.LineStart,
                 code.LineEnd, SearchKindWireNames.Code, EntryTypeParameter.Code);
         }
         else
         {
             var kind = requested == EntryType.Memory ? EntryKind.Memory : EntryKind.File;
-            var entry = await store.GetAsync(canonical, hash, cancellationToken, entryKind: kind)
-                ?? throw new UnknownHashException(hash, canonical);
+            var entry = await store.GetAsync(canonical, hash, cancellationToken, kind)
+                        ?? throw new UnknownHashException(hash, canonical);
             result = new GetEntryResult(entry.Hash, entry.Value, entry.Path, entry.Context, entry.CreatedAt,
                 null, null, SearchKindWireNames.Memory, classifier.ToStoredValue(kind));
         }

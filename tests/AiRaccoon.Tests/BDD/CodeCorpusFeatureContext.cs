@@ -15,7 +15,6 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Code;
 using AiRaccoon.Infrastructure.Watch;
-using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;

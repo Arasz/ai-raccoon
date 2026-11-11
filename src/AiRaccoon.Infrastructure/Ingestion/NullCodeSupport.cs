@@ -5,8 +5,10 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 
-/// <summary>Null object for callers that construct <see cref="FileIngestor" /> without code-corpus
-/// support (test/legacy positional call sites) — never matches a code extension.</summary>
+/// <summary>
+///     Null object for callers that construct <see cref="FileIngestor" /> without code-corpus
+///     support (test/legacy positional call sites) — never matches a code extension.
+/// </summary>
 public sealed class NullCodeFileTypeMatcher : ICodeFileTypeMatcher
 {
     public static NullCodeFileTypeMatcher Instance { get; } = new();
@@ -14,8 +16,10 @@ public sealed class NullCodeFileTypeMatcher : ICodeFileTypeMatcher
     public bool IsCodeFile(string path) => false;
 }
 
-/// <summary>Null object for callers that construct <see cref="FileIngestor" /> without code-corpus
-/// support — resolves to 0 chunks, ever.</summary>
+/// <summary>
+///     Null object for callers that construct <see cref="FileIngestor" /> without code-corpus
+///     support — resolves to 0 chunks, ever.
+/// </summary>
 public sealed class NullCodeIngestor : ICodeIngestor
 {
     public static NullCodeIngestor Instance { get; } = new();
@@ -25,9 +29,11 @@ public sealed class NullCodeIngestor : ICodeIngestor
         Task.FromResult(new CodeIngestResult(0, false));
 }
 
-/// <summary>Null object for callers that construct <see cref="FileIngestor" /> without watch-root
-/// lookup (test/legacy positional call sites, or a bank with no watches) — resolves to no
-/// registered watches, ever, so root resolution (B2) falls through to the ingest-scope allowlist.</summary>
+/// <summary>
+///     Null object for callers that construct <see cref="FileIngestor" /> without watch-root
+///     lookup (test/legacy positional call sites, or a bank with no watches) — resolves to no
+///     registered watches, ever, so root resolution (B2) falls through to the ingest-scope allowlist.
+/// </summary>
 public sealed class NullWatchStore : IWatchStore
 {
     public static NullWatchStore Instance { get; } = new();

@@ -132,7 +132,7 @@ public sealed class EncryptionStateTests : IDisposable
     [RetryFact]
     public void Read_EmptyFile_Throws()
     {
-        File.WriteAllText(SidecarPath(), string.Empty);
+        File.WriteAllText(SidecarPath(), "");
         var sidecar = new EncryptionSourceSidecar(BankPath());
 
         Should.Throw<EncryptionSourceException>(() => sidecar.Read());

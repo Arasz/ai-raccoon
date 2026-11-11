@@ -9,8 +9,8 @@ namespace AiRaccoon.Core.Memory;
 public static class ContextScope
 {
     /// <summary>
-    ///     Throws <see cref="ContextOutsideProjectException"/> unless <paramref name="context"/> targets
-    ///     <paramref name="projectId"/>. The shared tier belongs to no project, so it is outside every one.
+    ///     Throws <see cref="ContextOutsideProjectException" /> unless <paramref name="context" /> targets
+    ///     <paramref name="projectId" />. The shared tier belongs to no project, so it is outside every one.
     /// </summary>
     public static void RequireWithinProject(string context, string projectId)
     {

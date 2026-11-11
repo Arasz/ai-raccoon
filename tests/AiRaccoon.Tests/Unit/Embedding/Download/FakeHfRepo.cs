@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using AiRaccoon.Infrastructure.Embedding;
 
 namespace AiRaccoon.Tests.Unit.Embedding.Download;
 
@@ -61,7 +60,7 @@ internal sealed class FakeRepo
         };
         var stEntries = withSentenceTransformersLayout
             ? ",\n  { \"path\": \"1_Pooling/config.json\", \"type\": \"file\", \"size\": 100, \"lfs\": null },\n  { \"path\": \"modules.json\", \"type\": \"file\", \"size\": 100, \"lfs\": null }"
-            : string.Empty;
+            : "";
         server.Tree(repo.RepoId, repo.Revision,
             $$"""
                 [

@@ -30,7 +30,7 @@ public static class SearchParameterSettingsKeys
     public const int DefaultVectorWeight = 1;
     public const double DefaultSourceLambda = 0.1;
     public const double DefaultConsolidationThreshold = 0.1;
-    public const DocScoreFormula DefaultDocScoreFormula = global::AiRaccoon.Core.Memory.DocScoreFormula.Max;
+    public const DocScoreFormula DefaultDocScoreFormula = Memory.DocScoreFormula.Max;
     public const CandidateWindowMode DefaultCandidateWindow = CandidateWindowMode.Max3X100;
     public const double DefaultStructureAlpha = 0.5;
     public const bool DefaultFusionNoRegressionEnabled = FusionConfigKeys.DefaultNoRegressionEnabled;
@@ -63,8 +63,8 @@ public static class SearchParameterSettingsKeys
     public static DocScoreFormula? ParseDocScoreFormula(string? value) =>
         value?.Trim().ToLowerInvariant() switch
         {
-            "max" => global::AiRaccoon.Core.Memory.DocScoreFormula.Max,
-            "sum" => global::AiRaccoon.Core.Memory.DocScoreFormula.Sum,
+            "max" => Memory.DocScoreFormula.Max,
+            "sum" => Memory.DocScoreFormula.Sum,
             _ => null
         };
 

@@ -20,22 +20,26 @@ public sealed partial class WatchCatchUp(
     IIgnoreRulesProvider ignoreRulesProvider,
     IndexableFileWalk walk) : IWatchScanInitiator
 {
-    /// <summary>A mid-scan ignore-file edit can only ever redo the walk this many times before the
-    /// scan gives up trying to reach a stable read — defensive only; real edits settle in one.</summary>
+    /// <summary>
+    ///     A mid-scan ignore-file edit can only ever redo the walk this many times before the
+    ///     scan gives up trying to reach a stable read — defensive only; real edits settle in one.
+    /// </summary>
     private const int MaxRescanAttempts = 5;
 
     /// <summary>Task of the most recently enqueued scan (tests await it for determinism).</summary>
     internal Task? LastScan { get; private set; }
+
+    /// <summary>
+    ///     IWatchScanInitiator: triggers a full re-scan (ignore-file edit) — single-flighted,
+    ///     like every other scan trigger; a scan already running is joined, not duplicated.
+    /// </summary>
+    void IWatchScanInitiator.EnqueueInitialScan(string projectId, string path) => EnqueueInitialScan(projectId, path);
 
     /// <summary>Whether a scan of this watch is running; a scan queued now would join it.</summary>
     internal bool IsScanning(string projectId, string path) => scanGuard.IsRunning(projectId, path);
 
     public void EnqueueInitialScan(string projectId, string path, CancellationToken cancellationToken = default) =>
         LastScan = scanGuard.Run(projectId, path, ct => ScanCoreAsync(projectId, path, false, ct), cancellationToken);
-
-    /// <summary>IWatchScanInitiator: triggers a full re-scan (ignore-file edit) — single-flighted,
-    /// like every other scan trigger; a scan already running is joined, not duplicated.</summary>
-    void IWatchScanInitiator.EnqueueInitialScan(string projectId, string path) => EnqueueInitialScan(projectId, path);
 
     /// <summary>Restart scan of an already-synced watch: queues only the files changed since their own fingerprint.</summary>
     public void EnqueueChangedFiles(string projectId, string path, CancellationToken cancellationToken = default) =>

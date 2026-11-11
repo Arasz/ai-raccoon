@@ -183,15 +183,15 @@ public sealed partial class DecisionServiceTests
     {
         foreach (var task in new[] { "t1", "t2", "t3" })
         {
-            await service.RegisterTaskAsync("a", new DecisionWrite(task, "s", "register-" + task), "Task " + task, cancellationToken: ct);
+            await service.RegisterTaskAsync("a", new DecisionWrite(task, "s", $"register-{task}"), $"Task {task}", cancellationToken: ct);
         }
 
         var ids = new Dictionary<string, List<string>>(StringComparer.Ordinal) { ["t1"] = [], ["t2"] = [] };
         for (var i = 0; i < 24; i++)
         {
             var task = i % 2 == 0 ? "t1" : "t2";
-            var title = (i % 3 == 0 ? "alpha " : "beta ") + (i % 4 == 0 ? "shared " : string.Empty) + "decision " + i;
-            var content = new DecisionContent(title, i % 5 < 3 ? "arch" : "ops", "scenario " + i, "outcome " + i, "reasoning " + i,
+            var title = $"{(i % 3 == 0 ? "alpha " : "beta ")}{(i % 4 == 0 ? "shared " : "")}decision {i}";
+            var content = new DecisionContent(title, i % 5 < 3 ? "arch" : "ops", $"scenario {i}", $"outcome {i}", $"reasoning {i}",
                 validUntil: i % 7 == 0 ? ParityNow.AddDays(-1) : null, validFrom: i % 11 == 5 ? ParityNow.AddDays(1) : null);
             var status = i % 3 == 2 ? DecisionStatus.Proposed : DecisionStatus.Accepted;
             ids[task].Add((await service.RecordAsync("a", new DecisionWrite(task, "s", $"record-{i}"), content, status, ct)).Value.DecisionId);

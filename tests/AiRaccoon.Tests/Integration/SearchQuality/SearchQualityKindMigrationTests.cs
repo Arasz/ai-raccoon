@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Memory;
-using System.Collections.Generic;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;

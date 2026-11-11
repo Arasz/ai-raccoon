@@ -20,7 +20,7 @@ internal static class OrganicRefinement
 
     internal static OrganicRefinementResult Apply(
         double baseScore, string value, string projectId, IReadOnlyList<string> allProjectIds) =>
-        Apply(CandidateFeatureExtractor.Extract(value ?? string.Empty, projectId, allProjectIds), baseScore);
+        Apply(CandidateFeatureExtractor.Extract(value ?? "", projectId, allProjectIds), baseScore);
 
     internal static OrganicRefinementResult Apply(CandidateFeatures f, double baseScore)
     {

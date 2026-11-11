@@ -52,7 +52,7 @@ public partial class ObservabilityRunner(IHttpClientFactory httpClientFactory) :
 
             info = await response.Content.ReadFromJsonAsync<ServerInfo>(JsonOptions, ctx);
         }
-        catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ctx.IsCancellationRequested))
+        catch (Exception ex) when (ex is HttpRequestException || ex is OperationCanceledException && !ctx.IsCancellationRequested)
         {
             if (!IsNothingListening(ex))
             {
@@ -90,7 +90,7 @@ public partial class ObservabilityRunner(IHttpClientFactory httpClientFactory) :
     private static string ResolveKind(CliInput parsed)
     {
         var kindArgument = parsed.ParsedCliArgs.CommandResult.Command.Arguments.OfType<Argument<string>>().Single();
-        return parsed.ParsedCliArgs.GetValue(kindArgument) ?? string.Empty;
+        return parsed.ParsedCliArgs.GetValue(kindArgument) ?? "";
     }
 
     private async Task<int> PrintAsync(StandardStreams streams, string line)

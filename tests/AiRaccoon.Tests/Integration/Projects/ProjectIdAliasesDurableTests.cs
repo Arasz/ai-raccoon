@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;

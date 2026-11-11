@@ -5,7 +5,7 @@ internal static class IdentityTestKey
 {
     public static async Task WriteAsync(string path, string content, CancellationToken cancellationToken)
     {
-        var temporary = path + ".fixture-swap";
+        var temporary = $"{path}.fixture-swap";
         try
         {
             await File.WriteAllTextAsync(temporary, content, cancellationToken);

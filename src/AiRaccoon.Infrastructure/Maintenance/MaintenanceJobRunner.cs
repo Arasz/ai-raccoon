@@ -47,8 +47,8 @@ public sealed partial class MaintenanceJobRunner(
                 }
 
                 var lastRun = await connection.ExecuteScalarAsync<long?>(new CommandDefinition(
-                        "SELECT last_run_at FROM maintenance_jobs WHERE name = @name",
-                        new { name = job.Name }, cancellationToken: cancellationToken));
+                    "SELECT last_run_at FROM maintenance_jobs WHERE name = @name",
+                    new { name = job.Name }, cancellationToken: cancellationToken));
 
                 // On-demand due-ness (ADR-0076) is independent of the clock-gated IsDue check below —
                 // it exists precisely so a job like ModelMigrationJob isn't run-once by the ledger stamp
@@ -101,11 +101,11 @@ public sealed partial class MaintenanceJobRunner(
             }
 
             await connection.ExecuteAsync(new CommandDefinition(
-                    """
-                    INSERT INTO maintenance_jobs (name, last_run_at, run_count) VALUES (@name, @now, 1)
-                    ON CONFLICT(name) DO UPDATE SET last_run_at = @now, run_count = run_count + 1
-                    """,
-                    new { name = job.Name, now = now.ToUnixTimeSeconds() }, cancellationToken: cancellationToken));
+                """
+                INSERT INTO maintenance_jobs (name, last_run_at, run_count) VALUES (@name, @now, 1)
+                ON CONFLICT(name) DO UPDATE SET last_run_at = @now, run_count = run_count + 1
+                """,
+                new { name = job.Name, now = now.ToUnixTimeSeconds() }, cancellationToken: cancellationToken));
             var elapsedMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             Log.JobRan(logger, job.DisplayName, job.Name, elapsedMs);
             await RecordJobMetricsAsync(connection, job, elapsedMs, now, cancellationToken);
@@ -151,6 +151,19 @@ public sealed partial class MaintenanceJobRunner(
         }
     }
 
+    private static bool IsDue(IMaintenanceJob job, long? lastRunAt, DateTimeOffset now)
+    {
+        if (lastRunAt is null)
+        {
+            return true;
+        }
+
+        // A run-once job that has a row has run. This is the whole reason the ledger stores a
+        // timestamp rather than a boolean: the same table answers both questions.
+        return job.Interval is { } interval
+               && now - DateTimeOffset.FromUnixTimeSeconds(lastRunAt.Value) >= interval;
+    }
+
     private static partial class Log
     {
         [LoggerMessage(EventId = 525, Level = LogLevel.Information,
@@ -172,18 +185,5 @@ public sealed partial class MaintenanceJobRunner(
         [LoggerMessage(EventId = 529, Level = LogLevel.Debug,
             Message = "ai-raccoon: maintenance job '{DisplayName}' ({JobName}) due-check skipped: its install was replaced; the install watchdog is already shutting this server down")]
         public static partial void JobCheckSkippedInstallReplaced(ILogger logger, string displayName, string jobName);
-    }
-
-    private static bool IsDue(IMaintenanceJob job, long? lastRunAt, DateTimeOffset now)
-    {
-        if (lastRunAt is null)
-        {
-            return true;
-        }
-
-        // A run-once job that has a row has run. This is the whole reason the ledger stores a
-        // timestamp rather than a boolean: the same table answers both questions.
-        return job.Interval is { } interval
-               && now - DateTimeOffset.FromUnixTimeSeconds(lastRunAt.Value) >= interval;
     }
 }

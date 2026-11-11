@@ -30,8 +30,14 @@ public sealed partial class MetricsFlusher(
     /// <summary>Span name and `operation` tag of one flush pass.</summary>
     internal const string OperationName = "metrics.flush";
 
+    /// <summary>Attempts, at most: the first counts as an attempt too, so this is the retry ceiling, not a retry count.</summary>
+    internal const int MaxSaveAttempts = 3;
+
     /// <summary>Caps the shutdown-time final flush so a slow or hanging store can never hang shutdown.</summary>
     internal static readonly TimeSpan ShutdownFlushTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>Short and bounded — a convoy on the write lock clears in milliseconds, not seconds; TimeProvider-driven so tests never wait on the real clock.</summary>
+    private static readonly TimeSpan SaveRetryDelay = TimeSpan.FromMilliseconds(50);
 
     /// <summary>Completed after each flush pass (batch write + self-metrics write); test seam.</summary>
     internal TickSignal Flushes { get; } = new();
@@ -56,8 +62,8 @@ public sealed partial class MetricsFlusher(
     /// <summary>
     ///     Drains and flushes whatever is still buffered before the host stops — without this, a
     ///     session that only ever enqueues (never lives to the next periodic tick) writes zero rows.
-    ///     Bounded by <see cref="ShutdownFlushTimeout" />, on <paramref name="cancellationToken"/> and
-    ///     the timer's own <see cref="TimeProvider"/>, so a slow or hanging store cannot hang shutdown.
+    ///     Bounded by <see cref="ShutdownFlushTimeout" />, on <paramref name="cancellationToken" /> and
+    ///     the timer's own <see cref="TimeProvider" />, so a slow or hanging store cannot hang shutdown.
     /// </summary>
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
@@ -118,12 +124,6 @@ public sealed partial class MetricsFlusher(
             pass.Succeeded();
         }
     }
-
-    /// <summary>Attempts, at most: the first counts as an attempt too, so this is the retry ceiling, not a retry count.</summary>
-    internal const int MaxSaveAttempts = 3;
-
-    /// <summary>Short and bounded — a convoy on the write lock clears in milliseconds, not seconds; TimeProvider-driven so tests never wait on the real clock.</summary>
-    private static readonly TimeSpan SaveRetryDelay = TimeSpan.FromMilliseconds(50);
 
     private async Task<Exception?> TrySaveBatchAsync(IReadOnlyList<Measurement> batch, CancellationToken cancellationToken)
     {

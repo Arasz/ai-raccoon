@@ -6,12 +6,12 @@
 
 Rafał Araszkiewicz's personal site plus its contact/CV-request backend. Monorepo:
 
-| Directory                            | What                                                                              |
-|--------------------------------------|-----------------------------------------------------------------------------------|
-| [`frontend/`](frontend/)             | Angular 22 site (`araszme`), deployed to Vercel.                                  |
-| [`backend/`](backend/)               | Azure Functions (Node/TypeScript) — contact intake + CV-request Durable Function. |
-| [`infrastructure/`](infrastructure/) | Terraform (azurerm) for the backend, free-tier SKUs.                              |
-| [`docs/`](docs/)                     | Design direction, architecture, and ADRs.                                         |
+| Directory                             | What                                                                              |
+|---------------------------------------|-----------------------------------------------------------------------------------|
+| [`frontend/`](frontend/)              | Angular 22 site (`araszme`), deployed to Vercel.                                  |
+| [`backend/`](backend/)                | Azure Functions (Node/TypeScript) — contact intake + CV-request Durable Function. |
+| [`infrastructure/`](infrastructure/)  | Terraform (azurerm) for the backend, free-tier SKUs.                              |
+| [`docs/`](docs/)                      | Design direction, architecture, and ADRs.                                         |
 | [`docs/brand/`](docs/brand/README.md) | The site's mark and favicon.                                                      |
 
 ## Frontend
@@ -38,5 +38,4 @@ output `frontend/dist/araszme/browser`). If the Vercel Root Directory is ever ch
 
 See [`backend/README.md`](backend/README.md), [`infrastructure/README.md`](infrastructure/README.md),
 and [`docs/contact-backend-architecture.md`](docs/contact-backend-architecture.md). Both are
-implemented and running in production; Terraform applies and the Functions deploy run from CI
-(see [`docs/ci-cd.md`](docs/ci-cd.md) and [`docs/deployment-guide.md`](docs/deployment-guide.md)).
+implemented and running in production; Terraform applies and the Functions deploy run from CI (see [`docs/ci-cd.md`](docs/ci-cd.md) and [`docs/deployment-guide.md`](docs/deployment-guide.md)).

@@ -41,11 +41,11 @@ public interface IIdentityProver
 /// </summary>
 public sealed class IdentityProver : IIdentityProver
 {
-    /// <summary>Long enough for a loaded loopback host, short enough to keep a fallback prompt.</summary>
-    public static readonly TimeSpan DefaultBudget = TimeSpan.FromSeconds(2);
-
     /// <summary>An answer larger than this is malformed, whatever it claims to be.</summary>
     public const int ResponseByteBound = 8 * 1024;
+
+    /// <summary>Long enough for a loaded loopback host, short enough to keep a fallback prompt.</summary>
+    public static readonly TimeSpan DefaultBudget = TimeSpan.FromSeconds(2);
 
     private readonly TimeSpan _budget;
     private readonly Func<HttpClient> _client;
@@ -125,7 +125,7 @@ public sealed class IdentityProver : IIdentityProver
                 try
                 {
                     await socket.ConnectAsync(context.DnsEndPoint, cancellationToken);
-                    return new NetworkStream(socket, ownsSocket: true);
+                    return new NetworkStream(socket, true);
                 }
                 catch
                 {

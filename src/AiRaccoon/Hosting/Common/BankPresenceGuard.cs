@@ -19,6 +19,8 @@ internal sealed class BankMissingException(string message) : Exception(message);
 /// </summary>
 internal static class BankPresenceGuard
 {
+    private static StringComparison PathComparison => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
     public static void EnsureExists(InfrastructureOptions options)
     {
         Guard.IsNotNull(options);
@@ -38,13 +40,11 @@ internal static class BankPresenceGuard
             $"ai-raccoon: no bank exists at '{bankPath}' — create it with 'ai-raccoon --data-root {options.DataRoot}{scope} serve', or check --data-root for a typo");
     }
 
-    /// <summary>Path identity, not "was --data-root passed": compared after expansion so a trailing
-    /// separator or a "go up and back down" spelling of the default root still exempts it.</summary>
-    private static bool IsDefaultDataRoot(string dataRoot) =>
-        string.Equals(NormalizedFullPath(dataRoot), NormalizedFullPath(DefaultOptions.DataRoot), PathComparison);
+    /// <summary>
+    ///     Path identity, not "was --data-root passed": compared after expansion so a trailing
+    ///     separator or a "go up and back down" spelling of the default root still exempts it.
+    /// </summary>
+    private static bool IsDefaultDataRoot(string dataRoot) => string.Equals(NormalizedFullPath(dataRoot), NormalizedFullPath(DefaultOptions.DataRoot), PathComparison);
 
     private static string NormalizedFullPath(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-
-    private static StringComparison PathComparison =>
-        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 }

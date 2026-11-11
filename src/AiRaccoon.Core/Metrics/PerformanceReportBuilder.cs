@@ -9,9 +9,6 @@ namespace AiRaccoon.Core.Metrics;
 /// </summary>
 public static class PerformanceReportBuilder
 {
-    public static readonly TimeSpan DefaultWindow = TimeSpan.FromHours(3);
-    public static readonly TimeSpan DefaultBucket = TimeSpan.FromMinutes(1);
-
     /// <summary>
     ///     Caps allocation by bounding the bucket count per series, not the window — the .feature
     ///     rules retention a best-effort limit, not a guarantee (docs/work/specs/PerformanceMetrics.feature,
@@ -25,6 +22,9 @@ public static class PerformanceReportBuilder
     ///     180-bucket default, so no realistic caller notices the cap.
     /// </summary>
     public const int MaxBucketCount = 2000;
+
+    public static readonly TimeSpan DefaultWindow = TimeSpan.FromHours(3);
+    public static readonly TimeSpan DefaultBucket = TimeSpan.FromMinutes(1);
 
     /// <summary>
     ///     Builds one series per <paramref name="toolNames" /> entry — the derived tool inventory, not

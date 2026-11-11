@@ -56,7 +56,7 @@ internal static partial class CandidateFeatureExtractor
 
     internal static CandidateFeatures Extract(string value, string projectId, IReadOnlyList<string> allProjectIds)
     {
-        var v = value ?? string.Empty;
+        var v = value ?? "";
         var nWords = Words().Matches(v).Count;
         var lines = v.Split('\n').Where(l => l.Trim().Length > 0).ToList();
         var lineCount = Math.Max(lines.Count, 1);

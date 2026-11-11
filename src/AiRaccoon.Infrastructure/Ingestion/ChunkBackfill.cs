@@ -1,7 +1,6 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -39,7 +38,7 @@ public sealed class ChunkBackfill(
 
         var (budget, overlay, countTokens) = await BudgetAsync(connection, cancellationToken);
         var charsBefore = await connection.ExecuteScalarAsync<long?>(
-                new CommandDefinition("SELECT SUM(length(value)) FROM entries", cancellationToken: cancellationToken)) ?? 0;
+            new CommandDefinition("SELECT SUM(length(value)) FROM entries", cancellationToken: cancellationToken)) ?? 0;
 
         List<Row> rows =
         [
@@ -80,7 +79,7 @@ public sealed class ChunkBackfill(
             // (tombstone it) from one this same operation re-inserts (never tombstone a hash a
             // peer's copy still legitimately backs).
             var pieceHashes = split
-                .Select(piece => (Piece: piece, Hash: ContentHash.Of(row.Path ?? string.Empty, piece)))
+                .Select(piece => (Piece: piece, Hash: ContentHash.Of(row.Path ?? "", piece)))
                 .ToList();
 
             await TombstoneAndDeleteRowAsync(connection, row,
@@ -89,40 +88,40 @@ public sealed class ChunkBackfill(
             foreach (var (piece, hash) in pieceHashes)
             {
                 await connection.ExecuteAsync(new CommandDefinition(MemorySql.InsertEntry,
-                        new
-                        {
-                            hash,
-                            path = row.Path,
-                            value = piece,
-                            sourceFile = row.SourceFile,
-                            section = row.Section,
-                            scope = row.Scope,
-                            projectId = row.ProjectId,
-                            contextLabel = row.ContextLabel,
-                            workspaceId = row.WorkspaceId,
-                            agentId = (string?)null,
-                            createdAt = now,
-                            updatedAt = now,
-                            sourceId = row.SourceId,
-                            // The row keeps the kind its writer declared; the shape is only the
-                            // fallback for a row that predates the column.
-                            entryType = entryTypeClassifier.ResolveStoredValue(
-                                row.EntryType, row.Path, row.SourceFile),
-                            // Position unknown here — the bank-wide recompute below fills it in.
-                            chunkIndex = -1,
-                            totalChunks = 0
-                        }, cancellationToken: cancellationToken));
+                    new
+                    {
+                        hash,
+                        path = row.Path,
+                        value = piece,
+                        sourceFile = row.SourceFile,
+                        section = row.Section,
+                        scope = row.Scope,
+                        projectId = row.ProjectId,
+                        contextLabel = row.ContextLabel,
+                        workspaceId = row.WorkspaceId,
+                        agentId = (string?)null,
+                        createdAt = now,
+                        updatedAt = now,
+                        sourceId = row.SourceId,
+                        // The row keeps the kind its writer declared; the shape is only the
+                        // fallback for a row that predates the column.
+                        entryType = entryTypeClassifier.ResolveStoredValue(
+                            row.EntryType, row.Path, row.SourceFile),
+                        // Position unknown here — the bank-wide recompute below fills it in.
+                        chunkIndex = -1,
+                        totalChunks = 0
+                    }, cancellationToken: cancellationToken));
             }
         }
 
         if (!dryRun && replaced > 0)
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                    MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken));
+                MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken));
         }
 
         var charsAfter = await connection.ExecuteScalarAsync<long?>(
-                new CommandDefinition("SELECT SUM(length(value)) FROM entries", cancellationToken: cancellationToken)) ?? 0;
+            new CommandDefinition("SELECT SUM(length(value)) FROM entries", cancellationToken: cancellationToken)) ?? 0;
         return new ChunkBackfillReport(rows.Count, replaced, pieces, charsBefore, charsAfter);
     }
 
@@ -134,30 +133,31 @@ public sealed class ChunkBackfill(
     ///     (or vice versa).
     /// </summary>
     private static async Task TombstoneAndDeleteRowAsync(SqliteConnection connection, Row row,
-        IReadOnlySet<string> survivingHashes, long deletedAt, CancellationToken cancellationToken)
-    {
+        IReadOnlySet<string> survivingHashes, long deletedAt, CancellationToken cancellationToken) =>
         await connection.InWriteTransactionAsync(async () =>
         {
             if (!survivingHashes.Contains(row.Hash))
             {
                 await connection.ExecuteAsync(new CommandDefinition(
-                        MemorySql.TombstoneFromPredicate("id = @id"),
-                        new { id = row.Id, deletedAt }, cancellationToken: cancellationToken));
+                    MemorySql.TombstoneFromPredicate("id = @id"),
+                    new { id = row.Id, deletedAt }, cancellationToken: cancellationToken));
             }
 
             await connection.ExecuteAsync(new CommandDefinition(
-                    "DELETE FROM entries WHERE id = @id", new { id = row.Id }, cancellationToken: cancellationToken));
+                "DELETE FROM entries WHERE id = @id", new { id = row.Id }, cancellationToken: cancellationToken));
         }, cancellationToken);
-    }
 
-    /// <summary>The same resolution the ingest path uses, read from the same settings. Internal for the
-    /// D9 routing tests; the resolver IS the single source of budget + counter for the repair family.</summary>
-    internal Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
-        connection.ReadChunkBudgetAsync(embeddingService, cancellationToken);
+    /// <summary>
+    ///     The same resolution the ingest path uses, read from the same settings. Internal for the
+    ///     D9 routing tests; the resolver IS the single source of budget + counter for the repair family.
+    /// </summary>
+    internal Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken) => connection.ReadChunkBudgetAsync(embeddingService, cancellationToken);
 
-    /// <summary>A add_memory note — no source_file, or a citation that does not name this row's
-    /// own path — chunks as markdown; a file row chunks with its extension's own handler, or the
-    /// plain-text fallback when no handler owns it.</summary>
+    /// <summary>
+    ///     A add_memory note — no source_file, or a citation that does not name this row's
+    ///     own path — chunks as markdown; a file row chunks with its extension's own handler, or the
+    ///     plain-text fallback when no handler owns it.
+    /// </summary>
     private IChunker ResolveChunker(Row row)
     {
         if (string.IsNullOrWhiteSpace(row.SourceFile) || !string.Equals(row.Path, row.SourceFile, StringComparison.Ordinal))

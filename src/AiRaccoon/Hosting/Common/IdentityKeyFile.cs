@@ -31,8 +31,7 @@ public sealed class IdentityKeyFile : OwnerOnlySecretFile<ECDsa>
     public string? ReadKeyId() => Read() is { } key ? IdentityProof.KeyId(key) : null;
 
     /// <summary>The lock a concurrent mint/heal takes; exposed for the cross-process convergence gate.</summary>
-    internal static string LockPathFor(string stateDirectory) =>
-        OwnerOnlyFile.LockPathFor(System.IO.Path.Combine(stateDirectory, FileName));
+    internal static string LockPathFor(string stateDirectory) => OwnerOnlyFile.LockPathFor(System.IO.Path.Combine(stateDirectory, FileName));
 
     protected override ECDsa Mint() => ECDsa.Create(ECCurve.NamedCurves.nistP256);
 

@@ -1,8 +1,10 @@
 namespace AiRaccoon.Infrastructure.Sync;
 
-/// <summary>Embeds/verifies a sync blob's HMAC authenticity tag directly in the pushed bytes, so
-/// publication is atomic under the existing CAS push — there is no separate sidecar object for a
-/// torn write, or a delete-only attack, to strip authentication from the blob it protects.</summary>
+/// <summary>
+///     Embeds/verifies a sync blob's HMAC authenticity tag directly in the pushed bytes, so
+///     publication is atomic under the existing CAS push — there is no separate sidecar object for a
+///     torn write, or a delete-only attack, to strip authentication from the blob it protects.
+/// </summary>
 public interface ISyncBlobAuthenticator
 {
     /// <summary>Prepends a magic header and an HMAC-SHA256 tag (keyed via HKDF from <paramref name="passphrase" />) to <paramref name="data" />.</summary>

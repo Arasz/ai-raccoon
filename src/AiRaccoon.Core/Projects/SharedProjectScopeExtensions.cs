@@ -36,6 +36,5 @@ public static class SharedProjectScopeExtensions
     }
 
     /// <summary>The refusal text for an operation that requires an ordinary project.</summary>
-    public static string OrdinaryProjectRequiredMessage(string operation) =>
-        $"shared-project-unsupported: {operation} requires an ordinary project; shared supports document ingestion and watches.";
+    public static string OrdinaryProjectRequiredMessage(string operation) => $"shared-project-unsupported: {operation} requires an ordinary project; shared supports document ingestion and watches.";
 }

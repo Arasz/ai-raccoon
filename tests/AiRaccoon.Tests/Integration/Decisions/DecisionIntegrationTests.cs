@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Settings;
-using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Setup;
@@ -198,7 +197,7 @@ public sealed class DecisionIntegrationTests : IAsyncLifetime
 
     private async Task<string> RecordOverHttpAsync(DecisionHost host, string taskId, string title)
     {
-        var response = await host.Http.PostAsJsonAsync(Root + "/records", Content(taskId, title, "r-" + title), Ct);
+        var response = await host.Http.PostAsJsonAsync($"{Root}/records", Content(taskId, title, $"r-{title}"), Ct);
         var body = await response.Content.ReadAsStringAsync(Ct);
         response.IsSuccessStatusCode.ShouldBeTrue(body);
         return Id(body);
@@ -206,7 +205,7 @@ public sealed class DecisionIntegrationTests : IAsyncLifetime
 
     private async Task<(int Exit, string Out, string Err)> RecordOverCliAsync(DecisionHost host, string taskId, string title)
     {
-        var input = Path.Combine(_root, Guid.NewGuid().ToString("N") + ".json");
+        var input = Path.Combine(_root, $"{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(input,
             $$"""{"title":"{{title}}","category":"architecture","scenario":"Scenario","outcome":"Outcome","reasoning":"Reasoning"}""", Ct);
         var result = await Cli(host, ["record", "--project-id", _project, "--task-id", taskId, "--input", input]);

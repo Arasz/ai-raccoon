@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Tools;
 
@@ -10,7 +11,7 @@ namespace AiRaccoon.Observability;
 ///     or error (docs/plans/2026-08-15-performance-metrics-implementation.md, WP8). Dispose the
 ///     activity to stop the trace.
 /// </summary>
-public sealed class ToolExecutionActivity : IDisposable
+internal sealed class ToolExecutionActivity : IDisposable
 {
     private const string ToolActivityTag = "tool";
     private const string ProjectIdActivityTag = "project_id";
@@ -19,16 +20,16 @@ public sealed class ToolExecutionActivity : IDisposable
     private const string ResultSuccess = "success";
     private const string ResultError = "error";
     private const string DurationUnit = "ms";
+    private const string DispatchDelayMeasurementName = MetricsConfigKeys.McpDispatchDelayMetricName;
 
-    // MCP semantic convention (open-telemetry/semantic-conventions-genai, docs/gen-ai/mcp.md):
-    // span name "{mcp.method.name} {target}", both carried as attributes.
     private const string McpMethodNameActivityTag = "mcp.method.name";
     private const string GenAiToolNameActivityTag = "gen_ai.tool.name";
     private const string ToolsCallMethodName = "tools/call";
 
     private readonly Activity? _activity;
-    private readonly string _metricProjectId;
     private readonly string _bankProjectId;
+    private readonly TimeSpan? _dispatchDelay;
+    private readonly string _metricProjectId;
     private readonly ToolCallMetrics _metrics;
     private readonly IMeasurementRecorder? _recorder;
     private readonly Stopwatch _stopwatch;
@@ -50,7 +51,8 @@ public sealed class ToolExecutionActivity : IDisposable
     ///     RecordedAt, defaulting to the system clock like every other timed component here.
     /// </summary>
     public ToolExecutionActivity(ToolCallMetrics metrics, string toolName, string projectId, string? metricProjectId = null,
-        IMeasurementRecorder? recorder = null, TimeProvider? timeProvider = null, string? bankProjectId = null)
+        IMeasurementRecorder? recorder = null, TimeProvider? timeProvider = null, string? bankProjectId = null,
+        HttpContext? requestContext = null)
     {
         _metrics = metrics;
         _recorder = recorder;
@@ -58,6 +60,7 @@ public sealed class ToolExecutionActivity : IDisposable
         _metricProjectId = metricProjectId ?? projectId;
         _bankProjectId = bankProjectId ?? metricProjectId ?? projectId;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _dispatchDelay = ReadDispatchDelay(requestContext, _timeProvider);
         _activity = metrics.ActivitySource.StartActivity($"{ToolsCallMethodName} {toolName}");
         _activity?.SetTag(ToolActivityTag, toolName);
         _activity?.SetTag(ProjectIdActivityTag, projectId);
@@ -86,6 +89,7 @@ public sealed class ToolExecutionActivity : IDisposable
         _activity?.SetTag(ResultActivityTag, ResultSuccess);
         _metrics.RecordInvocation(_toolName, _metricProjectId, _stopwatch.Elapsed, false);
         RecordMeasurement(_bankProjectId);
+        RecordDispatchDelay(_bankProjectId);
     }
 
     /// <summary>
@@ -93,7 +97,7 @@ public sealed class ToolExecutionActivity : IDisposable
     ///     metricProjectId overrides the counter's project id — a refused call passes a bounded
     ///     sentinel so an unauthorised caller cannot mint one series per id it invents.
     /// </summary>
-    public void RecordError(Exception exception, string? metricProjectId = null)
+    internal void RecordError(Exception exception, string? metricProjectId = null)
     {
         if (_recorded)
         {
@@ -113,20 +117,45 @@ public sealed class ToolExecutionActivity : IDisposable
             {
                 ["exception.type"] = exception.GetType().FullName,
                 ["exception.message"] = description,
-                ["exception.stacktrace"] = exception.StackTrace ?? string.Empty
+                ["exception.stacktrace"] = exception.StackTrace ?? ""
             }));
         }
         else
         {
             _activity?.AddException(exception);
         }
+
         var boundedProjectId = metricProjectId ?? _metricProjectId;
         _metrics.RecordInvocation(_toolName, boundedProjectId, _stopwatch.Elapsed, true, exception.GetType().Name);
         RecordMeasurement(metricProjectId ?? _bankProjectId);
+        RecordDispatchDelay(metricProjectId ?? _bankProjectId);
     }
 
     /// <summary>The tool-level measurement family (WP8) — no correlation id; that belongs to the search-phase family MemoryTools tags itself.</summary>
     private void RecordMeasurement(string projectId) =>
         _recorder?.Record(new Measurement(_toolName, MeasurementKind.Histogram, _stopwatch.Elapsed.TotalMilliseconds,
             DurationUnit, _timeProvider.GetUtcNow(), projectId));
+
+    private void RecordDispatchDelay(string projectId)
+    {
+        if (_dispatchDelay is not { } delay)
+        {
+            return;
+        }
+
+        _metrics.RecordDispatchDelay(delay);
+        _recorder?.Record(new Measurement(DispatchDelayMeasurementName, MeasurementKind.Histogram,
+            delay.TotalMilliseconds, DurationUnit, _timeProvider.GetUtcNow(), projectId));
+    }
+
+    private static TimeSpan? ReadDispatchDelay(HttpContext? requestContext, TimeProvider timeProvider)
+    {
+        if (requestContext is null || !requestContext.Items.TryGetValue(OtlpNames.McpRequestStartTimestampKey, out var value) || value is not long timestamp)
+        {
+            return null;
+        }
+
+        var elapsed = timeProvider.GetElapsedTime(timestamp);
+        return elapsed >= TimeSpan.Zero ? elapsed : null;
+    }
 }

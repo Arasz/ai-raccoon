@@ -239,7 +239,7 @@ public sealed class ProxyForwardTests : IAsyncLifetime
     /// <summary>Backs the forwarder's re-acquire path with this test's counted re-acquire.</summary>
     private sealed class ReacquireSessions(ProxyForwardTests owner) : IBackendSessions
     {
-        public string Url => string.Empty;
+        public string Url => "";
 
         public Task<McpClient> OpenAsync(string? revision, CancellationToken ctx) => owner.ReacquireAsync(revision, ctx);
 

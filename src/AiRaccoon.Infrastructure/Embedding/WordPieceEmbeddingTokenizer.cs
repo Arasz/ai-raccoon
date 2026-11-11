@@ -18,8 +18,6 @@ public sealed class WordPieceEmbeddingTokenizer : IEmbeddingTokenizer
         _tokenizer = tokenizer;
     }
 
-    public static WordPieceEmbeddingTokenizer Create(string vocabPath) => new(OnnxEmbeddingGenerator.CreateTokenizer(vocabPath));
-
     /// <summary>Content tokens, no [CLS]/[SEP] — the ADR-0036 budget unit.</summary>
     public int CountTokens(string text) => _tokenizer.CountTokens(text);
 
@@ -27,4 +25,6 @@ public sealed class WordPieceEmbeddingTokenizer : IEmbeddingTokenizer
 
     /// <summary>[CLS] + [SEP] — the two tokens <c>EncodeToIds(text, true)</c> adds.</summary>
     public int SpecialTokenReservation => 2;
+
+    public static WordPieceEmbeddingTokenizer Create(string vocabPath) => new(OnnxEmbeddingGenerator.CreateTokenizer(vocabPath));
 }

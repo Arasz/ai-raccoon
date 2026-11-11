@@ -2,7 +2,6 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
-using AiRaccoon.Tests;
 using Shouldly;
 using Xunit;
 

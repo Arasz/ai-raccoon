@@ -58,15 +58,16 @@ public sealed partial class SqliteMemoryStore
         {
             parameters.Add(key, value);
         }
+
         parameters.Add("deletedAt", timeProvider.GetUtcNow().ToUnixTimeSeconds());
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await connection.InWriteTransactionAsync(async () =>
         {
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.TombstoneFromPredicate(filter), parameters,
-                    cancellationToken: cancellationToken));
+                cancellationToken: cancellationToken));
             return await connection.ExecuteAsync(new CommandDefinition($"DELETE FROM entries WHERE {filter}", parameters,
-                    cancellationToken: cancellationToken));
+                cancellationToken: cancellationToken));
         }, cancellationToken);
     }
 
@@ -93,18 +94,18 @@ public sealed partial class SqliteMemoryStore
         };
         return await connection.InWriteTransactionAsync(async () =>
         {
-            await connection.RequireSharedAvailableAsync(projectId, _scope, cancellationToken);
+            await connection.RequireSharedAvailableAsync(projectId, scope, cancellationToken);
             await connection.ExecuteAsync(
-                    Def(MemorySql.TombstoneFromPredicate(MemorySql.DeleteBySourcePathPredicate), parameters, cancellationToken));
+                Def(MemorySql.TombstoneFromPredicate(MemorySql.DeleteBySourcePathPredicate), parameters, cancellationToken));
             var deleted = await connection.ExecuteAsync(
-                    Def(MemorySql.DeleteBySourcePath, parameters, cancellationToken));
+                Def(MemorySql.DeleteBySourcePath, parameters, cancellationToken));
             // Code corpus leg (docs/work/2026-08-21-code-search-implementation-plan.md §3.5):
             // unconditional — each ingestor self-filters on re-ingest, so the digest needs no
             // classification here. A no-op for a memory-only path (idx_code_entries_path-backed).
             await connection.ExecuteAsync(
-                    Def(MemorySql.DeleteCodeBySourcePath, parameters, cancellationToken));
+                Def(MemorySql.DeleteCodeBySourcePath, parameters, cancellationToken));
             await connection.ExecuteAsync(
-                    Def(MemorySql.DeleteWatchFilesByProjectPathCascade, parameters, cancellationToken));
+                Def(MemorySql.DeleteWatchFilesByProjectPathCascade, parameters, cancellationToken));
             return deleted;
         }, cancellationToken);
     }
@@ -115,48 +116,37 @@ public sealed partial class SqliteMemoryStore
     ///     next sync. Same BEGIN IMMEDIATE/COMMIT/ROLLBACK shape as <see cref="DeleteSourcePathAsync" />
     ///     and <see cref="SqliteMemoryStore.ReplaceCoreAsync" />; both callers are top-level, so there is no nested-transaction hazard.
     /// </summary>
-    private async Task<int> DeleteCoreAsync(SqliteConnection connection, string projectId, string hash,
-        string? scope, CancellationToken cancellationToken)
-    {
-        return await connection.InWriteTransactionAsync(async () =>
+    private Task<int> DeleteCoreAsync(SqliteConnection connection, string projectId, string hash, string? deleteScope, CancellationToken cancellationToken) =>
+        connection.InWriteTransactionAsync(async () =>
         {
-            // The whole-write delete (N7/F26) reaches every row sharing the write's path;
-            // resolved once so the delete and its tombstone derivation both match on it.
-            // DeleteInScopeAsync (scope set) stays hash+scope exact and never needs a path.
-            var path = scope is null
-                ? await connection.QueryFirstOrDefaultAsync<string?>(
-                        Def(MemorySql.SelectPathByHashAndProject, new { hash, projectId }, cancellationToken))
+            var path = deleteScope is null
+                ? await connection.QueryFirstOrDefaultAsync<string?>(Def(MemorySql.SelectPathByHashAndProject, new { hash, projectId }, cancellationToken))
                 : null;
 
-            var recomputeContext = await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(
-                    Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId, scope }, cancellationToken));
+            var recomputeContext =
+                await connection.QueryFirstOrDefaultAsync<DeleteRecomputeRow>(Def(MemorySql.SelectDeleteRecomputeContext, new { hash, projectId, scope = deleteScope }, cancellationToken));
 
-            // Tombstones every row about to be removed (N7/F26) — not just the reported hash —
-            // before the delete runs, from the identical predicate, in the same transaction.
-            await connection.ExecuteAsync(
-                    Def(MemorySql.TombstoneFromPredicate(MemorySql.DeleteMatchPredicate),
-                        new
-                        {
-                            hash,
-                            projectId,
-                            scope,
-                            path,
-                            deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
-                        },
-                        cancellationToken));
+            await connection.ExecuteAsync(Def(MemorySql.TombstoneFromPredicate(MemorySql.DeleteMatchPredicate),
+                new
+                {
+                    hash,
+                    projectId,
+                    scope = deleteScope,
+                    path,
+                    deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
+                },
+                cancellationToken));
 
-            var deleted = await connection.ExecuteAsync(
-                    Def(MemorySql.DeleteByHashAndProject, new { hash, projectId, scope, path }, cancellationToken));
-
-            if (deleted > 0 && recomputeContext?.SourceFile is not null)
+            var deleted = await connection.ExecuteAsync(Def(MemorySql.DeleteByHashAndProject, new { hash, projectId, scope = deleteScope, path }, cancellationToken));
+            if (deleted <= 0 || recomputeContext?.SourceFile is null)
             {
-                var context = ContextStringOf(recomputeContext.Scope, recomputeContext.ContextLabel,
-                    recomputeContext.WorkspaceId, projectId);
-                await CompactChunkColumnsAfterDeleteAsync(connection, context, projectId,
-                    recomputeContext.SourceFile, (int)recomputeContext.ChunkIndex, cancellationToken);
+                return deleted;
             }
+
+            var context = recomputeContext.ContextStringOf(projectId);
+
+            await CompactChunkColumnsAfterDeleteAsync(connection, context, projectId, recomputeContext.SourceFile, (int)recomputeContext.ChunkIndex, cancellationToken);
 
             return deleted;
         }, cancellationToken);
-    }
 }

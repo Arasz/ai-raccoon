@@ -64,10 +64,7 @@ public sealed partial class ExtractionHostedService(
     }
 
     /// <summary>One extraction pass: enabled check, per-project propose/promote. Test seam.</summary>
-    internal async Task RunOnceAsync(CancellationToken cancellationToken)
-    {
-        await telemetry.RunPassCountingFailuresAsync(OperationName, RunPassAsync, cancellationToken);
-    }
+    internal async Task RunOnceAsync(CancellationToken cancellationToken) => await telemetry.RunPassCountingFailuresAsync(OperationName, RunPassAsync, cancellationToken);
 
     /// <summary>
     ///     Runs the pass and returns the number of projects whose propose/promote threw
@@ -120,14 +117,14 @@ public sealed partial class ExtractionHostedService(
                         // in the same pass. Sub-threshold rows never enter the queue, so no review
                         // backlog accumulates; the manual MCP promote path stays unfiltered.
                         await extraction.ProposeAsync(projectId, sharedIndex,
-                                false, SharedExtractionService.DefaultCandidateLimit, threshold,
-                                cancellationToken: cancellationToken);
+                            false, SharedExtractionService.DefaultCandidateLimit, threshold,
+                            cancellationToken);
                     }
 
                     // Promote-from-queue: the propose tier is the source of truth.
                     var outcome = await queue
                         .PromoteAsync([projectId], SharedExtractionService.DefaultCandidateLimit, threshold,
-                            cancellationToken: cancellationToken);
+                            cancellationToken);
                     promotedTotal += outcome.PromotedHashes.Count;
                     var candidateCount = outcome.PromotedHashes.Count + outcome.Absorbed
                                                                       + outcome.SkippedDuplicates + outcome.Failures.Count;
@@ -144,8 +141,8 @@ public sealed partial class ExtractionHostedService(
                 }
 
                 var candidates = await extraction.ProposeAsync(projectId, sharedIndex,
-                        false, SharedExtractionService.DefaultCandidateLimit,
-                        cancellationToken: cancellationToken);
+                    false, SharedExtractionService.DefaultCandidateLimit,
+                    cancellationToken: cancellationToken);
 
                 // Per-pass summary only; candidate counts are metered, not logged per row.
                 Log.Pass(logger, projectId, mode, candidates.Count, 0, 0);

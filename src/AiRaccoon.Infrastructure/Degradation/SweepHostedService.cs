@@ -45,10 +45,7 @@ public sealed partial class SweepHostedService(
     }
 
     /// <summary>One sweep pass: kill-switch check, then a per-project sweep. Test seam.</summary>
-    internal async Task RunOnceAsync(CancellationToken cancellationToken)
-    {
-        await telemetry.RunPassCountingFailuresAsync(OperationName, RunPassAsync, cancellationToken);
-    }
+    internal async Task RunOnceAsync(CancellationToken cancellationToken) => await telemetry.RunPassCountingFailuresAsync(OperationName, RunPassAsync, cancellationToken);
 
     /// <summary>
     ///     Runs the pass and returns the number of projects whose sweep threw. Test seam

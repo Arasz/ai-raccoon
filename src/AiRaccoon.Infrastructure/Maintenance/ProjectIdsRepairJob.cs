@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
@@ -7,6 +8,7 @@ using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiRaccoon.Infrastructure.Maintenance;
 
@@ -37,13 +39,13 @@ public sealed partial class ProjectIdsRepairJob(
     ILogger<ProjectIdsRepairJob>? logger = null)
     : IMaintenanceJob
 {
-    private readonly ILogger<ProjectIdsRepairJob> _logger =
-        logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<ProjectIdsRepairJob>.Instance;
-
     public const string JobName = "repair-project-ids";
 
     /// <summary>Event id of the per-pass result receipt <see cref="Log.PassApplied" /> stamps per requested run (Package F).</summary>
     public const int PassReceiptEventId = 711;
+
+    private readonly ILogger<ProjectIdsRepairJob> _logger =
+        logger ?? NullLogger<ProjectIdsRepairJob>.Instance;
 
     public string Name => JobName;
 
@@ -54,26 +56,29 @@ public sealed partial class ProjectIdsRepairJob(
 
     public async ValueTask<bool> HasWorkAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(MemorySql.HasOpenRepairRequest,
-                new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken)) > 0;
+            new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken)) > 0;
 
-    /// <summary>Folds with the request's stored one-shot map (null/empty means the empty map), re-derives chunk positions, then marks the request finished. No open request means no work: returns false without touching the bank. The plan is derived from a live census at apply time — never a replay of the CLI's dry-run plan (concurrent writes between diagnose and apply re-plan).</summary>
+    /// <summary>
+    ///     Folds with the request's stored one-shot map (null/empty means the empty map), re-derives chunk positions, then marks the request finished. No open request means no work: returns false without touching the bank. The plan is
+    ///     derived from a live census at apply time — never a replay of the CLI's dry-run plan (concurrent writes between diagnose and apply re-plan).
+    /// </summary>
     public async ValueTask<bool> RunAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var open = await connection.ExecuteScalarAsync<long>(new CommandDefinition(MemorySql.HasOpenRepairRequest,
-                    new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken)) > 0;
+            new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken)) > 0;
         if (!open)
         {
             return false;
         }
 
         var mapJson = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(MemorySql.SelectOpenRepairMapJson,
-                    new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken));
+            new { kind = RepairKinds.ProjectIds }, cancellationToken: cancellationToken));
         ProjectIdAliasMap map;
         try
         {
             map = ResolveMap(mapJson);
         }
-        catch (Exception ex) when (ex is ArgumentException or System.Text.Json.JsonException or NotSupportedException)
+        catch (Exception ex) when (ex is ArgumentException or JsonException or NotSupportedException)
         {
             // Direct-SQL rows bypass the endpoint's validation: refuse to fold rather than crash
             // the poll. The request stays open (no stamp), so a corrected --apply re-runs it.
@@ -106,7 +111,7 @@ public sealed partial class ProjectIdsRepairJob(
             .Where(pin => pin.Bucket == ProjectIdsFoldPlan.PinnedDecisionGraph)
             .Select(pin => pin.ProjectId));
         await ProjectIdAliases.PersistAppliedAsync(connection, applied,
-                timeProvider.GetUtcNow().ToUnixTimeSeconds(), cancellationToken);
+            timeProvider.GetUtcNow().ToUnixTimeSeconds(), cancellationToken);
         // Package E1 (reload on map change): the same process's choke-point cache must see the
         // just-applied map — otherwise the post-apply probe (D6 iv) hits a stale Default and a
         // retired id is accepted until a restart. LoadAndCache reads the table we just wrote.
@@ -115,8 +120,8 @@ public sealed partial class ProjectIdsRepairJob(
             moved, chunkRowsFixed);
 
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.FinishRepairRequest,
-                new { kind = RepairKinds.ProjectIds, finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
-                cancellationToken: cancellationToken));
+            new { kind = RepairKinds.ProjectIds, finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
+            cancellationToken: cancellationToken));
 
         return createdWork;
     }

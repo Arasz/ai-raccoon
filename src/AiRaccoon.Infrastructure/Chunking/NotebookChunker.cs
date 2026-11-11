@@ -33,18 +33,17 @@ public sealed class NotebookChunker : INotebookChunker
         return markdown.Length == 0
             ? []
             : _markdownChunker.ChunkWithHeadings(markdown, maxTokens, overlayTokens, countTokens)
-                .Where(chunk => HasContent(chunk.Text)).ToList();
+                .Where(static chunk => HasContent(chunk.Text)).ToList();
     }
 
     // The markdown chunker can emit a chunk holding only a cell heading when a cell's fence is split.
-    private static bool HasContent(string chunk) =>
-        chunk.Split('\n').Any(line => line.Trim() is { Length: > 0 } trimmed && !trimmed.StartsWith("## cell ", StringComparison.Ordinal));
+    private static bool HasContent(string chunk) => chunk.Split('\n').Any(static line => line.Trim() is { Length: > 0 } trimmed && !trimmed.StartsWith("## cell ", StringComparison.Ordinal));
 
     private static string Flatten(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
-            return string.Empty;
+            return "";
         }
 
         try
@@ -55,7 +54,7 @@ public sealed class NotebookChunker : INotebookChunker
                 || !root.TryGetProperty("cells", out var cells)
                 || cells.ValueKind != JsonValueKind.Array)
             {
-                return string.Empty;
+                return "";
             }
 
             var language = Language(root);
@@ -71,7 +70,7 @@ public sealed class NotebookChunker : INotebookChunker
         }
         catch (JsonException)
         {
-            return string.Empty;
+            return "";
         }
     }
 
@@ -108,7 +107,7 @@ public sealed class NotebookChunker : INotebookChunker
     // The markdown chunker toggles a fence on any line opening with ``` or ~~~, so such a line in a code
     // cell would end the cell's fence early; a leading backslash keeps it literal.
     private static string EscapeFenceLines(string source) =>
-        string.Join('\n', source.Split('\n').Select(line =>
+        string.Join('\n', source.Split('\n').Select(static line =>
             IsFenceLine(line) ? line.Insert(line.Length - line.TrimStart().Length, "\\") : line));
 
     private static bool IsFenceLine(string line)
@@ -141,12 +140,12 @@ public sealed class NotebookChunker : INotebookChunker
         }
 
         // A fence may run to the end of its cell; closing it keeps it from swallowing the next cell.
-        return inFence ? string.Join('\n', lines) + "\n```" : string.Join('\n', lines);
+        return inFence ? $"{string.Join('\n', lines)}\n```" : string.Join('\n', lines);
     }
 
     private static bool IsAtxHeading(string line, out int level)
     {
-        level = line.TakeWhile(c => c == '#').Count();
+        level = line.TakeWhile(static c => c == '#').Count();
         return level is >= 1 and <= 6 && (line.Length == level || line[level] is ' ' or '\t' or '\r');
     }
 
@@ -154,13 +153,13 @@ public sealed class NotebookChunker : INotebookChunker
     {
         if (!cell.TryGetProperty("source", out var source))
         {
-            return string.Empty;
+            return "";
         }
 
         switch (source.ValueKind)
         {
             case JsonValueKind.String:
-                return source.GetString() ?? string.Empty;
+                return source.GetString() ?? "";
             case JsonValueKind.Array:
                 var builder = new StringBuilder();
                 foreach (var line in source.EnumerateArray())
@@ -173,7 +172,7 @@ public sealed class NotebookChunker : INotebookChunker
 
                 return builder.ToString();
             default:
-                return string.Empty;
+                return "";
         }
     }
 
@@ -181,7 +180,7 @@ public sealed class NotebookChunker : INotebookChunker
     {
         if (!root.TryGetProperty("metadata", out var metadata) || metadata.ValueKind != JsonValueKind.Object)
         {
-            return string.Empty;
+            return "";
         }
 
         return NamedString(metadata, "kernelspec", "language") is { Length: > 0 } kernel
@@ -191,7 +190,7 @@ public sealed class NotebookChunker : INotebookChunker
 
     private static string NamedString(JsonElement metadata, string section, string key) =>
         metadata.TryGetProperty(section, out var node) && node.ValueKind == JsonValueKind.Object
-        && node.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? string.Empty
-            : string.Empty;
+                                                       && node.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? ""
+            : "";
 }

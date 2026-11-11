@@ -17,7 +17,7 @@ public sealed partial class SqliteMemoryStore
         await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
         await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                MemorySql.HasOpenModelMigration, cancellationToken: cancellationToken)) > 0;
+            MemorySql.HasOpenModelMigration, cancellationToken: cancellationToken)) > 0;
     }
 
     /// <inheritdoc />
@@ -32,6 +32,6 @@ public sealed partial class SqliteMemoryStore
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await embedder.StartMigrationAsync(connection, provider, model, baseUrl, timeProvider.GetUtcNow(),
-                cancellationToken);
+            cancellationToken);
     }
 }

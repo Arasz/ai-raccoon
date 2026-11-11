@@ -1,7 +1,6 @@
 using AiRaccoon.Core.Memory;
 using Shouldly;
 using Xunit;
-using xRetry.v3;
 
 namespace AiRaccoon.Tests.Unit.Memory;
 

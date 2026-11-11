@@ -35,7 +35,7 @@ public sealed class PendingEmbedJob(IEntryEmbedder embedder, IEventPump<EmbedDra
         }
 
         return await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
-                MemorySql.HasPendingEmbed, cancellationToken: cancellationToken));
+            MemorySql.HasPendingEmbed, cancellationToken: cancellationToken));
     }
 
     /// <summary>

@@ -1,6 +1,5 @@
 using System.Data;
 using System.Text;
-using AiRaccoon;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Options;

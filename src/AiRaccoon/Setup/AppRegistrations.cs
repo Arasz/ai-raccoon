@@ -1,9 +1,6 @@
-using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Decisions;
-using AiRaccoon.Infrastructure.Decisions;
-using AiRaccoon.Infrastructure.Sqlite.Decisions;
 using AiRaccoon.Core.EventPump;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Isolation;
@@ -17,10 +14,13 @@ using AiRaccoon.Core.Observability;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Infrastructure.Chunking;
+using AiRaccoon.Infrastructure.Decisions;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Embedding.Download;
+using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Extraction;
 using AiRaccoon.Infrastructure.Ingestion;
@@ -30,23 +30,22 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Promotion;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Code;
+using AiRaccoon.Infrastructure.Sqlite.Decisions;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Infrastructure.Workspace;
-using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Observability;
 using AiRaccoon.Projects;
 using AiRaccoon.Setup.Models;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Logging;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Setup;
 
-public static partial class AppRegistrations
+internal static partial class AppRegistrations
 {
     extension(IServiceCollection services)
     {
@@ -58,36 +57,19 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<IDecisionStore, SqliteDecisionStore>();
             services.AddRequiredSingleton<IDecisionService, DecisionService>();
             services.RegisterEncryptionServices(options);
-            // The proof channel's client half (ADR-0106 D2): read-only, never mints. Registered here
-            // because both the proxy graph and the CLI-command graph call RegisterCoreMemoryServices,
-            // and either one may need to prove a listener before a token-bearing request. Factory-only
-            // on purpose: IdentityProver exposes two public constructors, so registering the concrete
-            // type for activation would be ambiguous.
-            services.AddSingleton<IIdentityProver>(sp => new IdentityProver(
+
+            services.AddSingleton<IIdentityProver>(static sp => new IdentityProver(
                 sp.GetRequiredService<InfrastructureOptions>(),
                 sp.GetRequiredService<IHttpClientFactory>()));
-            // WP11: EmbeddingService and SqliteMemoryStore (both wired below) take
-            // IMeasurementRecorder — the narrower CLI graph that calls only this method (never
-            // RegisterMemoryServices/RegisterMetricsServices) still needs it resolvable, so the
-            // buffer + best-effort recorder register here. Only the persistence side (IMetricsStore,
-            // MetricsFlusher, IMetricsReportService) stays server-only in RegisterMetricsServices.
+
             services.RegisterMeasurementRecording();
-            // EntryEmbedder (RegisterEmbeddingServices below) takes IOperationTelemetry; the
-            // narrower CLI graph that calls only this method still constructs it through
-            // SqliteMemoryStore, so the port must be resolvable there too. BackgroundTelemetry is
-            // cheap to build and unused by CLI verbs.
+
             services.AddSingleton<IOperationTelemetry, BackgroundTelemetry>();
             services.RegisterEmbeddingServices();
             services.RegisterFileIngestionServices();
-            // The reserved shared document target's scope rules (ADR-0137): one implementation,
-            // resolved by the composition root, so the components that route writes and reads
-            // depend on the contract and not on a static helper. Registered in the core graph —
-            // the CLI graph builds the same stores.
+
             services.AddRequiredSingleton<ISharedProjectScope, SharedProjectScope>();
-            // The rule that says which kind a row holds, injected rather than called statically: the
-            // write paths that declare a kind and the repair paths that carry one all ask the same
-            // object. Registered in the CORE graph, not the server-only one — the CLI graph builds
-            // the same stores, and the store and the file ingestor both take it.
+
             services.AddRequiredSingleton<IEntryKindClassifier, EntryKindClassifier>();
             services.RegisterStores();
         }
@@ -104,7 +86,7 @@ public static partial class AppRegistrations
             services.RegisterObservabilityServices();
             services.RegisterExtractionServices();
             services.RegisterLongLivedBackgroundServices();
-            services.RegisterBankMaintenanceBackgrounbdService();
+            services.RegisterBankMaintenanceBackgroundService();
             services.RegisterMetricsServices();
         }
 
@@ -114,22 +96,16 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<ISharedExtractionService, SharedExtractionService>();
             services.AddRequiredSingleton<ISharedExtractionRunner, SharedExtractionRunner>();
-            // docs/adr/0065: share-extract and the read-path query guard are services, not
-            // MCP-only, so the CLI and the background loop can reach them too.
             services.AddRequiredSingleton<IShareExtractService, ShareExtractService>();
             services.AddRequiredSingleton<IQueryGuardService, QueryGuardService>();
-            // docs/adr/0067: composes the store and the queue here — PromotionQueueService
-            // already takes IMemoryStore, so the store itself cannot own this without a cycle.
             services.AddRequiredSingleton<IMemoryWriteService, MemoryWriteService>();
-            // query's kind dispatch (which legs run, the code-scope rule, the
-            // search_quality exclusion) lives here, off the tool layer (mcp.instructions.md).
             services.AddRequiredSingleton<ISearchDispatcher, SearchDispatcher>();
         }
 
         private void RegisterSyncServices()
         {
             services.AddRequiredSingleton<ISyncCloudStoreFactory, SyncCloudStoreFactory>();
-            services.AddSingleton<ISyncService>(sp => new SyncService(
+            services.AddSingleton<ISyncService>(static sp => new SyncService(
                 ct => sp.GetRequiredService<SyncCloudStoreFactory>().CreateAsync(ct),
                 async ct => await sp.GetRequiredService<SqliteConnectionFactory>().OpenBankAsync(ct),
                 (path, ct) => OpenSnapshotWithKey(sp, path, ct),
@@ -177,8 +153,6 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<IMemoryAccessGuard, MemoryAccessGuard>();
             services.AddRequiredSingleton<IForgettingPolicyService, ForgettingPolicyService>();
-            // P3's mechanical gate (review M1): the marker ToolGate and the registration guard
-            // both consult before any fold-or-refuse. Registered beside its consumers, never null.
             services.AddRequiredSingleton<IProjectIdsMigrationGate, SqliteProjectIdsMigrationGate>();
             services.AddRequiredSingleton<IProjectRegistrationGuard, ProjectRegistrationGuard>();
             services.AddRequiredSingleton<ICwdProbe, CurrentDirectoryCwdProbe>();
@@ -192,28 +166,22 @@ public static partial class AppRegistrations
         {
             services.AddRequiredSingleton<ISearchQualityService, SqliteSearchQualityService>();
             services.AddRequiredSingleton<IToolCallMetrics, ToolCallMetrics>();
-            // typeof(MemoryTools).Assembly matches VersionContractTests' convention for "the built AiRaccoon binary".
             services.AddSingleton<IBuildStamp>(new AssemblyBuildStamp(typeof(MemoryTools).Assembly));
         }
 
-        private void RegisterBankMaintenanceBackgrounbdService()
+        private void RegisterBankMaintenanceBackgroundService()
         {
             services.AddRequiredSingleton<ISweepService, SweepService>();
             services.AddSingleton<MaintenanceJobRunner>();
-            // The list is the schedule (ADR-0070). Order matters: a reclaim after the backfill
-            // collects the pages the backfill's deletes freed as well, and PendingEmbedJob is LAST
-            // so any job earlier in this list that leaves rows pending — chunk-backfill produced
-            // 13,578 of them on a real bank — is already visible to PendingEmbedJob.HasWorkAsync by
-            // the time MaintenanceJobRunner's single foreach reaches it, embedding them in this same
-            // pass instead of the next one.
-            services.AddSingleton<IReadOnlyList<IMaintenanceJob>>(sp =>
+
+            services.AddSingleton<IReadOnlyList<IMaintenanceJob>>(static sp =>
             [
                 new ChunkBackfillJob(sp.GetRequiredService<IEntryKindClassifier>(), sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IMarkdownChunker>(),
                     sp.GetRequiredService<IPlainTextChunker>(), sp.GetRequiredService<TimeProvider>(),
                     sp.GetRequiredService<IEmbeddingService>()),
-                // Once ever, before the boundary repair: that repair renumbers a note from the positions it holds.
+
                 new NoteChunkOrderRepairJob(sp.GetRequiredService<ILogger<NoteChunkOrderRepairJob>>()),
-                // Once ever, right after the backfill for the same reason: it leaves re-chunked rows pending.
+
                 new ChunkBoundaryRepairJob(sp.GetRequiredService<IEntryKindClassifier>(), sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IMarkdownChunker>(),
                     sp.GetRequiredService<IPlainTextChunker>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<IMemoryStore>(), sp.GetRequiredService<TimeProvider>(),
@@ -221,38 +189,23 @@ public static partial class AppRegistrations
                 new Vec0ReclaimJob(),
                 new VacuumJob(),
                 new MetricsRetentionJob(sp.GetRequiredService<TimeProvider>()),
-                // ADR-0076: on-demand — HasWorkAsync reads the outbox itself, not a cadence.
                 new ModelMigrationJob(sp.GetRequiredService<IEntryEmbedder>()),
-                // ADR-0075 amendment: on-demand, same shape as ModelMigrationJob — HasWorkAsync reads
-                // the repair_requests row a `repair <verb> --apply` submitted through the server.
-                // Before PendingEmbedJob for the same reason ChunkBackfillJob is: a reingest repair
-                // leaves rows pending, and PendingEmbedJob, last in this list, already sees them by
-                // the time this same foreach reaches it.
                 new ChunkIndexRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<TimeProvider>()),
                 new ReingestRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<IMemoryStore>(), sp.GetRequiredService<TimeProvider>()),
-                // Air-merge P2: the project-ids fold leaves renamed rows pending too, so it sits
-                // with the other two repair relays, ahead of PendingEmbedJob.
                 new ProjectIdsRepairJob(sp.GetRequiredService<IFileTypeMatcher>(), sp.GetRequiredService<IEmbeddingService>(),
                     sp.GetRequiredService<TimeProvider>(),
                     sp.GetRequiredService<ISharedProjectScope>(),
                     sp.GetRequiredService<ILogger<ProjectIdsRepairJob>>()),
-                // ADR-0075 amendment: on-demand, same shape as the two repair jobs above —
-                // HasWorkAsync reads the promotion_queue_prune_requests row `extract prune --apply`
-                // submitted through the server. Pure DELETE — never leaves anything pending for
-                // PendingEmbedJob, so its position relative to it does not matter.
+
                 new PromotionQueuePruneJob(sp.GetRequiredService<TimeProvider>()),
-                // .NET-F1: on-demand — HasWorkAsync reads entries.embed_state itself, not a cadence.
+
                 new PendingEmbedJob(sp.GetRequiredService<IEntryEmbedder>(), sp.GetRequiredService<IEventPump<EmbedDrainRequest>>()),
-                // On-demand, same shape as PendingEmbedJob (docs/work/2026-08-21-code-search-implementation-plan.md
-                // §3.8): signals a drain of code_entries rows a code-engine activation or
-                // fingerprint change left pending. No outbox, no ToolGate interaction.
+
                 new CodeReindexJob(sp.GetRequiredService<ICodeEmbedder>(), sp.GetRequiredService<IEventPump<EmbedDrainRequest>>())
             ]);
             services.AddHostedService<BankMaintenanceHostedService>();
-            // Package E1: warm the choke-point alias cache from project_id_aliases once per
-            // process — without it P3 enforcement silently disarms on every restart.
             services.AddHostedService<ProjectIdAliasCacheHostedService>();
         }
 
@@ -277,7 +230,7 @@ public static partial class AppRegistrations
         /// </summary>
         private void RegisterMeasurementRecording()
         {
-            services.AddSingleton<IMeasurementBuffer>(_ => new MeasurementBuffer(MetricsConfigKeys.DefaultBufferCapacity));
+            services.AddSingleton<IMeasurementBuffer>(static _ => new MeasurementBuffer(MetricsConfigKeys.DefaultBufferCapacity));
             services.AddRequiredSingleton<IMeasurementRecorder, MetricsRecorder>();
         }
 
@@ -303,31 +256,25 @@ public static partial class AppRegistrations
         /// </summary>
         private void RegisterFileIngestionServices()
         {
-            services.AddSingleton<IEventPump<EmbedDrainRequest>>(_ =>
+            services.AddSingleton<IEventPump<EmbedDrainRequest>>(static _ =>
                 new EventPump<EmbedDrainRequest>(
                     new PumpTopic(EmbedDrainService.PumpCeiling, EmbedDrainService.PumpCapacity, true)));
             services.AddSingleton<O200kTokenizer>();
-            services.AddSingleton<TokenCount>(sp => new TokenCount(sp.GetRequiredService<O200kTokenizer>().CountTokens));
+            services.AddSingleton<TokenCount>(static sp => sp.GetRequiredService<O200kTokenizer>().CountTokens);
             services.AddRequiredSingleton<IMarkdownChunker, MarkdownChunker>();
             services.AddRequiredSingleton<IPlainTextChunker, PlainTextChunker>();
-            services.AddSingleton<IJsonChunker>(sp => new JsonFileTypeChunker(
+            services.AddSingleton<IJsonChunker>(static sp => new JsonFileTypeChunker(
                 sp.GetRequiredService<TokenCount>(),
                 sp.GetRequiredService<IMarkdownChunker>(),
                 ChunkingDefaults.OverlayTokens));
-            services.AddSingleton<INotebookChunker>(sp => new NotebookChunker(sp.GetRequiredService<IMarkdownChunker>()));
-            services.AddSingleton<IFileTypeHandler>(sp => new MarkdownFileTypeHandler(sp.GetRequiredService<IMarkdownChunker>()));
-            services.AddSingleton<IFileTypeHandler>(sp => new PlainTextFileTypeHandler(sp.GetRequiredService<IPlainTextChunker>()));
-            services.AddSingleton<IFileTypeHandler>(sp => new JsonFileTypeHandler(sp.GetRequiredService<IJsonChunker>()));
-            services.AddSingleton<IFileTypeHandler>(sp => new NotebookFileTypeHandler(sp.GetRequiredService<INotebookChunker>()));
-            services.AddSingleton<IReadOnlyCollection<IFileTypeHandler>>(sp => sp.GetServices<IFileTypeHandler>().ToList());
+            services.AddSingleton<INotebookChunker>(static sp => new NotebookChunker(sp.GetRequiredService<IMarkdownChunker>()));
+            services.AddSingleton<IFileTypeHandler>(static sp => new MarkdownFileTypeHandler(sp.GetRequiredService<IMarkdownChunker>()));
+            services.AddSingleton<IFileTypeHandler>(static sp => new PlainTextFileTypeHandler(sp.GetRequiredService<IPlainTextChunker>()));
+            services.AddSingleton<IFileTypeHandler>(static sp => new JsonFileTypeHandler(sp.GetRequiredService<IJsonChunker>()));
+            services.AddSingleton<IFileTypeHandler>(static sp => new NotebookFileTypeHandler(sp.GetRequiredService<INotebookChunker>()));
+            services.AddSingleton<IReadOnlyCollection<IFileTypeHandler>>(static sp => [.. sp.GetServices<IFileTypeHandler>()]);
             services.AddRequiredSingleton<IIgnoreRulesProvider, IgnoreRulesProvider>();
             services.AddRequiredSingleton<IFileTypeMatcher, FileTypeMatcher>();
-
-            // Code corpus (docs/work/2026-08-21-code-search-implementation-plan.md §3.4, WP2):
-            // real line-range CodeChunker, budget 510 (#422: the model's measured window), counted with the bundled
-            // code-daemon-embed-v1 sentencepiece tokenizer — the v1 default until a configured
-            // code engine (embedding.codeModel, WP5) replaces the counting path. Always-ingest
-            // per §3.3: code files chunk + store `pending` even with no engine configured.
             services.AddRequiredSingleton<ICodeFileTypeMatcher, CodeFileTypeMatcher>();
             services.AddRequiredSingleton<ICodeTokenizer, CodeTokenizer>();
             services.AddRequiredSingleton<ICodeChunker, CodeChunker>();
@@ -345,58 +292,31 @@ public static partial class AppRegistrations
 
         private void RegisterStores()
         {
-            services.AddSingleton(sp => new SqliteConnectionFactory(
+            services.AddSingleton(static sp => new SqliteConnectionFactory(
                 sp.GetRequiredService<InfrastructureOptions>(),
                 sp.GetRequiredService<IEncryptionKeyResolver>(),
                 sp.GetRequiredService<ILogger<SqliteConnectionFactory>>()));
-            services.AddSingleton<ISqliteConnectionFactory>(sp => sp.GetRequiredService<SqliteConnectionFactory>());
+            services.AddSingleton<ISqliteConnectionFactory>(static sp => sp.GetRequiredService<SqliteConnectionFactory>());
             services.AddRequiredSingleton<IWatchStore, WatchStore>();
-            // ADR-0075 amendment: the server-side default for `watch registered` — overridden by
-            // LazyServerSettingsStore for the CLI graph, exactly like ISettingsStore above.
-            services.AddSingleton<IWatchRegisteredStore>(sp => sp.GetRequiredService<WatchStore>());
+            services.AddSingleton<IWatchRegisteredStore>(static sp => sp.GetRequiredService<WatchStore>());
             services.AddRequiredSingleton<INoiseFilteringService, NoiseFilteringService>();
-
-            // Register default noise filter policies (deterministic only — see ADR-0033).
             services.AddSingleton<INoiseFilterPolicy, HermesProcessNoisePolicy>();
-
-            // noise_entries (ADR-0029/ADR-0039): the training-data source — every rejected write,
-            // TTL-purged by BankMaintenanceHostedService.
             services.AddRequiredSingleton<INoiseEntryStore, SqliteNoiseEntryStore>();
-            // ADR-0075 amendment: the server-side default for `noise entries` — overridden by
-            // LazyServerSettingsStore for the CLI graph, exactly like ISettingsStore above.
-            services.AddSingleton<INoiseSummaryStore>(sp => sp.GetRequiredService<SqliteNoiseEntryStore>());
-
-            // Self-learning noise substrate seam (ADR-0039, amended): no scoring model registered.
-            // INoiseDetector -> NoOpNoiseDetector is what a future structural/lexical detector
-            // plugs into once one is validated on held-out data.
+            services.AddSingleton<INoiseSummaryStore>(static sp => sp.GetRequiredService<SqliteNoiseEntryStore>());
             services.AddSingleton<INoiseDetector, NoOpNoiseDetector>();
             services.AddRequiredSingleton<INoiseShadowObserver, NoiseShadowObserver>();
-
             services.AddRequiredSingleton<IMemoryStore, SqliteMemoryStore>();
-            // FTS5-only v1 leg (docs/work/2026-08-21-code-search-implementation-plan.md §3.6) —
-            // the seam where a vec0 leg + RRF fusion would attach.
             services.AddRequiredSingleton<ICodeSearchService, SqliteCodeSearchService>();
-            // ADR-0076: same instance as IMemoryStore — split out for the same reason ISettingsStore
-            // was (ADR-0075), so the CLI can route model-set through the server independently.
-            services.AddSingleton<IModelMigrationStore>(sp => sp.GetRequiredService<SqliteMemoryStore>());
-            // ADR-0089: same instance as IMemoryStore, same reason as IModelMigrationStore above.
-            // Server graph only — the CLI graph's wiring is carried to post-delta-5 §WP1.
-            services.AddSingleton<IProjectRegistry>(sp => sp.GetRequiredService<SqliteMemoryStore>());
+            services.AddSingleton<IModelMigrationStore>(static sp => sp.GetRequiredService<SqliteMemoryStore>());
+            services.AddSingleton<IProjectRegistry>(static sp => sp.GetRequiredService<SqliteMemoryStore>());
             services.AddRequiredSingleton<IProjectDirectory, SqliteProjectDirectory>();
-            // §3.3 D-E9: a store of its own, not another SqliteMemoryStore constructor parameter —
-            // same ADR-0075 reason the two registrations above are split out.
             services.AddRequiredSingleton<ICodeEngineStore, SqliteCodeEngineStore>();
             services.AddRequiredSingleton<IMemorySourceStore, SqliteMemorySourceStore>();
             services.AddRequiredSingleton<ISettingsStore, SqliteSettingsStore>();
-            // ADR-0075 amendment: the server-side default for `repair` — overridden by
-            // LazyServerSettingsStore for the CLI graph, exactly like ISettingsStore above.
             services.AddRequiredSingleton<IRepairStore, SqliteRepairStore>();
             services.AddRequiredSingleton<IWorkspaceStore, SqliteWorkspaceStore>();
             services.AddRequiredSingleton<IPromotionQueueStore, SqlitePromotionQueueStore>();
-            // ADR-0075 amendment: the server-side default for `extract prune` — overridden by
-            // LazyServerSettingsStore for the CLI graph, exactly like ISettingsStore above.
-            services.AddSingleton<IPromotionQueuePruneStore>(sp => sp.GetRequiredService<SqlitePromotionQueueStore>());
-            // ADR-0075 amendment: the server-side default for `settings maintenance list`.
+            services.AddSingleton<IPromotionQueuePruneStore>(static sp => sp.GetRequiredService<SqlitePromotionQueueStore>());
             services.AddRequiredSingleton<IMaintenanceStatsStore, SqliteMaintenanceStatsStore>();
         }
 
@@ -416,32 +336,17 @@ public static partial class AppRegistrations
             services.AddRequiredSingleton<ISentencePieceVocabularyReader, SentencePieceVocabularyReader>();
             services.AddRequiredSingleton<IOnnxSmokeTester, OrtOnnxSmokeTester>();
             services.AddRequiredSingleton<IDiskSpaceProvider, DiskSpaceProvider>();
-            // ADR-0076: the migration lease EntryEmbedder's DrainMigrationAsync needs; registered
-            // before IEntryEmbedder so constructor injection resolves it.
             services.AddRequiredSingleton<IModelMigrationLease, SqliteModelMigrationLease>();
             services.AddRequiredSingleton<IVecDimensionReconciler, VecDimensionReconciler>();
-            // config-D P1c: the migration drain's chunk-budget rebudget phase, beside IVecDimensionReconciler
-            // (plan P1 files). The Func<IMemoryStore> defers store resolution past EntryEmbedder's
-            // construction — the store itself takes IEntryEmbedder — and is called only when the phase runs.
-            // Factory-only on purpose, like IIdentityProver above: the helper would also register the
-            // concrete type for constructor activation, which can never construct — Func<IMemoryStore>
-            // has no registration — so the DI walk's GetServices pass dies on it before this factory runs.
-            services.AddSingleton<IChunkBudgetReconciler>(
-                sp => new ChunkBudgetReconciler(sp.GetRequiredService<IFileTypeMatcher>(),
-                    sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<IEmbeddingService>(),
-                    sp.GetRequiredService<TimeProvider>(),
-                    () => sp.GetRequiredService<IMemoryStore>(),
-                    sp.GetRequiredService<ILogger<ChunkBudgetReconciler>>(),
-                    sp.GetRequiredService<IEntryKindClassifier>()));
-            // The drain's one log + metric surface (LANE P4): registered beside EntryEmbedder so
-            // the narrower CLI graph RegisterCoreMemoryServices builds on its own can resolve it
-            // too — EmbedDrainService (RegisterEmbedDrainServices) resolves the same singleton.
+            services.AddSingleton<IChunkBudgetReconciler>(static sp => new ChunkBudgetReconciler(sp.GetRequiredService<IFileTypeMatcher>(),
+                sp.GetRequiredService<IMarkdownChunker>(), sp.GetRequiredService<IEmbeddingService>(),
+                sp.GetRequiredService<TimeProvider>(),
+                sp.GetRequiredService<IMemoryStore>,
+                sp.GetRequiredService<ILogger<ChunkBudgetReconciler>>(),
+                sp.GetRequiredService<IEntryKindClassifier>()));
             services.AddSingleton<EmbedDrainReporter>();
             services.AddRequiredSingleton<IEntryEmbedder, EntryEmbedder>();
             services.AddRequiredSingleton<IEmbeddingAvailability, EmbeddingAvailability>();
-            // The code corpus's own embedder (docs/work/2026-08-21-code-search-implementation-plan.md
-            // §12.2 H5) — a second engine in the same keyed CreateGenerator cache, no
-            // IModelMigrationLease (the code corpus has no outbox).
             services.AddRequiredSingleton<ICodeEmbedder, CodeEmbedder>();
         }
 
@@ -468,13 +373,9 @@ public static partial class AppRegistrations
         private void RegisterWatchSyncBackgroundService()
         {
             services.AddSingleton<WatchCatchUp>();
-            // WatchCatchUp implements IWatchScanInitiator; WatchDigestExecutor takes a Lazy<> of it
-            // so its own construction never eagerly resolves WatchCatchUp — which needs
-            // WatchPipeline, which needs IWatchDigestExecutor, which would otherwise cycle back
-            // here (docs/work/2026-08-21-code-search-implementation-plan.md §5.3).
-            services.AddSingleton<IWatchScanInitiator>(sp => sp.GetRequiredService<WatchCatchUp>());
-            services.AddSingleton(sp => new Lazy<IWatchScanInitiator>(() => sp.GetRequiredService<IWatchScanInitiator>()));
-            services.AddSingleton(sp =>
+            services.AddSingleton<IWatchScanInitiator>(static sp => sp.GetRequiredService<WatchCatchUp>());
+            services.AddSingleton(static sp => new Lazy<IWatchScanInitiator>(sp.GetRequiredService<IWatchScanInitiator>));
+            services.AddSingleton(static sp =>
             {
                 var logger = sp.GetRequiredService<ILogger<WatchEventSource>>();
                 return new WatchEventSource(sp.GetRequiredService<WatchPipeline>().Enqueue,
@@ -488,27 +389,25 @@ public static partial class AppRegistrations
             services.AddSingleton<IEncryptionSourceSidecar>(_ => new EncryptionSourceSidecar(SqliteConnectionFactory.BankPathFor(options)));
             services.AddSingleton<IEncryptionKeyProvider, NoneEncryptionKeyProvider>();
             services.AddSingleton<IEncryptionKeyProvider, EnvEncryptionKeyProvider>();
-            services.AddSingleton<IEncryptionKeyProvider>(_ => new BitwardenEncryptionKeyProvider(new CliSecretManager(CliSecretTool.Bitwarden)));
-            services.AddSingleton<IEncryptionKeyProvider>(_ => new OnePasswordEncryptionKeyProvider(new CliSecretManager(CliSecretTool.OnePassword)));
-            services.AddSingleton<IEncryptionKeyResolver>(sp => new EncryptionKeyResolver(sp.GetRequiredService<IEncryptionSourceSidecar>(), [.. sp.GetServices<IEncryptionKeyProvider>()]));
+            services.AddSingleton<IEncryptionKeyProvider>(static _ => new BitwardenEncryptionKeyProvider(new CliSecretManager(CliSecretTool.Bitwarden)));
+            services.AddSingleton<IEncryptionKeyProvider>(static _ => new OnePasswordEncryptionKeyProvider(new CliSecretManager(CliSecretTool.OnePassword)));
+            services.AddSingleton<IEncryptionKeyResolver>(static sp => new EncryptionKeyResolver(sp.GetRequiredService<IEncryptionSourceSidecar>(), [.. sp.GetServices<IEncryptionKeyProvider>()]));
         }
     }
 
     private static partial class Log
     {
-        [LoggerMessage(EventId = 330, Level = LogLevel.Error,
-            Message = "Watch event source error for {ProjectId} on {WatchPath}: {Message}")]
-        public static partial void WatchEventSourceError(ILogger logger, string projectId, string watchPath,
-            string message);
+        [LoggerMessage(EventId = 330, Level = LogLevel.Error, Message = "Watch event source error for {ProjectId} on {WatchPath}: {Message}")]
+        internal static partial void WatchEventSourceError(ILogger logger, string projectId, string watchPath, string message);
     }
 }
 
-public static class ServiceExtensions
+internal static class ServiceExtensions
 {
     extension(IServiceCollection serviceCollection)
     {
         public void AddRequiredSingleton<TService, TImplementation>() where TImplementation : class, TService where TService : class =>
-            serviceCollection.AddRequiredSingleton<TService, TImplementation>(sp => sp.GetRequiredService<TImplementation>());
+            serviceCollection.AddRequiredSingleton<TService, TImplementation>(static sp => sp.GetRequiredService<TImplementation>());
 
         public void AddRequiredSingleton<TService, TImplementation>(Func<IServiceProvider, TImplementation> implementationFactory)
             where TImplementation : class, TService where TService : class

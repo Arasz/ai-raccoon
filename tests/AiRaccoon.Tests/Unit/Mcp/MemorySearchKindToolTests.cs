@@ -8,7 +8,6 @@ using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
-using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;

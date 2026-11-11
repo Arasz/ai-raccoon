@@ -219,7 +219,7 @@ public sealed class DecisionCliTests : IAsyncLifetime
     public async Task DecisionCli_MarkdownExportKeepsFullTextAndEscapesTerminalAndMarkup()
     {
         await RegisterTaskAsync("t1", "First");
-        var reasoning = string.Concat(Enumerable.Repeat("long rationale ", 40)) + "END";
+        var reasoning = $"{string.Concat(Enumerable.Repeat("long rationale ", 40))}END";
         await RecordAsync("t1", "Hostile \u001b[31m<script>alert(1)</script> ‮title", reasoning);
 
         var (exit, stdout, stderr) = await Cli(["export", "--project-id", _project, "--format", "markdown"]);
@@ -256,7 +256,7 @@ public sealed class DecisionCliTests : IAsyncLifetime
         await RegisterTaskAsync("t1", "First");
         for (var i = 0; i < 12; i++)
         {
-            await RecordAsync("t1", $"Decision {i} " + string.Concat(Enumerable.Repeat("\U0001F99D", 60)),
+            await RecordAsync("t1", $"Decision {i} {string.Concat(Enumerable.Repeat("\U0001F99D", 60))}",
                 string.Concat(Enumerable.Repeat("\U0001F4DA", 300)));
         }
 
@@ -451,7 +451,7 @@ public sealed class DecisionCliTests : IAsyncLifetime
 
         exit.ShouldBe(0, stderr);
         using var content = new StringContent(backendBody, Encoding.UTF8, "application/json");
-        var response = await _host.Http.PostAsync(Root + "/query", content, Ct);
+        var response = await _host.Http.PostAsync($"{Root}/query", content, Ct);
         response.EnsureSuccessStatusCode();
         var backend = JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!["data"]!;
         var cli = JsonNode.Parse(stdout)!;
@@ -461,7 +461,7 @@ public sealed class DecisionCliTests : IAsyncLifetime
 
     private async Task<string> InputAsync(string json)
     {
-        var path = Path.Combine(_outputDirectory, Guid.NewGuid().ToString("N") + ".json");
+        var path = Path.Combine(_outputDirectory, $"{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(path, json, Ct);
         return path;
     }
@@ -502,11 +502,11 @@ public sealed class DecisionCliTests : IAsyncLifetime
     }
 
     private async Task RegisterTaskAsync(string taskId, string title) =>
-        (await _host.Http.PostAsJsonAsync(Root + "/tasks", new { taskId, sessionId = "seed", requestId = "task-" + taskId, title }, Ct)).EnsureSuccessStatusCode();
+        (await _host.Http.PostAsJsonAsync($"{Root}/tasks", new { taskId, sessionId = "seed", requestId = $"task-{taskId}", title }, Ct)).EnsureSuccessStatusCode();
 
     private async Task<string> RecordAsync(string taskId, string title, string reasoning, string category = "architecture")
     {
-        var response = await _host.Http.PostAsJsonAsync(Root + "/records", new
+        var response = await _host.Http.PostAsJsonAsync($"{Root}/records", new
         {
             taskId, sessionId = "seed", requestId = Guid.NewGuid().ToString("N"), title, category,
             scenario = "Scenario", outcome = "Outcome", reasoning
@@ -518,7 +518,7 @@ public sealed class DecisionCliTests : IAsyncLifetime
     private async Task LinkAsync(string taskId, string sourceId, string targetId)
     {
         var revision = (await BackendExportAsync("{}"))["projectRevision"]!.GetValue<long>();
-        (await _host.Http.PostAsJsonAsync(Root + "/edges", new
+        (await _host.Http.PostAsJsonAsync($"{Root}/edges", new
         {
             taskId, sessionId = "seed", requestId = Guid.NewGuid().ToString("N"), sourceId, targetId, kind = "depends_on",
             reason = "because", expectedProjectRevision = revision
@@ -528,7 +528,7 @@ public sealed class DecisionCliTests : IAsyncLifetime
     private async Task<JsonObject> BackendExportAsync(string body)
     {
         using var content = new StringContent(body, Encoding.UTF8, "application/json");
-        var response = await _host.Http.PostAsync(Root + "/export", content, Ct);
+        var response = await _host.Http.PostAsync($"{Root}/export", content, Ct);
         response.EnsureSuccessStatusCode();
         return JsonNode.Parse(await response.Content.ReadAsStringAsync(Ct))!["data"]!.AsObject();
     }

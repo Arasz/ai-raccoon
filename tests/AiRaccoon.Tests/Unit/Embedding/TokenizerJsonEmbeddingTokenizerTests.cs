@@ -51,7 +51,7 @@ public class TokenizerJsonEmbeddingTokenizerTests
         var tokenizer = TokenizerJsonEmbeddingTokenizer.Create(Fixture("tiny-bytelevel.json"));
 
         tokenizer.CountTokens("ab c").ShouldBe(2);
-        tokenizer.CountTokens(string.Empty).ShouldBe(0);
+        tokenizer.CountTokens("").ShouldBe(0);
     }
 
     [Fact]
@@ -71,7 +71,7 @@ public class TokenizerJsonEmbeddingTokenizerTests
         var tokenizer = TokenizerJsonEmbeddingTokenizer.Create(Fixture("tiny-roberta.json"));
 
         tokenizer.EncodeToIds("ab c", addSpecialTokens: true).ShouldBe([8, 4, 5, 9]);
-        tokenizer.EncodeToIds(string.Empty, addSpecialTokens: true).ShouldBe([8, 9]);
+        tokenizer.EncodeToIds("", addSpecialTokens: true).ShouldBe([8, 9]);
         tokenizer.SpecialTokenReservation.ShouldBe(2);
     }
 
@@ -83,7 +83,7 @@ public class TokenizerJsonEmbeddingTokenizerTests
         // Qwen3 shape: pre_tokenizer Sequence(Split regex, ByteLevel); post_processor only
         // appends the eos-equivalent special — no leading token at all.
         tokenizer.EncodeToIds("ab c", addSpecialTokens: true).ShouldBe([4, 3, 2, 8]);
-        tokenizer.EncodeToIds(string.Empty, addSpecialTokens: true).ShouldBe([8]);
+        tokenizer.EncodeToIds("", addSpecialTokens: true).ShouldBe([8]);
         tokenizer.SpecialTokenReservation.ShouldBe(1);
     }
 
@@ -113,8 +113,8 @@ public class TokenizerJsonEmbeddingTokenizerTests
     {
         var tokenizer = TokenizerJsonEmbeddingTokenizer.Create(Fixture("tiny-spm-bytefallback.json"));
 
-        tokenizer.EncodeToIds(string.Empty, addSpecialTokens: false).ShouldBeEmpty();
-        tokenizer.EncodeToIds(string.Empty, addSpecialTokens: true).ShouldBe([2, 1]);
+        tokenizer.EncodeToIds("", addSpecialTokens: false).ShouldBeEmpty();
+        tokenizer.EncodeToIds("", addSpecialTokens: true).ShouldBe([2, 1]);
         tokenizer.SpecialTokenReservation.ShouldBe(2);
     }
 

@@ -10,10 +10,16 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 
-/// <summary>What a chunk-boundary repair did: files re-ingested, row groups re-chunked in place, rows written, notes left
-/// as stored because no order of their rows joins back into the body their path names, and files whose rows kept their
-/// content and were renumbered in place.</summary>
-public sealed record ChunkBoundaryRepairReport(int FilesReingested, int GroupsRepaired, int RowsWritten, int NotesUnproven,
+/// <summary>
+///     What a chunk-boundary repair did: files re-ingested, row groups re-chunked in place, rows written, notes left
+///     as stored because no order of their rows joins back into the body their path names, and files whose rows kept their
+///     content and were renumbered in place.
+/// </summary>
+public sealed record ChunkBoundaryRepairReport(
+    int FilesReingested,
+    int GroupsRepaired,
+    int RowsWritten,
+    int NotesUnproven,
     int FilesRepositioned);
 
 /// <summary>
@@ -68,7 +74,7 @@ public sealed class ChunkBoundaryRepair(
             }
 
             var isFile = ordered[0].IsFileRow;
-            IReadOnlyList<PartitionEntry> partition = isFile
+            var partition = isFile
                 ? await ChunkPositionScanner.PartitionAsync(connection, ordered[0].Id, cancellationToken)
                 : [];
             var keepingOrder = ChunkPositionScanner.Moves(partition, null);
@@ -120,8 +126,10 @@ public sealed class ChunkBoundaryRepair(
         return new ChunkBoundaryRepairReport(filesReingested, groupsRepaired, rowsWritten, notesUnproven, filesRepositioned);
     }
 
-    /// <summary>A file's rows by position; a note's rows in the order <see cref="NoteTextOrder" /> proves, or null
-    /// when no order joins back into the note's body.</summary>
+    /// <summary>
+    ///     A file's rows by position; a note's rows in the order <see cref="NoteTextOrder" /> proves, or null
+    ///     when no order joins back into the note's body.
+    /// </summary>
     private static List<Row>? InTextOrder(List<Row> rows)
     {
         if (rows[0].IsFileRow)
@@ -139,7 +147,7 @@ public sealed class ChunkBoundaryRepair(
         for (var i = 0; i + 1 < ordered.Count; i++)
         {
             if (ChunkSeam.CutsATerm(ordered[i].Value, ordered[i + 1].Value)
-                || (isFile && ChunkSeam.MayCutAFencedTerm(ordered[i].Value, ordered[i + 1].Value)))
+                || isFile && ChunkSeam.MayCutAFencedTerm(ordered[i].Value, ordered[i + 1].Value))
             {
                 return true;
             }
@@ -148,9 +156,11 @@ public sealed class ChunkBoundaryRepair(
         return false;
     }
 
-    /// <summary>Code rows carry line ranges that cannot be re-derived from the rows, so a cut code file is only
-    /// re-ingested from disk; one no longer on disk is left for the watch digest to prune. A re-ingest that writes
-    /// back the rows the file already had (a cut the chunker must make) is not counted.</summary>
+    /// <summary>
+    ///     Code rows carry line ranges that cannot be re-derived from the rows, so a cut code file is only
+    ///     re-ingested from disk; one no longer on disk is left for the watch digest to prune. A re-ingest that writes
+    ///     back the rows the file already had (a cut the chunker must make) is not counted.
+    /// </summary>
     private static async Task<int> ReingestCutCodeFilesAsync(SqliteConnection connection, IMemoryStore store,
         CancellationToken cancellationToken)
     {
@@ -178,8 +188,10 @@ public sealed class ChunkBoundaryRepair(
         return reingested;
     }
 
-    /// <summary>Re-ingests a file through the same unconditional replace the reingest repair uses; false when the
-    /// file cannot be read or ingested, so the caller repairs from the rows instead.</summary>
+    /// <summary>
+    ///     Re-ingests a file through the same unconditional replace the reingest repair uses; false when the
+    ///     file cannot be read or ingested, so the caller repairs from the rows instead.
+    /// </summary>
     private static async Task<bool> TryReingestAsync(IMemoryStore store, string projectId, string path, CancellationToken cancellationToken)
     {
         try
@@ -259,8 +271,10 @@ public sealed class ChunkBoundaryRepair(
         return fileTypeMatcher.TryGetHandler(row.Path, out var handler) ? handler.Chunker : fallbackChunker;
     }
 
-    /// <summary>Swaps each run for its new pieces in one transaction, tombstoning every hash that disappears, and
-    /// renumbers the source file's position partition with each run's pieces in the run's own place.</summary>
+    /// <summary>
+    ///     Swaps each run for its new pieces in one transaction, tombstoning every hash that disappears, and
+    ///     renumbers the source file's position partition with each run's pieces in the run's own place.
+    /// </summary>
     private async Task<int> ReplaceRowsAsync(SqliteConnection connection, List<Row> ordered,
         List<(List<Row> Old, IReadOnlyList<string> New)> replacements, CancellationToken cancellationToken)
     {
@@ -345,7 +359,7 @@ public sealed class ChunkBoundaryRepair(
             .OrderBy(p => !p.IsFileRow).ThenBy(p => p.Slot).ThenBy(p => p.Piece).ThenBy(p => p.Id)
             .ToList();
         var position = order.Select((p, i) => (p.Id, Index: (long)i)).ToDictionary(p => p.Id, p => p.Index);
-        foreach (var (id, index) in NoteTextOrder.Repositioned([.. textOrder.Select(id => new NoteRow(id, string.Empty, position[id]))]))
+        foreach (var (id, index) in NoteTextOrder.Repositioned([.. textOrder.Select(id => new NoteRow(id, "", position[id]))]))
         {
             position[id] = index;
         }
@@ -360,7 +374,7 @@ public sealed class ChunkBoundaryRepair(
 
     private Task<long?> InsertAsync(SqliteConnection connection, Row row, string piece, long now,
         CancellationToken cancellationToken) =>
-        connection.ExecuteScalarAsync<long?>(new CommandDefinition(MemorySql.InsertEntry + " RETURNING id",
+        connection.ExecuteScalarAsync<long?>(new CommandDefinition($"{MemorySql.InsertEntry} RETURNING id",
             new
             {
                 hash = ContentHash.Of(row.Path, piece),
@@ -384,8 +398,10 @@ public sealed class ChunkBoundaryRepair(
                 totalChunks = 0
             }, cancellationToken: cancellationToken));
 
-    /// <summary>A row's sort key in its partition: the file's rows first, then the slot it holds, and for a new piece
-    /// its order within the run.</summary>
+    /// <summary>
+    ///     A row's sort key in its partition: the file's rows first, then the slot it holds, and for a new piece
+    ///     its order within the run.
+    /// </summary>
     private sealed record Placed(long Id, bool IsFileRow, long Slot, int Piece);
 
     private sealed record PositionRow(long Id, long ChunkIndex, string? Path, string? SourceFile)

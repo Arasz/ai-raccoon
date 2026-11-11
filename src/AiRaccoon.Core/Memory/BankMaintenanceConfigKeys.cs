@@ -14,8 +14,6 @@ public static class BankMaintenanceConfigKeys
     /// <summary>Ceiling for the vacuum interval: TimeSpan.FromDays overflows beyond this.</summary>
     public const int MaxVacuumIntervalDays = 36500;
 
-    public static int ParseCheckpointIntervalMinutes(string? value) => int.TryParse(value, out var minutes) && minutes > 0 ? minutes : DefaultCheckpointIntervalMinutes;
-
     /// <summary>
     ///     How long a discarded promotion candidate is remembered. A discard means "the agent said
     ///     no, do not propose this again", so it is load-bearing while its entry still exists — the
@@ -29,15 +27,6 @@ public static class BankMaintenanceConfigKeys
     public const string SearchQualityRetentionDaysGlobal = "maintenance.search-quality-retention-days.global";
 
     public const int DefaultSearchQualityRetentionDays = 90;
-
-    public static int ParsePromotionDiscardRetentionDays(string? value) => int.TryParse(value, out var days) && days > 0 ? days : DefaultPromotionDiscardRetentionDays;
-
-    public static int ParseSearchQualityRetentionDays(string? value) => int.TryParse(value, out var days) && days > 0 ? days : DefaultSearchQualityRetentionDays;
-
-    public static int ParseVacuumIntervalDays(string? value) =>
-        int.TryParse(value, out var days) && days > 0
-            ? Math.Min(days, MaxVacuumIntervalDays)
-            : DefaultVacuumIntervalDays;
 
     /// <summary>
     ///     Rows drained per signal, for both corpora (WP11-C, owner gate G18) — today's
@@ -63,6 +52,17 @@ public static class BankMaintenanceConfigKeys
     ///     128 default. ADR-0136.
     /// </summary>
     public const int MaxEmbedRowsPerRun = 4096;
+
+    public static int ParseCheckpointIntervalMinutes(string? value) => int.TryParse(value, out var minutes) && minutes > 0 ? minutes : DefaultCheckpointIntervalMinutes;
+
+    public static int ParsePromotionDiscardRetentionDays(string? value) => int.TryParse(value, out var days) && days > 0 ? days : DefaultPromotionDiscardRetentionDays;
+
+    public static int ParseSearchQualityRetentionDays(string? value) => int.TryParse(value, out var days) && days > 0 ? days : DefaultSearchQualityRetentionDays;
+
+    public static int ParseVacuumIntervalDays(string? value) =>
+        int.TryParse(value, out var days) && days > 0
+            ? Math.Min(days, MaxVacuumIntervalDays)
+            : DefaultVacuumIntervalDays;
 
     /// <summary>
     ///     True when <paramref name="value" /> is empty (unset) or an integer inside

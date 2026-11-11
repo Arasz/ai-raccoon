@@ -13,13 +13,14 @@ public sealed partial class InstallWatchdog : BackgroundService
     /// <summary>Span name and `operation` tag of one install check.</summary>
     internal const string OperationName = "install.check";
 
-    private readonly Func<bool> _installDirectoryExists;
-    private readonly string _installDirectory;
     private readonly TimeSpan _checkInterval;
+    private readonly string _installDirectory;
+
+    private readonly Func<bool> _installDirectoryExists;
     private readonly IHostApplicationLifetime _lifetime;
+    private readonly ILogger<InstallWatchdog> _logger;
     private readonly IOperationTelemetry _telemetry;
     private readonly TimeProvider _timeProvider;
-    private readonly ILogger<InstallWatchdog> _logger;
 
     public InstallWatchdog(string installDirectory, Func<bool> installDirectoryExists, TimeSpan checkInterval,
         IHostApplicationLifetime lifetime, IOperationTelemetry telemetry, TimeProvider timeProvider,

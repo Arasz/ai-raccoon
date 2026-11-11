@@ -16,9 +16,6 @@ internal sealed partial class MlxCacheLimit(ILogger logger)
     private const string LibraryFileName = "libmlxc.dylib";
     private const string ExportName = "mlx_set_cache_limit";
 
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    private delegate int SetCacheLimit(out nuint previous, nuint limit);
-
     /// <summary>Sets the cap in this process; true when MLX accepted it. Call on the MLX session's thread.</summary>
     public bool TryApply(string pluginDirectory, long bytes)
     {
@@ -45,6 +42,9 @@ internal sealed partial class MlxCacheLimit(ILogger logger)
         Log.Applied(logger, bytes >> 20, (long)(previous >> 20));
         return true;
     }
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int SetCacheLimit(out nuint previous, nuint limit);
 
     public static partial class Log
     {

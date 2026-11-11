@@ -18,9 +18,23 @@ namespace AiRaccoon.Setup.Cli.Commands;
 ///     the bank read-only, exactly like <c>OpenSnapshotReadOnly</c> (AppRegistrations.cs), so it
 ///     never runs <c>MemorySchema.EnsureAsync</c> against the very bank it is inspecting.
 /// </summary>
-public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnectionFactory, IEncryptionKeyResolver keyResolver,
-    InfrastructureOptions options, ILogger<DoctorCommands> logger)
+public sealed partial class DoctorCommands(
+    ISqliteConnectionFactory bankConnectionFactory,
+    IEncryptionKeyResolver keyResolver,
+    InfrastructureOptions options,
+    ILogger<DoctorCommands> logger)
 {
+    /// <summary>SQLITE_NOTADB (26): the file exists but is not a database (or not this key's database).</summary>
+    private const int NotADatabaseErrorCode = 26;
+
+    /// <summary>
+    ///     DateTimeOffset.FromUnixTimeSeconds' accepted bounds — checked before the call so a
+    ///     stored value outside them renders as data, not as a raw .NET parameter message.
+    /// </summary>
+    private const long MinUnixTimeSeconds = -62_135_596_800;
+
+    private const long MaxUnixTimeSeconds = 253_402_300_799;
+
     public async Task<int> RunAsync(StandardStreams streams, CancellationToken cancellationToken)
     {
         var bankPath = bankConnectionFactory.BankPath;
@@ -130,8 +144,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         if (verifier is not null && resolvedKey.Passphrase is null)
         {
             await streams.WriteErrorLineAsync(
-                $"ai-raccoon: doctor: the bank at {bankPath} is encrypted, but no encryption key was resolved — " +
-                "set AIRACCOON_DB_PASSPHRASE, or configure the key source this bank uses");
+                $"ai-raccoon: doctor: the bank at {bankPath} is encrypted, but no encryption key was resolved — set AIRACCOON_DB_PASSPHRASE, or configure the key source this bank uses");
             return ErrorCode.Key.Unresolved;
         }
 
@@ -140,8 +153,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
             if (!KeyCheckSidecar.Verifies(verifier, resolvedKey.Passphrase))
             {
                 await streams.WriteErrorLineAsync(
-                    $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); " +
-                    "its key verifier confirms the resolved encryption key is wrong — check the encryption key source");
+                    $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); its key verifier confirms the resolved encryption key is wrong — check the encryption key source");
                 return ErrorCode.Key.WrongKey;
             }
 
@@ -153,16 +165,13 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
             if (!new RekeyMarker(bankPath).IsPresent)
             {
                 await streams.WriteErrorLineAsync(
-                    $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); " +
-                    "its key verifier confirms the encryption key is right, so the bank file itself is corrupt — restore it from a backup");
+                    $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); its key verifier confirms the encryption key is right, so the bank file itself is corrupt — restore it from a backup");
                 return ErrorCode.Bank.Corrupted;
             }
         }
 
         await streams.WriteErrorLineAsync(
-            $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); " +
-            "wrong key or corrupt bank — check the encryption key source if this data root was working before, " +
-            "or restore the bank from a backup if the file itself is damaged");
+            $"ai-raccoon: doctor: the bank at {bankPath} exists but is not a SQLite database (SQLite error {ex.SqliteErrorCode}); wrong key or corrupt bank — check the encryption key source if this data root was working before, or restore the bank from a backup if the file itself is damaged");
         return ErrorCode.Bank.Corrupted;
     }
 
@@ -283,7 +292,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
             // its own table, so it survives on the same state (R2 N4).
             if (!settingsExist)
             {
-                return new CorpusEngineState(null, null, null, pending, Unreadable: true);
+                return new CorpusEngineState(null, null, null, pending, true);
             }
 
             return probe.ProviderKey is null
@@ -296,7 +305,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         }
         catch (SqliteException)
         {
-            return new CorpusEngineState(null, null, null, null, Unreadable: true);
+            return new CorpusEngineState(null, null, null, null, true);
         }
     }
 
@@ -375,8 +384,7 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
 
         var reason = string.IsNullOrEmpty(status.Reason) ? "" : $": {status.Reason}";
         var running = IsRunning(status.Pid) ? "" : " (not running)";
-        return $"coreml: {status.State} ({status.Trigger}{reason}) at {FormatTimestamp(status.At.ToUnixTimeSeconds())}, " +
-               $"pid {status.Pid}{running}, {cache}";
+        return $"coreml: {status.State} ({status.Trigger}{reason}) at {FormatTimestamp(status.At.ToUnixTimeSeconds())}, pid {status.Pid}{running}, {cache}";
     }
 
     private static async Task<EmbeddingDevice> ReadDeviceAsync(SqliteConnection connection, CancellationToken cancellationToken)
@@ -424,8 +432,10 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         await connection.ExecuteScalarAsync<long>(new CommandDefinition(
             "SELECT EXISTS(SELECT 1 FROM settings WHERE key = @key)", new { key }, cancellationToken: cancellationToken)) > 0;
 
-    /// <summary>The manifest's own model name when it is still readable, else the directory's leaf —
-    /// doctor reports, so an unreadable manifest must not stop it printing the rest.</summary>
+    /// <summary>
+    ///     The manifest's own model name when it is still readable, else the directory's leaf —
+    ///     doctor reports, so an unreadable manifest must not stop it printing the rest.
+    /// </summary>
     private static string ModelNameFor(string directory)
     {
         try
@@ -490,22 +500,14 @@ public sealed partial class DoctorCommands(ISqliteConnectionFactory bankConnecti
         }
     }
 
-    private static string MigrationLine(MigrationState migration) => migration.Result switch
-    {
-        MigrationRead.Open =>
-            $"model migration: open since {FormatTimestamp(migration.StartedAtUnix!.Value)} (all MCP tool calls are refused until it finishes)",
-        MigrationRead.Unreadable => "model migration: unreadable",
-        _ => "model migration: none open"
-    };
-
-    /// <summary>SQLITE_NOTADB (26): the file exists but is not a database (or not this key's database).</summary>
-    private const int NotADatabaseErrorCode = 26;
-
-    /// <summary>DateTimeOffset.FromUnixTimeSeconds' accepted bounds — checked before the call so a
-    /// stored value outside them renders as data, not as a raw .NET parameter message.</summary>
-    private const long MinUnixTimeSeconds = -62_135_596_800;
-
-    private const long MaxUnixTimeSeconds = 253_402_300_799;
+    private static string MigrationLine(MigrationState migration) =>
+        migration.Result switch
+        {
+            MigrationRead.Open =>
+                $"model migration: open since {FormatTimestamp(migration.StartedAtUnix!.Value)} (all MCP tool calls are refused until it finishes)",
+            MigrationRead.Unreadable => "model migration: unreadable",
+            _ => "model migration: none open"
+        };
 
     /// <summary>Unix seconds as an absolute UTC instant — mirrors WatchCommands.FormatTimestamp (:185); the second copy is deliberate (R1 S8). An out-of-range value degrades to a marker naming the stored value (F7).</summary>
     private static string FormatTimestamp(long unixSeconds)

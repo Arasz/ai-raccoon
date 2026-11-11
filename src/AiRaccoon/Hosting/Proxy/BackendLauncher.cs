@@ -14,12 +14,12 @@ internal sealed partial class BackendLauncher : IBackendLauncher
 {
     public const string BackendSessionClient = "BackendSessionClient";
 
+    /// <summary>Stderr is captured for the failure path only, bounded to its last ~4 KB.</summary>
+    private const int StderrCaptureCharLimit = 4096;
+
     public static readonly TimeSpan DefaultBudget = TimeSpan.FromSeconds(30);
 
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(250);
-
-    /// <summary>Stderr is captured for the failure path only, bounded to its last ~4 KB.</summary>
-    private const int StderrCaptureCharLimit = 4096;
 
     /// <summary>Bounds the re-probe that follows an exited backend, which the spent budget cannot.</summary>
     private static readonly TimeSpan LastChanceBudget = TimeSpan.FromSeconds(5);
@@ -125,7 +125,7 @@ internal sealed partial class BackendLauncher : IBackendLauncher
 
     private BackendResult GaveUp(string url, int? serveExitCode, string? serveStderr)
     {
-        Log.BackendUnavailable(_logger, url, (int)_budget.TotalSeconds, serveExitCode, serveStderr ?? string.Empty);
+        Log.BackendUnavailable(_logger, url, (int)_budget.TotalSeconds, serveExitCode, serveStderr ?? "");
         return new BackendResult(null, serveExitCode, serveStderr);
     }
 
@@ -183,8 +183,10 @@ internal sealed partial class BackendLauncher : IBackendLauncher
 
     private readonly record struct StartedBackend(Process Backend, TailCapture Stderr);
 
-    /// <summary>Thread-safe accumulator keeping only the last <paramref name="maxChars"/> characters
-    /// written, readable at any time — the backend may still be running when a snapshot is taken.</summary>
+    /// <summary>
+    ///     Thread-safe accumulator keeping only the last <paramref name="maxChars" /> characters
+    ///     written, readable at any time — the backend may still be running when a snapshot is taken.
+    /// </summary>
     private sealed class TailCapture(int maxChars)
     {
         private readonly StringBuilder _buffer = new();
@@ -222,6 +224,5 @@ internal sealed partial class BackendLauncher : IBackendLauncher
         [LoggerMessage(EventId = 635, Level = LogLevel.Error,
             Message = "ai-raccoon: the backend at {Url} did not answer within {BudgetSeconds}s (serve exit {ServeExitCode}) stderr: {ServeStderr}")]
         public static partial void BackendUnavailable(ILogger logger, string url, int budgetSeconds, int? serveExitCode, string serveStderr);
-
     }
 }

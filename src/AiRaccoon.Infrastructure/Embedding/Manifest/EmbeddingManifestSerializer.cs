@@ -52,7 +52,7 @@ public sealed class EmbeddingManifestSerializer : IEmbeddingManifestSerializer
         }
         catch (JsonException ex)
         {
-            var at = string.IsNullOrEmpty(ex.Path) ? string.Empty : $" (at {ex.Path})";
+            var at = string.IsNullOrEmpty(ex.Path) ? "" : $" (at {ex.Path})";
             throw new EmbeddingManifestFormatException(
                 $"invalid embedding manifest: {ex.Message}{at}{Hint(ex.Path)}", ex);
         }
@@ -62,12 +62,14 @@ public sealed class EmbeddingManifestSerializer : IEmbeddingManifestSerializer
     private static string Hint(string? path) =>
         path?.Contains("specialTokens", StringComparison.OrdinalIgnoreCase) == true
             ? """ — tokenizer.options.specialTokens maps special-token names to NUMERIC ids taken from tokenizer_config.json (e.g. {"<s>": 0}), never a list or a string"""
-            : string.Empty;
+            : "";
 }
 
-/// <summary>Pins the schema's exact string for an enum member where hump-to-kebab would guess
-/// wrong — e.g. <c>SentencePiece</c> is <c>sentencepiece</c> in the schema, not
-/// <c>sentence-piece</c>.</summary>
+/// <summary>
+///     Pins the schema's exact string for an enum member where hump-to-kebab would guess
+///     wrong — e.g. <c>SentencePiece</c> is <c>sentencepiece</c> in the schema, not
+///     <c>sentence-piece</c>.
+/// </summary>
 [AttributeUsage(AttributeTargets.Field)]
 public sealed class SchemaNameAttribute(string name) : Attribute
 {
@@ -119,22 +121,23 @@ public sealed class KebabCaseEnumJsonConverter<TEnum> : JsonConverter<TEnum>
         return attribute?.Name ?? HumpToKebab(member);
     }
 
-    private static string? ResolveSchemaNameByStaticMap(TEnum value) => value switch
-    {
-        TokenizerFamily tokenizerFamily => tokenizerFamily switch
+    private static string? ResolveSchemaNameByStaticMap(TEnum value) =>
+        value switch
         {
-            TokenizerFamily.SentencePiece => "sentencepiece",
-            TokenizerFamily.TokenizerJson => "tokenizer-json",
+            TokenizerFamily tokenizerFamily => tokenizerFamily switch
+            {
+                TokenizerFamily.SentencePiece => "sentencepiece",
+                TokenizerFamily.TokenizerJson => "tokenizer-json",
+                _ => null
+            },
+            PoolingMode poolingMode => poolingMode switch
+            {
+                PoolingMode.ModelOutput => "model-output",
+                PoolingMode.LastToken => "last-token",
+                _ => null
+            },
             _ => null
-        },
-        PoolingMode poolingMode => poolingMode switch
-        {
-            PoolingMode.ModelOutput => "model-output",
-            PoolingMode.LastToken => "last-token",
-            _ => null
-        },
-        _ => null
-    };
+        };
 
     private static string HumpToKebab(string name)
     {

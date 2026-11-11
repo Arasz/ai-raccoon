@@ -8,12 +8,12 @@ namespace AiRaccoon.Infrastructure.Embedding.NeuralEngine;
 /// <summary>Builds the CoreML bucket sessions over the ANE graph and the CPU session for longer rows (ADR-0118).</summary>
 internal sealed class CoreMlSessionFactory : ICoreMlSessionFactory
 {
-    private readonly string _graphPath;
-    private readonly string _productGraphPath;
-    private readonly IEmbeddingTokenizer _tokenizer;
     private readonly EngineDescriptor _descriptor;
+    private readonly string _graphPath;
     private readonly int _intraOpThreads;
     private readonly ILogger _logger;
+    private readonly string _productGraphPath;
+    private readonly IEmbeddingTokenizer _tokenizer;
 
     public CoreMlSessionFactory(string graphPath, string productGraphPath, IEmbeddingTokenizer tokenizer,
         EngineDescriptor descriptor, int intraOpThreads, ILogger logger)
@@ -31,15 +31,6 @@ internal sealed class CoreMlSessionFactory : ICoreMlSessionFactory
         _intraOpThreads = intraOpThreads;
         _logger = logger;
     }
-
-    /// <summary>The CoreML provider options for one bucket: an ML Program on the CPU and Neural Engine, static shapes, its own cache.</summary>
-    internal static Dictionary<string, string> ProviderOptions(string cacheDirectory) => new()
-    {
-        ["ModelFormat"] = "MLProgram",
-        ["MLComputeUnits"] = "CPUAndNeuralEngine",
-        ["RequireStaticInputShapes"] = "1",
-        ["ModelCacheDirectory"] = cacheDirectory
-    };
 
     public ICoreMlBucketSession CreateBucket(int bucket, string cacheDirectory)
     {
@@ -59,8 +50,17 @@ internal sealed class CoreMlSessionFactory : ICoreMlSessionFactory
         return new CoreMlBucketSession(OrtSessionLog.Create(_graphPath, options, _logger), _descriptor.EmbeddingOutput!);
     }
 
-    public ILocalEmbeddingGenerator CreateOverflow() =>
-        new OnnxEmbeddingGenerator(_productGraphPath, _tokenizer, _descriptor, _logger, _intraOpThreads);
+    public ILocalEmbeddingGenerator CreateOverflow() => new OnnxEmbeddingGenerator(_productGraphPath, _tokenizer, _descriptor, _logger, _intraOpThreads);
+
+    /// <summary>The CoreML provider options for one bucket: an ML Program on the CPU and Neural Engine, static shapes, its own cache.</summary>
+    internal static Dictionary<string, string> ProviderOptions(string cacheDirectory) =>
+        new()
+        {
+            ["ModelFormat"] = "MLProgram",
+            ["MLComputeUnits"] = "CPUAndNeuralEngine",
+            ["RequireStaticInputShapes"] = "1",
+            ["ModelCacheDirectory"] = cacheDirectory
+        };
 }
 
 /// <summary>One CoreML session compiled for a single padded row length.</summary>

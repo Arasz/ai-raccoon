@@ -46,9 +46,7 @@ public static class Program
                 var metrics = RetrievalMetricsEvaluator.Compute(embedder, BenchmarkCorpus.Queries, 10);
 
                 Console.WriteLine(
-                    $"{name,-52} {embedder.Dimensions,-6} " +
-                    $"{metrics.RecallAt5,-7:F3} {metrics.RecallAt10,-7:F3} " +
-                    $"{metrics.Mrr,-7:F3} {metrics.NdcgAt10,-8:F3}");
+                    $"{name,-52} {embedder.Dimensions,-6} {metrics.RecallAt5,-7:F3} {metrics.RecallAt10,-7:F3} {metrics.Mrr,-7:F3} {metrics.NdcgAt10,-8:F3}");
             }
             catch (Exception ex)
             {

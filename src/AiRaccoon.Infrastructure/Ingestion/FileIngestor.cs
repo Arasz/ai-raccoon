@@ -7,10 +7,10 @@ using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
-using static AiRaccoon.Infrastructure.Sqlite.Sql;
 using AiRaccoon.Infrastructure.Watch;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using static AiRaccoon.Infrastructure.Sqlite.Sql;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 
@@ -33,7 +33,18 @@ public sealed class FileIngestor(
     ISharedProjectScope scope,
     IEntryKindClassifier entryTypeClassifier) : IFileIngestor
 {
+    private const string SetCitingPosition =
+        "UPDATE entries SET chunk_index = @chunkIndex, total_chunks = @totalChunks "
+        + "WHERE id = @id AND (chunk_index <> @chunkIndex OR total_chunks <> @totalChunks)";
+
     private static readonly FileSniffer Sniffer = new();
+
+    /// <summary>The rows of a file's position partition that are not its own: notes citing it.</summary>
+    private static readonly string SelectCitingRows = $"""
+                                                       SELECT id, chunk_index FROM entries
+                                                       WHERE source_file = @path AND path IS NOT @path
+                                                         AND ({MemorySql.ContextKeyExpression("")}) = ({MemorySql.ContextKeyExpression("@")})
+                                                       """;
 
     private readonly ISharedProjectScope _scope = scope;
 
@@ -72,106 +83,13 @@ public sealed class FileIngestor(
         }
 
         var (rows, hashes) = await InsertChunksAsync(connection, projectId, path, content, handler, context,
-                cancellationToken, preserveMemoryMetadata);
+            cancellationToken, preserveMemoryMetadata);
         if (hashes.Count == 0 && !string.IsNullOrWhiteSpace(content))
         {
             return new FileIngestResult(0, false, hashes, Skipped: SkipReason.Unparseable);
         }
 
         return new FileIngestResult(rows, true, hashes);
-    }
-
-    /// <summary>
-    ///     Explicit single-file ingest also routes code extensions to the code corpus
-    ///     (docs/work/2026-08-21-code-search-implementation-plan.md §12.4). Fingerprint-eligible
-    ///     when chunking produced rows, or when zero rows is because the content is
-    ///     empty/whitespace-only — never for a stand-in chunker's zero rows on real content.
-    /// </summary>
-    private async Task<FileIngestResult> IngestAsCodeAsync(SqliteConnection connection, string projectId, string path,
-        CancellationToken cancellationToken)
-    {
-        if (_scope.IsReserved(projectId))
-        {
-            return new FileIngestResult(0, false, Skipped: SkipReason.UnsupportedType);
-        }
-
-        if (!codeFileTypeMatcher.IsCodeFile(path))
-        {
-            return await SkipUnroutedAsync(path, cancellationToken);
-        }
-
-        // An empty code-hash set, not null: a file that turned binary must prune its old code rows.
-        if (await Sniffer.IsBinaryAsync(path, cancellationToken))
-        {
-            return new FileIngestResult(0, false, CodeChunkHashes: [], Skipped: SkipReason.Binary);
-        }
-
-        var result = await codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken);
-        var codeChunkHashes = ResolveCodeChunkHashes(result);
-        if (result.ChunkHashes is { Count: > 0 })
-        {
-            return new FileIngestResult(result.Rows, true, CodeChunkHashes: codeChunkHashes);
-        }
-
-        return result.ContentWhitespaceOnly
-            ? new FileIngestResult(0, true, CodeChunkHashes: codeChunkHashes)
-            : new FileIngestResult(0, false, CodeChunkHashes: codeChunkHashes);
-    }
-
-    /// <summary>A file neither corpus routes: the ignore file itself is a control file, not a skip;
-    /// anything else is skipped as binary or as an unsupported type.</summary>
-    private static async Task<FileIngestResult> SkipUnroutedAsync(string path, CancellationToken cancellationToken)
-    {
-        if (string.Equals(Path.GetFileName(path), IgnoreRulesProvider.FileName, StringComparison.Ordinal))
-        {
-            return new FileIngestResult(0, true);
-        }
-
-        var reason = await Sniffer.IsBinaryAsync(path, cancellationToken) ? SkipReason.Binary : SkipReason.UnsupportedType;
-        return new FileIngestResult(0, false, Skipped: reason);
-    }
-
-    /// <summary>The null-vs-empty <see cref="CodeIngestResult.ChunkHashes" /> prune contract (S3,
-    /// #485): null for a stand-in chunker's untrustworthy zero chunks, else the real set.</summary>
-    private static IReadOnlyList<string>? ResolveCodeChunkHashes(CodeIngestResult result) =>
-        result.ChunkHashes is { Count: > 0 }
-            ? result.ChunkHashes
-            : result.ContentWhitespaceOnly
-                ? result.ChunkHashes ?? []
-                : null;
-
-    /// <summary>
-    ///     The `ai-raccoon.ignore` root for a single-file ingest or a directory walk's root: the
-    ///     containing registered watch if one exists (longest match), else the ingest-scope
-    ///     allowlist entry that admits the path, else the path's own parent directory.
-    ///     `IgnoreRulesProvider` reads one file at whatever root it is given — no nested discovery.
-    /// </summary>
-    private async Task<string> ResolveIgnoreRootAsync(SqliteConnection connection, string projectId, string path,
-        CancellationToken cancellationToken)
-    {
-        var normalized = IngestPath.Normalize(path);
-
-        var watches = await watchStore.ListWatchesAsync(cancellationToken);
-        var containingWatch = watches
-            .Where(w => w.ProjectId == projectId && IngestPath.IsWithinScope(normalized, w.Path))
-            .OrderByDescending(w => w.Path.Length)
-            .FirstOrDefault();
-        if (containingWatch is not null)
-        {
-            return containingWatch.Path;
-        }
-
-        var scope = await ReadScopeAsync(connection, projectId, cancellationToken);
-        var admittingScopeEntry = scope
-            .Where(entry => IngestPath.IsWithinScope(normalized, entry))
-            .OrderByDescending(entry => entry.Length)
-            .FirstOrDefault();
-        if (admittingScopeEntry is not null)
-        {
-            return admittingScopeEntry;
-        }
-
-        return Path.GetDirectoryName(path) ?? path;
     }
 
     public async Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId,
@@ -233,7 +151,7 @@ public sealed class FileIngestor(
             }
 
             var (rows, hashes) = await InsertChunksAsync(connection, projectId, file, content, handler, context,
-                    cancellationToken);
+                cancellationToken);
             indexed += rows;
             memoryRowsWritten |= rows > 0;
             walked.Add(new WalkedFile(file, hashes, null));
@@ -271,14 +189,114 @@ public sealed class FileIngestor(
             : [content];
     }
 
-    /// <summary>Leaves every freshly inserted row `embed_state = 'pending'` — the caller enqueues
-    /// the corpus's drain once it is safe to (see <see cref="IngestDirectoryAsync" />).</summary>
+    /// <summary>
+    ///     Explicit single-file ingest also routes code extensions to the code corpus
+    ///     (docs/work/2026-08-21-code-search-implementation-plan.md §12.4). Fingerprint-eligible
+    ///     when chunking produced rows, or when zero rows is because the content is
+    ///     empty/whitespace-only — never for a stand-in chunker's zero rows on real content.
+    /// </summary>
+    private async Task<FileIngestResult> IngestAsCodeAsync(SqliteConnection connection, string projectId, string path,
+        CancellationToken cancellationToken)
+    {
+        if (_scope.IsReserved(projectId))
+        {
+            return new FileIngestResult(0, false, Skipped: SkipReason.UnsupportedType);
+        }
+
+        if (!codeFileTypeMatcher.IsCodeFile(path))
+        {
+            return await SkipUnroutedAsync(path, cancellationToken);
+        }
+
+        // An empty code-hash set, not null: a file that turned binary must prune its old code rows.
+        if (await Sniffer.IsBinaryAsync(path, cancellationToken))
+        {
+            return new FileIngestResult(0, false, CodeChunkHashes: [], Skipped: SkipReason.Binary);
+        }
+
+        var result = await codeIngestor.IngestFileAsync(connection, projectId, path, cancellationToken);
+        var codeChunkHashes = ResolveCodeChunkHashes(result);
+        if (result.ChunkHashes is { Count: > 0 })
+        {
+            return new FileIngestResult(result.Rows, true, CodeChunkHashes: codeChunkHashes);
+        }
+
+        return result.ContentWhitespaceOnly
+            ? new FileIngestResult(0, true, CodeChunkHashes: codeChunkHashes)
+            : new FileIngestResult(0, false, CodeChunkHashes: codeChunkHashes);
+    }
+
+    /// <summary>
+    ///     A file neither corpus routes: the ignore file itself is a control file, not a skip;
+    ///     anything else is skipped as binary or as an unsupported type.
+    /// </summary>
+    private static async Task<FileIngestResult> SkipUnroutedAsync(string path, CancellationToken cancellationToken)
+    {
+        if (string.Equals(Path.GetFileName(path), IgnoreRulesProvider.FileName, StringComparison.Ordinal))
+        {
+            return new FileIngestResult(0, true);
+        }
+
+        var reason = await Sniffer.IsBinaryAsync(path, cancellationToken) ? SkipReason.Binary : SkipReason.UnsupportedType;
+        return new FileIngestResult(0, false, Skipped: reason);
+    }
+
+    /// <summary>
+    ///     The null-vs-empty <see cref="CodeIngestResult.ChunkHashes" /> prune contract (S3,
+    ///     #485): null for a stand-in chunker's untrustworthy zero chunks, else the real set.
+    /// </summary>
+    private static IReadOnlyList<string>? ResolveCodeChunkHashes(CodeIngestResult result) =>
+        result.ChunkHashes is { Count: > 0 }
+            ? result.ChunkHashes
+            : result.ContentWhitespaceOnly
+                ? result.ChunkHashes ?? []
+                : null;
+
+    /// <summary>
+    ///     The `ai-raccoon.ignore` root for a single-file ingest or a directory walk's root: the
+    ///     containing registered watch if one exists (longest match), else the ingest-scope
+    ///     allowlist entry that admits the path, else the path's own parent directory.
+    ///     `IgnoreRulesProvider` reads one file at whatever root it is given — no nested discovery.
+    /// </summary>
+    private async Task<string> ResolveIgnoreRootAsync(SqliteConnection connection, string projectId, string path,
+        CancellationToken cancellationToken)
+    {
+        var normalized = IngestPath.Normalize(path);
+
+        var watches = await watchStore.ListWatchesAsync(cancellationToken);
+        var containingWatch = watches
+            .Where(w => w.ProjectId == projectId && IngestPath.IsWithinScope(normalized, w.Path))
+            .OrderByDescending(w => w.Path.Length)
+            .FirstOrDefault();
+        if (containingWatch is not null)
+        {
+            return containingWatch.Path;
+        }
+
+        var scope = await ReadScopeAsync(connection, projectId, cancellationToken);
+        var admittingScopeEntry = scope
+            .Where(entry => IngestPath.IsWithinScope(normalized, entry))
+            .OrderByDescending(entry => entry.Length)
+            .FirstOrDefault();
+        if (admittingScopeEntry is not null)
+        {
+            return admittingScopeEntry;
+        }
+
+        return Path.GetDirectoryName(path) ?? path;
+    }
+
+    /// <summary>
+    ///     Leaves every freshly inserted row `embed_state = 'pending'` — the caller enqueues
+    ///     the corpus's drain once it is safe to (see <see cref="IngestDirectoryAsync" />).
+    /// </summary>
     private Task<InsertedChunks> InsertChunksAsync(SqliteConnection connection,
         string projectId, string path, string content, IFileTypeHandler handler, string? context,
-        CancellationToken cancellationToken, bool preserveMemoryMetadata = false) => _scope.IsReserved(projectId)
-        ? connection.InWriteTransactionAsync(() => InsertChunksCoreAsync(connection, projectId, path, content,
-            handler, context, cancellationToken, preserveMemoryMetadata), cancellationToken)
-        : InsertChunksCoreAsync(connection, projectId, path, content, handler, context, cancellationToken, preserveMemoryMetadata);
+        CancellationToken cancellationToken, bool preserveMemoryMetadata = false) =>
+        _scope.IsReserved(projectId)
+            ? connection.InWriteTransactionAsync(() => InsertChunksCoreAsync(connection, projectId, path, content,
+                handler, context, cancellationToken, preserveMemoryMetadata), cancellationToken)
+            : InsertChunksCoreAsync(connection, projectId, path, content, handler, context, cancellationToken, preserveMemoryMetadata);
 
     private async Task<InsertedChunks> InsertChunksCoreAsync(SqliteConnection connection,
         string projectId, string path, string content, IFileTypeHandler handler, string? context,
@@ -316,14 +334,16 @@ public sealed class FileIngestor(
             context_label = bucket.ContextLabel,
             workspace_id = bucket.WorkspaceId
         };
-        var previous = preserveMemoryMetadata ? await connection.QueryFirstOrDefaultAsync<MirrorMetadata>(Def(
-            """
-            SELECT entry_type AS EntryType, ttl_days AS TtlDays
-            FROM entries WHERE path = @path AND source_file = @path
-              AND scope IS @scope AND project_id IS @project_id
-              AND context_label IS @context_label AND workspace_id IS @workspace_id
-            ORDER BY id LIMIT 1
-            """, bucketParams, cancellationToken)) : null;
+        var previous = preserveMemoryMetadata
+            ? await connection.QueryFirstOrDefaultAsync<MirrorMetadata>(Def(
+                """
+                SELECT entry_type AS EntryType, ttl_days AS TtlDays
+                FROM entries WHERE path = @path AND source_file = @path
+                  AND scope IS @scope AND project_id IS @project_id
+                  AND context_label IS @context_label AND workspace_id IS @workspace_id
+                ORDER BY id LIMIT 1
+                """, bucketParams, cancellationToken))
+            : null;
         var entryType = previous is null
             ? EntryKindWireNames.File
             : entryTypeClassifier.ResolveStoredValue(previous.EntryType, path, path);
@@ -342,16 +362,16 @@ public sealed class FileIngestor(
             // #549), and the anchor only ever names its leaf.
             var section = row.Chunk.SectionLabel();
             var existingId = await connection.ExecuteScalarAsync<long?>(
-                    Def(MemorySql.SelectChunkIdByPathAndHashInBucket,
-                        new
-                        {
-                            hash,
-                            path,
-                            scope = bucket.Scope,
-                            projectId = bucket.ProjectId,
-                            contextLabel = bucket.ContextLabel,
-                            workspaceId = bucket.WorkspaceId
-                        }, cancellationToken));
+                Def(MemorySql.SelectChunkIdByPathAndHashInBucket,
+                    new
+                    {
+                        hash,
+                        path,
+                        scope = bucket.Scope,
+                        projectId = bucket.ProjectId,
+                        contextLabel = bucket.ContextLabel,
+                        workspaceId = bucket.WorkspaceId
+                    }, cancellationToken));
 
             if (existingId is null)
             {
@@ -359,28 +379,28 @@ public sealed class FileIngestor(
                 // call won the insert or a concurrent same-bucket insert got there first — no
                 // follow-up SELECT needed to find out.
                 var affected = await connection.ExecuteAsync(
-                        Def(MemorySql.InsertRebudgetEntry,
-                            new
-                            {
-                                hash,
-                                path,
-                                value = chunk,
-                                sourceFile = path,
-                                section,
-                                scope = bucket.Scope,
-                                projectId = bucket.ProjectId,
-                                contextLabel = bucket.ContextLabel,
-                                workspaceId = bucket.WorkspaceId,
-                                agentId = (string?)null,
-                                createdAt = now,
-                                updatedAt = now,
-                                sourceId = source.Id,
-                                entryType,
-                                ttlDays,
-                                chunkIndex = row.Position,
-                                totalChunks
-                            },
-                            cancellationToken));
+                    Def(MemorySql.InsertRebudgetEntry,
+                        new
+                        {
+                            hash,
+                            path,
+                            value = chunk,
+                            sourceFile = path,
+                            section,
+                            scope = bucket.Scope,
+                            projectId = bucket.ProjectId,
+                            contextLabel = bucket.ContextLabel,
+                            workspaceId = bucket.WorkspaceId,
+                            agentId = (string?)null,
+                            createdAt = now,
+                            updatedAt = now,
+                            sourceId = source.Id,
+                            entryType,
+                            ttlDays,
+                            chunkIndex = row.Position,
+                            totalChunks
+                        },
+                        cancellationToken));
                 if (affected > 0)
                 {
                     inserted++;
@@ -402,8 +422,8 @@ public sealed class FileIngestor(
 
             var chunkId = existingId.Value;
             await connection.ExecuteAsync(
-                    Def(MemorySql.SetChunkPosition, new { id = chunkId, chunkIndex = row.Position, totalChunks, section },
-                        cancellationToken));
+                Def(MemorySql.SetChunkPosition, new { id = chunkId, chunkIndex = row.Position, totalChunks, section },
+                    cancellationToken));
         }
 
         foreach (var (id, chunkIndex) in DocumentChunks.After(rows.Count, citing))
@@ -430,19 +450,6 @@ public sealed class FileIngestor(
 
         return _scope.ContextFor(projectId);
     }
-
-    /// <summary>The rows of a file's position partition that are not its own: notes citing it.</summary>
-    private static readonly string SelectCitingRows = $"""
-        SELECT id, chunk_index FROM entries
-        WHERE source_file = @path AND path IS NOT @path
-          AND ({MemorySql.ContextKeyExpression("")}) = ({MemorySql.ContextKeyExpression("@")})
-        """;
-
-    private const string SetCitingPosition =
-        "UPDATE entries SET chunk_index = @chunkIndex, total_chunks = @totalChunks "
-        + "WHERE id = @id AND (chunk_index <> @chunkIndex OR total_chunks <> @totalChunks)";
-
-    private readonly record struct InsertedChunks(int Rows, List<string> Hashes);
 
     private static async Task RequireInScopeAsync(SqliteConnection connection, string projectId, string path,
         CancellationToken cancellationToken)
@@ -494,9 +501,11 @@ public sealed class FileIngestor(
     /// </summary>
     private static bool IsHidden(string root, string path) => WatchDenySet.Excludes(root, path);
 
-    /// <summary>`ai-raccoon.ignore` check against the walk root's rules: never true for the ignore
-    /// file's own path — a `*` pattern must not hide it from the caller's own re-scan/reconcile
-    /// bookkeeping.</summary>
+    /// <summary>
+    ///     `ai-raccoon.ignore` check against the walk root's rules: never true for the ignore
+    ///     file's own path — a `*` pattern must not hide it from the caller's own re-scan/reconcile
+    ///     bookkeeping.
+    /// </summary>
     private static bool IsIgnored(IgnoreRules rules, string root, string path)
     {
         if (!rules.HasRules)
@@ -513,6 +522,8 @@ public sealed class FileIngestor(
         var relative = Path.GetRelativePath(root, path);
         return rules.IsIgnored(relative, false);
     }
+
+    private readonly record struct InsertedChunks(int Rows, List<string> Hashes);
 
     private sealed record MirrorMetadata(string? EntryType, long? TtlDays);
 }

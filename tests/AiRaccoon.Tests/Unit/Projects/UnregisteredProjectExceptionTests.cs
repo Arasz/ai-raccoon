@@ -52,7 +52,7 @@ public sealed class UnregisteredProjectExceptionTests
     [Fact]
     public void LoneSurrogate_IsEscapedInTheEchoedId()
     {
-        var message = new UnregisteredProjectException("bad" + '\ud800' + "name").Message;
+        var message = new UnregisteredProjectException("bad\ud800name").Message;
 
         message.Contains("\\uD800", StringComparison.Ordinal).ShouldBeTrue(message);
         message.Any(IsUnsafe).ShouldBeFalse($"a raw unsafe rune reached the refusal: {message}");

@@ -7,10 +7,10 @@ namespace AiRaccoon.Core.Memory.QueryGuard.Structural;
 ///     caller rather than baked in here (F8/the record's threshold-transfer finding — calibrate on
 ///     the deployment's own traffic, see <see cref="StructuralNoiseCalibrator" />).
 ///     <para>
-///     Never returns <see cref="QueryGuardTier.Refuse" />: F9 measured this detector's false
-///     positives landing on genuinely valuable content (measurement tables, citation blocks), so
-///     unlike the regex refuse tier (22/22 graded matches scored 2/5, never higher) a structural
-///     match here is not evidence-backed enough to block a search outright.
+///         Never returns <see cref="QueryGuardTier.Refuse" />: F9 measured this detector's false
+///         positives landing on genuinely valuable content (measurement tables, citation blocks), so
+///         unlike the regex refuse tier (22/22 graded matches scored 2/5, never higher) a structural
+///         match here is not evidence-backed enough to block a search outright.
 ///     </para>
 /// </summary>
 public static class StructuralQueryGuardPolicy

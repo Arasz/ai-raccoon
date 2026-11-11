@@ -89,7 +89,7 @@ internal static class TableChunkingArms
             List<string> chunks = [];
             var prose = new StringBuilder();
             var inFence = false;
-            var heading = string.Empty;
+            var heading = "";
 
             for (var i = 0; i < lines.Length; i++)
             {
@@ -115,7 +115,7 @@ internal static class TableChunkingArms
 
                     IReadOnlyList<string> header = [WithNewline(lines[i]), WithNewline(lines[i + 1])];
                     var rows = lines[(i + 2)..end].Select(WithNewline).ToList();
-                    var prefix = withHeading && heading.Length > 0 ? heading : string.Empty;
+                    var prefix = withHeading && heading.Length > 0 ? heading : "";
                     foreach (var rendered in render(header, rows))
                     {
                         var piece = prefix + rendered;

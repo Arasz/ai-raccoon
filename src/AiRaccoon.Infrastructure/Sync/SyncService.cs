@@ -3,6 +3,7 @@ using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Sqlite.Decisions;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
@@ -20,23 +21,55 @@ public partial class SyncService(
     ProjectIdAliasMap? aliasMap = null) : ISyncService
 {
     private const int MaxPushRetries = 3;
-    private readonly ISyncBlobAuthenticator _authenticator = blobAuthenticator ?? new SyncBlobAuthenticator();
-    private readonly ProjectIdAliasMap? _aliasMap = aliasMap;
-    private readonly SemaphoreSlim _gate = new(1, 1);
 
-    /// <summary>Package E: an explicitly injected map wins (tests); otherwise the live choke-point
-    /// cache — read per merge, never frozen at construction, so a reloaded Default applies to the
-    /// next sync without a restart.</summary>
-    private ProjectIdAliasMap ResolveAliasMap() => _aliasMap ?? ProjectIdAliasMap.Default;
-
-    /// <summary>Tables that never leave the machine via sync — DROPped from every pushed snapshot
-    /// by <see cref="StripNonSyncableAsync" />. The single list both that method and its tests read,
-    /// so a table added here only needs adding once.</summary>
+    /// <summary>
+    ///     Tables that never leave the machine via sync — DROPped from every pushed snapshot
+    ///     by <see cref="StripNonSyncableAsync" />. The single list both that method and its tests read,
+    ///     so a table added here only needs adding once.
+    /// </summary>
     internal static readonly string[] MachineLocalTables =
     [
         "workspaces", "promotion_queue", "promotion_queue_prune_requests", "repair_requests",
-        ..Sqlite.Decisions.DecisionSchema.TableNames.Reverse()
+        .. DecisionSchema.TableNames.Reverse()
     ];
+
+    private readonly ProjectIdAliasMap? _aliasMap = aliasMap;
+    private readonly ISyncBlobAuthenticator _authenticator = blobAuthenticator ?? new SyncBlobAuthenticator();
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
+    /// <summary>Convenience ctor for a fixed store (tests); the DI path resolves per call.</summary>
+    public SyncService(ICloudStore cloud, Func<CancellationToken, Task<SqliteConnection>> openBank,
+        Func<string, CancellationToken, Task<SqliteConnection>> openSnapshot,
+        Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
+        TimeProvider timeProvider, ILogger<SyncService> logger, ProjectIdAliasMap? aliasMap = null)
+        : this(_ => Task.FromResult(cloud), openBank, openSnapshot, openReadOnly, timeProvider, logger, null, aliasMap)
+    {
+    }
+
+    /// <summary>Defaults <paramref name="objectKey" /> to "memory-{projectId}.db" when the caller has none configured — the naming convention is the service's concern, not the caller's.</summary>
+    public virtual async Task<SyncResult> MemorySyncAsync(string projectId, string? objectKey = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        var key = string.IsNullOrWhiteSpace(objectKey) ? $"memory-{projectId}.db" : objectKey;
+
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            return await SyncCycleAsync(projectId, key, cancellationToken);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    ///     Package E: an explicitly injected map wins (tests); otherwise the live choke-point
+    ///     cache — read per merge, never frozen at construction, so a reloaded Default applies to the
+    ///     next sync without a restart.
+    /// </summary>
+    private ProjectIdAliasMap ResolveAliasMap() => _aliasMap ?? ProjectIdAliasMap.Default;
 
     /// <summary>
     ///     Pull-time id fold: resolves the remote id through the REMOTE projects-row name first — a
@@ -115,12 +148,12 @@ public partial class SyncService(
     {
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            SELECT l.alias, l.winner, r.winner
-            FROM project_id_aliases l
-            JOIN remote.project_id_aliases r ON r.alias = l.alias
-            WHERE COALESCE(l.winner, '') <> COALESCE(r.winner, '') OR l.kind <> r.kind
-            LIMIT 1
-            """;
+                          SELECT l.alias, l.winner, r.winner
+                          FROM project_id_aliases l
+                          JOIN remote.project_id_aliases r ON r.alias = l.alias
+                          WHERE COALESCE(l.winner, '') <> COALESCE(r.winner, '') OR l.kind <> r.kind
+                          LIMIT 1
+                          """;
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
         if (await reader.ReadAsync(cancellationToken))
         {
@@ -128,33 +161,6 @@ public partial class SyncService(
                 reader.GetString(0),
                 reader.IsDBNull(1) ? null : reader.GetString(1),
                 reader.IsDBNull(2) ? null : reader.GetString(2));
-        }
-    }
-
-    /// <summary>Convenience ctor for a fixed store (tests); the DI path resolves per call.</summary>
-    public SyncService(ICloudStore cloud, Func<CancellationToken, Task<SqliteConnection>> openBank,
-        Func<string, CancellationToken, Task<SqliteConnection>> openSnapshot,
-        Func<string, CancellationToken, Task<SqliteConnection>> openReadOnly,
-        TimeProvider timeProvider, ILogger<SyncService> logger, ProjectIdAliasMap? aliasMap = null)
-        : this(_ => Task.FromResult(cloud), openBank, openSnapshot, openReadOnly, timeProvider, logger, null, aliasMap)
-    {
-    }
-
-    /// <summary>Defaults <paramref name="objectKey" /> to "memory-{projectId}.db" when the caller has none configured — the naming convention is the service's concern, not the caller's.</summary>
-    public virtual async Task<SyncResult> MemorySyncAsync(string projectId, string? objectKey = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        var key = string.IsNullOrWhiteSpace(objectKey) ? $"memory-{projectId}.db" : objectKey;
-
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            return await SyncCycleAsync(projectId, key, cancellationToken);
-        }
-        finally
-        {
-            _gate.Release();
         }
     }
 
@@ -413,9 +419,9 @@ public partial class SyncService(
                     await using (var mergeAliases = conn.CreateCommand())
                     {
                         mergeAliases.CommandText = """
-                            INSERT OR IGNORE INTO project_id_aliases (alias, winner, kind, applied_at)
-                            SELECT alias, winner, kind, applied_at FROM remote.project_id_aliases
-                            """;
+                                                   INSERT OR IGNORE INTO project_id_aliases (alias, winner, kind, applied_at)
+                                                   SELECT alias, winner, kind, applied_at FROM remote.project_id_aliases
+                                                   """;
                         mergedAliases = await mergeAliases.ExecuteNonQueryAsync(cancellationToken);
                     }
 
@@ -470,31 +476,31 @@ public partial class SyncService(
                         ? MemorySql.EntryTypeFromDeclarationOrShape("r.")
                         : MemorySql.EntryTypeFromShape("r.");
                     mergeEntries.CommandText = $"""
-                                               INSERT OR IGNORE INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
-                                                                               workspace_id, agent_id, created_at, updated_at,
-                                                                               access_count, last_accessed_at, rating, ttl_days,
-                                                                               embed_state, embedding, chunk_index, entry_type)
-                                               SELECT r.hash, r.path, r.value, r.source_file, r.section, r.scope, {scopedFold}, r.context_label,
-                                                      r.workspace_id, r.agent_id, r.created_at, r.updated_at,
-                                                      r.access_count, r.last_accessed_at, r.rating,
-                                                      CASE WHEN ({mergedEntryType}) = 'memory' THEN r.ttl_days ELSE NULL END,
-                                                      'pending', NULL, -1, {mergedEntryType}
-                                               FROM remote.entries r
-                                               WHERE r.workspace_id IS NULL
-                                                 -- A remote pushed by an older peer may still hold a row with
-                                                 -- neither a scope nor a workspace_id (F34) — the local CHECK
-                                                 -- rejects that shape outright, so admitting it here would abort
-                                                 -- the whole merge on a constraint violation instead of just
-                                                 -- skipping the one unreachable row.
-                                                 AND r.scope IS NOT NULL
-                                                 AND NOT EXISTS (
-                                                     SELECT 1 FROM sync_tombstones t
-                                                     WHERE t.hash = r.hash
-                                                       AND t.scope = COALESCE(r.scope, 'workspace')
-                                                       AND t.project_id = {foldedRemoteProject}
-                                                       AND (t.context_label IS NULL OR t.context_label IS r.context_label)
-                                                 )
-                                               """;
+                                                INSERT OR IGNORE INTO entries (hash, path, value, source_file, section, scope, project_id, context_label,
+                                                                                workspace_id, agent_id, created_at, updated_at,
+                                                                                access_count, last_accessed_at, rating, ttl_days,
+                                                                                embed_state, embedding, chunk_index, entry_type)
+                                                SELECT r.hash, r.path, r.value, r.source_file, r.section, r.scope, {scopedFold}, r.context_label,
+                                                       r.workspace_id, r.agent_id, r.created_at, r.updated_at,
+                                                       r.access_count, r.last_accessed_at, r.rating,
+                                                       CASE WHEN ({mergedEntryType}) = 'memory' THEN r.ttl_days ELSE NULL END,
+                                                       'pending', NULL, -1, {mergedEntryType}
+                                                FROM remote.entries r
+                                                WHERE r.workspace_id IS NULL
+                                                  -- A remote pushed by an older peer may still hold a row with
+                                                  -- neither a scope nor a workspace_id (F34) — the local CHECK
+                                                  -- rejects that shape outright, so admitting it here would abort
+                                                  -- the whole merge on a constraint violation instead of just
+                                                  -- skipping the one unreachable row.
+                                                  AND r.scope IS NOT NULL
+                                                  AND NOT EXISTS (
+                                                      SELECT 1 FROM sync_tombstones t
+                                                      WHERE t.hash = r.hash
+                                                        AND t.scope = COALESCE(r.scope, 'workspace')
+                                                        AND t.project_id = {foldedRemoteProject}
+                                                        AND (t.context_label IS NULL OR t.context_label IS r.context_label)
+                                                  )
+                                                """;
                     received += await mergeEntries.ExecuteNonQueryAsync(cancellationToken);
                 }
 
@@ -562,9 +568,9 @@ public partial class SyncService(
                 {
                     var foldedTombstoneProject = FoldRemoteProjectId("project_id", ResolveAliasMap());
                     mergeTombstones.CommandText = $"""
-                                                  INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at, received_at)
-                                                  SELECT {foldedTombstoneProject}, hash, scope, {remoteContextLabelColumn}, deleted_at, @receivedAt FROM remote.sync_tombstones
-                                                  """;
+                                                   INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at, received_at)
+                                                   SELECT {foldedTombstoneProject}, hash, scope, {remoteContextLabelColumn}, deleted_at, @receivedAt FROM remote.sync_tombstones
+                                                   """;
                     mergeTombstones.Parameters.AddWithValue("@receivedAt", pullNow);
                     await mergeTombstones.ExecuteNonQueryAsync(cancellationToken);
                 }
@@ -583,16 +589,16 @@ public partial class SyncService(
                 {
                     var foldedApplyProject = FoldRemoteProjectId("t.project_id", ResolveAliasMap());
                     applyTombstones.CommandText = $"""
-                                                  DELETE FROM entries
-                                                  WHERE EXISTS (
-                                                      SELECT 1 FROM remote.sync_tombstones t
-                                                      WHERE t.hash = entries.hash
-                                                        AND t.scope = COALESCE(entries.scope, 'workspace')
-                                                        AND {foldedApplyProject} = entries.project_id
-                                                        AND entries.created_at <= t.deleted_at
-                                                        AND ({(remoteHasContextLabel ? "t.context_label IS NULL OR t.context_label IS entries.context_label" : "1 = 1")})
-                                                  )
-                                                  """;
+                                                   DELETE FROM entries
+                                                   WHERE EXISTS (
+                                                       SELECT 1 FROM remote.sync_tombstones t
+                                                       WHERE t.hash = entries.hash
+                                                         AND t.scope = COALESCE(entries.scope, 'workspace')
+                                                         AND {foldedApplyProject} = entries.project_id
+                                                         AND entries.created_at <= t.deleted_at
+                                                         AND ({(remoteHasContextLabel ? "t.context_label IS NULL OR t.context_label IS entries.context_label" : "1 = 1")})
+                                                   )
+                                                   """;
                     await applyTombstones.ExecuteNonQueryAsync(cancellationToken);
                 }
 
@@ -684,16 +690,18 @@ public partial class SyncService(
         }
     }
 
-    /// <summary>Deletes workspace-scoped entries and all settings rows, folds loser-keyed ids to
-    /// their winners in the pushed snapshot (Package E2 push symmetry — see
-    /// <see cref="FoldSnapshotProjectIdsAsync" />), DROPs the code corpus
-    /// (code_entries/code_fts/vec_code — table absence, not row-deletion, so their shadow tables
-    /// and triggers drop with them, docs/adr/0014) and DROPs the telemetry tables
-    /// (search_quality/metrics — table absence sheds their indexes too and lets a restored
-    /// snapshot's EnsureAsync recreate them via the digest-DDL path, docs/adr/0098), then VACUUMs
-    /// the snapshot. Every path that pushes a snapshot must call this — settings hold the cloud
-    /// credentials the push itself authenticates with, and the code corpus and telemetry never
-    /// leave the machine.</summary>
+    /// <summary>
+    ///     Deletes workspace-scoped entries and all settings rows, folds loser-keyed ids to
+    ///     their winners in the pushed snapshot (Package E2 push symmetry — see
+    ///     <see cref="FoldSnapshotProjectIdsAsync" />), DROPs the code corpus
+    ///     (code_entries/code_fts/vec_code — table absence, not row-deletion, so their shadow tables
+    ///     and triggers drop with them, docs/adr/0014) and DROPs the telemetry tables
+    ///     (search_quality/metrics — table absence sheds their indexes too and lets a restored
+    ///     snapshot's EnsureAsync recreate them via the digest-DDL path, docs/adr/0098), then VACUUMs
+    ///     the snapshot. Every path that pushes a snapshot must call this — settings hold the cloud
+    ///     credentials the push itself authenticates with, and the code corpus and telemetry never
+    ///     leave the machine.
+    /// </summary>
     private async Task StripNonSyncableAsync(string snapshotPath, CancellationToken cancellationToken)
     {
         // The snapshot of an encrypted bank is itself encrypted, so the strip opens through
@@ -820,14 +828,14 @@ public partial class SyncService(
         await using (var dedup = snap.CreateCommand())
         {
             dedup.CommandText = $"""
-                DELETE FROM entries
-                WHERE {ProjectRows.CommittedScope("", "loser")}
-                  AND EXISTS (
-                      SELECT 1 FROM entries w
-                      WHERE {ProjectRows.CommittedScope("w.", "winner")}
-                        AND w.path = entries.path AND w.hash = entries.hash AND w.scope = entries.scope
-                        AND COALESCE(w.context_label, '') = COALESCE(entries.context_label, ''))
-                """;
+                                 DELETE FROM entries
+                                 WHERE {ProjectRows.CommittedScope("", "loser")}
+                                   AND EXISTS (
+                                       SELECT 1 FROM entries w
+                                       WHERE {ProjectRows.CommittedScope("w.", "winner")}
+                                         AND w.path = entries.path AND w.hash = entries.hash AND w.scope = entries.scope
+                                         AND COALESCE(w.context_label, '') = COALESCE(entries.context_label, ''))
+                                 """;
             dedup.Parameters.AddWithValue("@loser", entry.Alias);
             dedup.Parameters.AddWithValue("@winner", entry.Canonical);
             await dedup.ExecuteNonQueryAsync(cancellationToken);
@@ -851,14 +859,14 @@ public partial class SyncService(
         await using (var merge = snap.CreateCommand())
         {
             merge.CommandText = """
-                UPDATE sync_tombstones AS w
-                SET deleted_at = MAX(w.deleted_at, (SELECT l.deleted_at FROM sync_tombstones l
-                                                    WHERE l.project_id = @loser
-                                                      AND l.hash = w.hash AND l.scope = w.scope))
-                WHERE w.project_id = @winner
-                  AND EXISTS (SELECT 1 FROM sync_tombstones l
-                              WHERE l.project_id = @loser AND l.hash = w.hash AND l.scope = w.scope)
-                """;
+                                UPDATE sync_tombstones AS w
+                                SET deleted_at = MAX(w.deleted_at, (SELECT l.deleted_at FROM sync_tombstones l
+                                                                    WHERE l.project_id = @loser
+                                                                      AND l.hash = w.hash AND l.scope = w.scope))
+                                WHERE w.project_id = @winner
+                                  AND EXISTS (SELECT 1 FROM sync_tombstones l
+                                              WHERE l.project_id = @loser AND l.hash = w.hash AND l.scope = w.scope)
+                                """;
             merge.Parameters.AddWithValue("@loser", entry.Alias);
             merge.Parameters.AddWithValue("@winner", entry.Canonical);
             await merge.ExecuteNonQueryAsync(cancellationToken);
@@ -867,12 +875,12 @@ public partial class SyncService(
         await using (var dedup = snap.CreateCommand())
         {
             dedup.CommandText = """
-                DELETE FROM sync_tombstones
-                WHERE project_id = @loser
-                  AND EXISTS (SELECT 1 FROM sync_tombstones w
-                              WHERE w.project_id = @winner
-                                AND w.hash = sync_tombstones.hash AND w.scope = sync_tombstones.scope)
-                """;
+                                DELETE FROM sync_tombstones
+                                WHERE project_id = @loser
+                                  AND EXISTS (SELECT 1 FROM sync_tombstones w
+                                              WHERE w.project_id = @winner
+                                                AND w.hash = sync_tombstones.hash AND w.scope = sync_tombstones.scope)
+                                """;
             dedup.Parameters.AddWithValue("@loser", entry.Alias);
             dedup.Parameters.AddWithValue("@winner", entry.Canonical);
             await dedup.ExecuteNonQueryAsync(cancellationToken);
@@ -912,18 +920,20 @@ public partial class SyncService(
         return new SqliteConnectionStringBuilder(conn.ConnectionString).Password;
     }
 
-    /// <summary>Verifies the pulled remote blob's embedded HMAC tag before quick_check/ATTACH
-    /// ever runs on it, returning the snapshot bytes with the header stripped. Unencrypted banks
-    /// have no passphrase to key from and skip the check entirely (a keyless checksum would only
-    /// re-cover what quick_check already does — integrity, not authenticity). A headerless blob
-    /// this objectKey has never carried a verified tag for is a legacy blob predating this
-    /// feature and is accepted with a logged warning (first-contact trust: a remote already
-    /// tampered with before its first tagged push is indistinguishable from a genuine legacy
-    /// blob). A headerless blob for an objectKey that HAS previously carried a verified tag is
-    /// refused — the tag can only disappear by an attacker rewriting the whole object, which is
-    /// exactly the downgrade a separate sidecar object was vulnerable to at zero extra cost for
-    /// an attacker who already has delete access. A present-but-mismatching tag is always
-    /// refused.</summary>
+    /// <summary>
+    ///     Verifies the pulled remote blob's embedded HMAC tag before quick_check/ATTACH
+    ///     ever runs on it, returning the snapshot bytes with the header stripped. Unencrypted banks
+    ///     have no passphrase to key from and skip the check entirely (a keyless checksum would only
+    ///     re-cover what quick_check already does — integrity, not authenticity). A headerless blob
+    ///     this objectKey has never carried a verified tag for is a legacy blob predating this
+    ///     feature and is accepted with a logged warning (first-contact trust: a remote already
+    ///     tampered with before its first tagged push is indistinguishable from a genuine legacy
+    ///     blob). A headerless blob for an objectKey that HAS previously carried a verified tag is
+    ///     refused — the tag can only disappear by an attacker rewriting the whole object, which is
+    ///     exactly the downgrade a separate sidecar object was vulnerable to at zero extra cost for
+    ///     an attacker who already has delete access. A present-but-mismatching tag is always
+    ///     refused.
+    /// </summary>
     private async Task<byte[]> VerifyAndUnwrapRemoteAsync(SqliteConnection conn, string objectKey, byte[] remoteData,
         string? passphrase, CancellationToken cancellationToken)
     {
@@ -938,10 +948,7 @@ public partial class SyncService(
             if (!_authenticator.Verify(passphrase, tag, innerData))
             {
                 throw new SyncTamperedRemoteException(
-                    $"Remote snapshot '{objectKey}' failed its authenticity check: the embedded HMAC tag does " +
-                    "not match its bytes. Refusing to merge — the remote object may have been tampered with, " +
-                    "corrupted in transit, or overwritten by a bank using a different passphrase. Verify the " +
-                    "remote object, or delete it and let this bank re-push a fresh copy.");
+                    $"Remote snapshot '{objectKey}' failed its authenticity check: the embedded HMAC tag does not match its bytes. Refusing to merge — the remote object may have been tampered with, corrupted in transit, or overwritten by a bank using a different passphrase. Verify the remote object, or delete it and let this bank re-push a fresh copy.");
             }
 
             await MarkAuthTagSeenAsync(conn, objectKey, cancellationToken);
@@ -951,10 +958,7 @@ public partial class SyncService(
         if (await HasSeenAuthTagAsync(conn, objectKey, cancellationToken))
         {
             throw new SyncTamperedRemoteException(
-                $"Remote snapshot '{objectKey}' has no authenticity tag, but this bank has previously verified " +
-                "one for this object. Refusing rather than trusting a blob that can only lose its tag by being " +
-                "rewritten wholesale — a tag-stripping or downgrade attempt, or (harmlessly) a hand-restored " +
-                "backup. Push a fresh tagged copy from a trusted bank to recover.");
+                $"Remote snapshot '{objectKey}' has no authenticity tag, but this bank has previously verified one for this object. Refusing rather than trusting a blob that can only lose its tag by being rewritten wholesale — a tag-stripping or downgrade attempt, or (harmlessly) a hand-restored backup. Push a fresh tagged copy from a trusted bank to recover.");
         }
 
         Log.RemoteBlobMissingAuthenticityTag(logger, objectKey);

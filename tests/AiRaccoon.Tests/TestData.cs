@@ -398,7 +398,7 @@ public static class TestData
     {
         var words = seed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var grown = new List<string>();
-        var text = string.Empty;
+        var text = "";
         while (!done(text))
         {
             if (grown.Count >= words.Length * 200)
@@ -511,7 +511,7 @@ public static class TestData
         var manifest = serializer.Deserialize(File.ReadAllText(path));
         File.WriteAllText(path, serializer.Serialize(manifest with
         {
-            Pooling = new PoolingManifest(mode, new PoolingOutputNames(embeddingOutput ?? string.Empty, tokenEmbeddingsOutput)),
+            Pooling = new PoolingManifest(mode, new PoolingOutputNames(embeddingOutput ?? "", tokenEmbeddingsOutput)),
             Onnx = manifest.Onnx with { EmbeddingOutput = embeddingOutput, TokenEmbeddingsOutput = tokenEmbeddingsOutput }
         }));
     }

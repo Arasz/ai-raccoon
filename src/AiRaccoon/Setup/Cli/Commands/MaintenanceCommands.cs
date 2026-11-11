@@ -16,8 +16,6 @@ namespace AiRaccoon.Setup.Cli.Commands;
 /// </summary>
 public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats, InfrastructureOptions options)
 {
-    private string StatsSidecarPath => Path.Combine(Path.GetDirectoryName(SqliteConnectionFactory.BankPathFor(options))!, "maintenance-stats.json");
-
     private static readonly IntSetting CheckpointInterval = new(
         BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal, "minutes", "checkpoint interval", "minutes",
         value => $"checkpoint interval: {value} min");
@@ -25,6 +23,8 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
     private static readonly IntSetting VacuumInterval = new(
         BankMaintenanceConfigKeys.VacuumIntervalDaysGlobal, "days", "vacuum interval", "days",
         value => $"vacuum interval: {value} days", BankMaintenanceConfigKeys.MaxVacuumIntervalDays);
+
+    private string StatsSidecarPath => Path.Combine(Path.GetDirectoryName(SqliteConnectionFactory.BankPathFor(options))!, "maintenance-stats.json");
 
     public Task<int> SetCheckpointIntervalAsync(ParseResult parseResult, IMemoryStore store,
         StandardStreams streams, CancellationToken cancellationToken) =>
@@ -79,8 +79,7 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
         await streams.WriteOutputLineAsync($"shm: {FormatBytes(current.ShmBytes)}");
         await streams.WriteOutputLineAsync($"on-disk total: {FormatBytes(current.TotalBytes)}");
         await streams.WriteOutputLineAsync(
-            $"reclaimable: {FormatBytes(current.ReclaimableBytes)} (freelist {FormatBytes(current.FreelistBytes)}, " +
-            $"uncheckpointed wal {FormatBytes(current.UncheckpointedWalBytes)})");
+            $"reclaimable: {FormatBytes(current.ReclaimableBytes)} (freelist {FormatBytes(current.FreelistBytes)}, uncheckpointed wal {FormatBytes(current.UncheckpointedWalBytes)})");
         await streams.WriteOutputLineAsync($"since last check: {delta}");
 
         WriteSidecar(current);
@@ -129,8 +128,7 @@ public sealed class MaintenanceCommands(IMaintenanceStatsStore maintenanceStats,
         var percent = previousTotalBytes == 0
             ? 0
             : Math.Abs(deltaBytes) * 100.0 / previousTotalBytes;
-        return $"{FormatBytes(Math.Abs(deltaBytes))} {direction} " +
-               $"({percent.ToString("0.0", CultureInfo.InvariantCulture)}%)";
+        return $"{FormatBytes(Math.Abs(deltaBytes))} {direction} ({percent.ToString("0.0", CultureInfo.InvariantCulture)}%)";
     }
 
     private static string FormatBytes(long bytes) =>

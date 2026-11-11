@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;

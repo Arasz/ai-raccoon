@@ -28,10 +28,12 @@ public static class VecDimensionReconcilerExtensions
 /// <summary>Brings the vec0 tables to the dimension the active engine embeds at (plan D3).</summary>
 public interface IVecDimensionReconciler
 {
-    /// <summary>Recreates <paramref name="tables" /> at <paramref name="targetDimension" /> when
-    /// any is missing or declared at another dimension. When <paramref name="transaction" /> is
-    /// passed the caller owns it (the reconciler never begins, commits or rolls back); otherwise
-    /// the reconciler begins and commits its own. True when any table changed.</summary>
+    /// <summary>
+    ///     Recreates <paramref name="tables" /> at <paramref name="targetDimension" /> when
+    ///     any is missing or declared at another dimension. When <paramref name="transaction" /> is
+    ///     passed the caller owns it (the reconciler never begins, commits or rolls back); otherwise
+    ///     the reconciler begins and commits its own. True when any table changed.
+    /// </summary>
     Task<bool> ReconcileAsync(SqliteConnection connection, SqliteTransaction? transaction, int targetDimension, IReadOnlyCollection<string> tables, CancellationToken cancellationToken);
 }
 

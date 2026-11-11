@@ -58,6 +58,5 @@ internal sealed class DirectGraphDecisionClient : IDecisionClient
 
     public Task<JsonDocument> ImportApplyAsync(string projectId, ImportApplyRequest request, CancellationToken cancellationToken = default) => throw Refused();
 
-    private static NotSupportedException Refused() =>
-        new("ai-raccoon: decisions are read and written only through the server; this command writes the bank directly");
+    private static NotSupportedException Refused() => new("ai-raccoon: decisions are read and written only through the server; this command writes the bank directly");
 }

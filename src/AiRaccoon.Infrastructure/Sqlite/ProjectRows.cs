@@ -21,22 +21,28 @@ internal static class ProjectRows
     public static string Of(string alias = "") => $"{Scope(alias)} AND {alias}project_id = @projectId";
 
     /// <summary>
-    ///     Committed project-scope rows of one id (<c>{alias}scope = 'project' AND
-    ///     {alias}project_id = @param</c>). The single home of the project-scope literal outside
+    ///     Committed project-scope rows of one id (
+    ///     <c>
+    ///         {alias}scope = 'project' AND
+    ///         {alias}project_id = @param
+    ///     </c>
+    ///     ). The single home of the project-scope literal outside
     ///     display ordering (ADR-0046; air-merge repair fold) — hand-rolled copies are flagged by
     ///     <c>ProjectRowsSingleDefinitionTests</c>.
     /// </summary>
-    public static string ProjectScope(string alias = "", string param = "projectId") =>
-        $"{alias}scope = 'project' AND {alias}project_id = @{param}";
+    public static string ProjectScope(string alias = "", string param = "projectId") => $"{alias}scope = 'project' AND {alias}project_id = @{param}";
 
     /// <summary>
-    ///     Committed rows of one id (<c>{alias}scope IN ('project', 'custom') AND {alias}project_id =
-    ///     @param</c>, any label including NULL). The repair fold's executable predicate (D1): the
+    ///     Committed rows of one id (
+    ///     <c>
+    ///         {alias}scope IN ('project', 'custom') AND {alias}project_id =
+    ///         @param
+    ///     </c>
+    ///     , any label including NULL). The repair fold's executable predicate (D1): the
     ///     planner's <c>OwnsMoveableContent</c> is defined as owning rows in exactly this set, so a
     ///     planned fold can never execute as zero moves. Shared rows are cross-project and never fold.
     /// </summary>
-    public static string CommittedScope(string alias = "", string param = "projectId") =>
-        $"{Scope(alias)} AND {alias}project_id = @{param}";
+    public static string CommittedScope(string alias = "", string param = "projectId") => $"{Scope(alias)} AND {alias}project_id = @{param}";
 
     /// <summary>
     ///     Orders the committed row ahead of a context-labelled sibling of the same hash. A hash is

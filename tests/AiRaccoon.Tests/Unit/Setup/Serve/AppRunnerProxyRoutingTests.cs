@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Hosting.Common;
-using AiRaccoon.Settings;
 using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;

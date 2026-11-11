@@ -1,43 +1,11 @@
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Infrastructure.Sqlite.Memory;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
 /// <summary>SQL over our memory.db tables (see docs/work/archive/2026-08-03-native-memory-plan.md §2.2); kept in one place so the store stays thin.</summary>
 internal static class MemorySql
 {
-    /// <summary>
-    ///     The kind a row holds when nothing declared one, as SQL over the given table alias: a row
-    ///     that MIRRORS a file on disk has path = source_file; every other row is agent-written
-    ///     memory.
-    ///     <para>
-    ///         This is the SQL twin of <see cref="EntryKindClassifier.Classify" />, and the two must
-    ///         agree — a comparison test runs both over one fixture. Three call sites need it: the v20
-    ///         backfill, the vector rebuild's kind normalization and the sync merge, so the rule is
-    ///         written once rather than three times.
-    ///     </para>
-    /// </summary>
-    public static string EntryTypeFromShape(string tableAlias) =>
-        $"CASE WHEN {tableAlias}source_file IS NOT NULL AND {tableAlias}source_file <> '' "
-        + $"AND {tableAlias}source_file = {tableAlias}path THEN '{EntryKindWireNames.File}' ELSE '{EntryKindWireNames.Memory}' END";
-
-    /// <summary>
-    ///     The kind a row keeps when it comes from somewhere else: the kind it declares, when it
-    ///     declares one this build knows, and otherwise the kind its shape implies. The SQL twin of
-    ///     the classifier's resolve: a declared kind wins, and only an UNDECLARED row (no kind, or
-    ///     the <c>none</c> marker) is resolved from the shape.
-    ///     <para>
-    ///         The kinds it knows are named by the one vocabulary, so the domain has one home.
-    ///     </para>
-    /// </summary>
-    public static string EntryTypeFromDeclarationOrShape(string tableAlias) =>
-        $"CASE WHEN {tableAlias}entry_type IN ('{EntryKindWireNames.Memory}', '{EntryKindWireNames.File}') "
-        + $"THEN {tableAlias}entry_type "
-        + $"WHEN {tableAlias}entry_type IS NULL OR {tableAlias}entry_type = '{EntryKindWireNames.None}' "
-        + $"THEN {EntryTypeFromShape(tableAlias)} "
-        // A remote's UNKNOWN kind is data from another machine: it lands unclassified, where the
-        // doctor counts it, rather than being guessed at from the row's shape.
-        + $"ELSE '{EntryKindWireNames.None}' END";
-
     // ON CONFLICT DO NOTHING is bare — expression/partial indexes can't be a conflict target — so
     // concurrent same-bucket inserts converge; the loser re-reads by bucket key
     // (docs/work/archive/2026-08-06-extraction-followups-plan.md).
@@ -76,39 +44,14 @@ internal static class MemorySql
                                           WHERE id = @id
                                           """;
 
-    public static readonly string SelectSourceByHashAndProject = $""""""
-                                                                   SELECT e.path AS Path, e.value AS Value, e.source_file AS SourceFile, e.section AS Section,
-                                                                          ms.source_type AS SourceType, ms.heading_path AS HeadingPath
-                                                                  FROM entries e
-                                                                  LEFT JOIN memory_source ms ON ms.id = e.source_id
-                                                                  WHERE e.hash = @hash AND {ProjectRows.Of("e.")}
-                                                                  ORDER BY {ProjectRows.CommittedFirst("e.")}
-                                                                  LIMIT 1
-                                                                  """""";
+    public const string CountEntries = "SELECT count(*) FROM entries WHERE scope = 'shared'";
+    public const string CountPendingEntries = "SELECT count(*) FROM entries WHERE scope = 'shared' AND embed_state = 'pending'";
 
-    public static readonly string SelectExtractionCandidates = $""""""
-                                                                SELECT e.hash AS Hash, e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
-                                                                       ms.source_type AS SourceType,
-                                                                       e.rating AS Rating, e.access_count AS AccessCount, e.created_at AS CreatedAt,
-                                                                       e.ttl_days AS TtlDays
-                                                                FROM entries e
-                                                                LEFT JOIN memory_source ms ON ms.id = e.source_id
-                                                                WHERE {ProjectRows.Of("e.")} AND e.embed_state = 'embedded'
-                                                                  AND (@includeTtlRows = 1 OR e.ttl_days IS NULL)
-                                                                """""";
-
-    public const string SelectSharedIndex = """"
+    public const string SelectSharedIndex = """
                                             SELECT path AS Path, value AS Value
                                             FROM entries
                                             WHERE scope = 'shared'
-                                            """";
-
-    public static readonly string SelectProjectIds = $""""
-                                                      SELECT DISTINCT project_id AS ProjectId
-                                                      FROM entries
-                                                      WHERE {ProjectRows.Scope()}
-                                                      ORDER BY project_id
-                                                      """";
+                                            """;
 
     // Global content dedup (FR-NM-7; see docs/work/features-native-memory/native-memory.feature): the earliest committed row (workspace_id IS NULL) holding
     // this value, across every scope of the project — writing identical content returns it.
@@ -168,29 +111,6 @@ internal static class MemorySql
                                                   LIMIT 200
                                                   """;
 
-    /// <summary>A search hit's kind: the declared kind, or <c>none</c> for a row this build cannot classify.</summary>
-    private static readonly string HitKind =
-        $"CASE WHEN e.entry_type IN ('{EntryKindWireNames.Memory}', '{EntryKindWireNames.File}') THEN e.entry_type "
-        + $"ELSE '{EntryKindWireNames.None}' END";
-
-    // Hash tie-break (owner ruling): an exact bm25 score tie is real over short chunks, and without
-    // a total order the result is whatever rowid sqlite happens to visit first -- ties by e.hash
-    // instead, matching the harness's ORDER BY bm25(...), e.hash port
-    // (scripts/retrieval_tuning/llamaindex_harness/ingest.py's _bank_fts_order).
-    private static readonly string SearchTemplate = $$"""
-                                         SELECT e.hash AS Hash, bm25(entries_fts, 1.0, 8.0, 4.0) AS Ranking,
-                                                e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
-                                                e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks,
-                                                e.id AS Id, {{HitKind}} AS EntryKind
-                                         FROM entries_fts
-                                         JOIN entries e ON e.id = entries_fts.rowid
-                                         WHERE entries_fts MATCH @query AND ({filter}){typeFilter}
-                                         ORDER BY bm25(entries_fts, 1.0, 8.0, 4.0), e.hash
-                                         LIMIT @limit
-                                         """;
-
-    public static readonly string SearchByFilter = SearchTemplate.Replace("{typeFilter}", "");
-
     // Re-runs the SAME @query text SearchByFilter used, restricted to the ranking survivors' rowids,
     // so the highlighting matches what the eager statement would have produced. Filters by
     // entries_fts.rowid rather than e.hash, which is not FTS5-indexable and degrades MATCH to a
@@ -201,50 +121,6 @@ internal static class MemorySql
                                                   JOIN entries e ON e.id = entries_fts.rowid
                                                   WHERE entries_fts MATCH @query AND entries_fts.rowid IN @ids
                                                   """;
-
-    // vec0 modality: native KNN over the ctx partition replaces `WHERE {filter}` entirely, since the
-    // partition already selects exactly the rows a search context can retrieve
-    // (docs/plans/2026-08-08-search-knn-perf.md §3.1/§3.4). Row position is the RRF rank; `ORDER BY
-    // v.distance, e.path` preserves the existing distance-tie break. Vector hits carry a fallback
-    // snippet built in C# (the FTS list's snippet() wins for docs both modalities retrieve).
-    private static readonly string VectorSearchTemplate = $$"""
-                                               SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
-                                                      v.distance AS Distance, e.source_file AS SourceFile,
-                                                      e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks, {{HitKind}} AS EntryKind
-                                               FROM (SELECT rowid, distance FROM vec_entries
-                                                     WHERE ctx = @ctx AND {typeFilter} embedding MATCH @queryVector AND k = @limit) v
-                                               JOIN entries e ON e.id = v.rowid
-                                               ORDER BY v.distance + 0, e.path
-                                               LIMIT @limit
-                                               """;
-
-    // Structure modality: cosine KNN over the heading-path vectors (vec_structure),
-    // same shape as the content query (source identity included) so both lists fuse in C# by
-    // entry hash.
-    private static readonly string StructureVectorSearchTemplate = $$"""
-                                                        SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
-                                                               v.distance AS Distance, e.source_file AS SourceFile,
-                                                               e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks, {{HitKind}} AS EntryKind
-                                                        FROM (SELECT rowid, distance FROM vec_structure
-                                                              WHERE ctx = @ctx AND {typeFilter} embedding MATCH @queryVector AND k = @limit) v
-                                                        JOIN entries e ON e.id = v.rowid
-                                                        ORDER BY v.distance + 0, e.path
-                                                        LIMIT @limit
-                                                        """;
-
-    /// <summary>
-    ///     Asking for both Memory and File is no type filter on the memory corpus (ADR-0141), so it
-    ///     reaches unclassified rows too; a narrower set selects declared kinds only.
-    /// </summary>
-    private static bool FiltersMemoryRows(EntryType types) =>
-        (types & (EntryType.Memory | EntryType.File)) != (EntryType.Memory | EntryType.File);
-
-    public static string SearchByTypes(EntryType types) =>
-        SearchTemplate.Replace("{typeFilter}", FiltersMemoryRows(types) ? " AND e.entry_type IN @entryTypes" : "");
-
-    public static string VectorSearchByTypes(EntryType types, bool structure = false) =>
-        (structure ? StructureVectorSearchTemplate : VectorSearchTemplate).Replace("{typeFilter}",
-            FiltersMemoryRows(types) ? "type IN @entryTypes AND " : "");
 
     // @scope null is delete_entry (N7/F26): every row sharing the write's path goes, not just
     // the reported hash — a manual add_memory's N chunks share one content-addressed path. The
@@ -260,34 +136,12 @@ internal static class MemorySql
         "(@path IS NOT NULL AND path = @path AND (source_file IS NULL OR source_file <> path)))) " +
         "OR (@scope IS NOT NULL AND scope = @scope AND hash = @hash))";
 
-    public const string DeleteByHashAndProject = "DELETE FROM entries WHERE " + DeleteMatchPredicate;
+    public const string DeleteByHashAndProject = $"DELETE FROM entries WHERE {DeleteMatchPredicate}";
 
     // The write's path is what makes the whole-write delete whole (N7/F26); resolved before the
     // delete so the predicate stays a plain parameter comparison.
     public const string SelectPathByHashAndProject =
         "SELECT path FROM entries WHERE hash = @hash AND project_id = @projectId LIMIT 1";
-
-    // Sync propagates deletes through tombstones (FR-NM-8). The set is derived from the rows the
-    // delete's own predicate reaches — delete_entry's is the whole write (N7/F26), so a
-    // multi-chunk write's untombstoned siblings cannot resurrect on the next sync pull — inside the
-    // caller's transaction, before the delete runs. The committed-scope filter is mandatory: a
-    // workspace row's scope is NULL, and tombstoning it would delete a same-hash workspace row on
-    // another replica and push scratch content off-machine. The tombstone carries the deleted row's
-    // own context_label (NULL for project/shared scope, the real label for custom scope) so a
-    // label-scoped delete cannot suppress a peer's same-hash row under a different label. The upsert
-    // refreshes deleted_at so a later delete still suppresses under the P2.2 age guard; INSERT OR
-    // IGNORE would keep the older value. The conflict target matches TombstoneIndexDdl's
-    // COALESCE-based unique index (MemorySchema.cs) — SQLite never dedupes raw NULLs against each other.
-    // received_at (F36) is this bank's OWN clock, always equal to deleted_at for a locally-originated
-    // tombstone — only SyncService's pull merge writes a received_at that differs from deleted_at
-    // (the remote replica's clock), which is the whole point: GC compares receipt time, never a
-    // remote clock, against the local watermark.
-    public static string TombstoneFromPredicate(string predicate) =>
-        "INSERT INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at, received_at) " +
-        "SELECT DISTINCT project_id, hash, scope, context_label, @deletedAt, @deletedAt FROM entries " +
-        $"WHERE {predicate} AND scope IN ('project', 'custom', 'shared') " +
-        "ON CONFLICT(project_id, hash, scope, COALESCE(context_label, '')) DO UPDATE SET " +
-        "deleted_at = excluded.deleted_at, received_at = excluded.received_at";
 
     // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3): read before the
     // delete so the row's group can be recomputed afterward.
@@ -300,25 +154,6 @@ internal static class MemorySql
                                                          AND (@scope IS NULL OR scope IS @scope)
                                                        """;
 
-    // Mirror delete/rename: removes committed chunks of the source path and its subtree (directory
-    // delete cascades; workspace scratch is transient and stays), plus per-path watch fingerprints
-    // so a delete-then-recreate cycle cannot hash-skip back to stale chunks. Watch registration survives.
-    // Matching is on `path`, not `source_file`: mirror/ingest rows carry the real file path in both
-    // columns, while manual add_memory rows carry path = <sha256(content)>.md and merely cite the
-    // file in source_file — the digest owns the mirror rows, never manual rows that cite the file.
-    /// <summary>
-    ///     Rows of <paramref name="table" /> at the path or under it, as two index seeks on
-    ///     (project_id, path) — an OR of the two the planner can only answer by scanning the project.
-    /// </summary>
-    private static string AtOrUnderPath(string table) =>
-        $"rowid IN (SELECT rowid FROM {table} WHERE project_id = @projectId AND path = @path " +
-        $"UNION ALL SELECT rowid FROM {table} WHERE project_id = @projectId " +
-        "AND path >= @subtreeLow AND path < @subtreeHigh)";
-
-    public static readonly string DeleteBySourcePathPredicate = AtOrUnderPath("entries") + " AND workspace_id IS NULL";
-
-    public static readonly string DeleteBySourcePath = "DELETE FROM entries WHERE " + DeleteBySourcePathPredicate;
-
     // A replace deletes every chunk of the path and re-inserts them, so promotion_queue_entries_ad
     // (ADR-0023) fires even for chunks whose text is unchanged and which return under the same hash.
     // These three hold the candidates across that round trip; see SqliteMemoryStore.ReplaceCoreAsync.
@@ -329,53 +164,6 @@ internal static class MemorySql
                                                       reasons TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
                                                   DELETE FROM queue_restore;
                                                   """;
-
-    // "Backed" means the same rows ShareAsync can resolve — ProjectRows is the one definition
-    // (ADR-0046); this used to be a hand-copied `e.scope = 'project'` in six places.
-    public static readonly string CaptureQueueRowsForSourcePath = $"""
-                                                                   INSERT INTO queue_restore (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
-                                                                   SELECT q.project_id, q.hash, q.path, q.value, q.source_file, q.score, q.reasons, q.created_at, q.updated_at
-                                                                   FROM promotion_queue q
-                                                                   WHERE q.project_id = @projectId
-                                                                     AND EXISTS (SELECT 1 FROM entries e
-                                                                                 WHERE e.project_id = q.project_id AND e.hash = q.hash
-                                                                                   AND {ProjectRows.Scope("e.")}
-                                                                                   AND (e.path = @path OR (e.path >= @subtreeLow AND e.path < @subtreeHigh)))
-                                                                   """;
-
-    // WP12 Fix A gap: a KEPT hash (still in the ingest's "keep" list) is never deleted from entries,
-    // so promotion_queue_entries_ad's cascade — the only thing that used to purge a discarded hash's
-    // queue row on a replace — never fires for it. This sweeps that residue explicitly, scoped to
-    // this path so it costs proportional to one file, not the whole project's queue.
-    public static readonly string DeleteDiscardedQueueRowsForSourcePath = $"""
-                                                                           DELETE FROM promotion_queue
-                                                                           WHERE project_id = @projectId
-                                                                             AND EXISTS (SELECT 1 FROM promotion_discards d
-                                                                                         WHERE d.project_id = promotion_queue.project_id
-                                                                                           AND d.hash = promotion_queue.hash)
-                                                                             AND EXISTS (SELECT 1 FROM entries e
-                                                                                         WHERE e.project_id = promotion_queue.project_id
-                                                                                           AND e.hash = promotion_queue.hash
-                                                                                           AND {ProjectRows.Scope("e.")}
-                                                                                           AND (e.path = @path OR (e.path >= @subtreeLow AND e.path < @subtreeHigh)))
-                                                                           """;
-
-    public static readonly string RestoreQueueRowsStillBacked = $"""
-                                                                 INSERT INTO promotion_queue (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
-                                                                 SELECT r.project_id, r.hash, r.path, r.value, r.source_file, r.score, r.reasons, r.created_at, r.updated_at
-                                                                 FROM queue_restore r
-                                                                 WHERE EXISTS (SELECT 1 FROM entries e
-                                                                               WHERE e.project_id = r.project_id AND e.hash = r.hash
-                                                                                 AND {ProjectRows.Scope("e.")})
-                                                                   AND NOT EXISTS (SELECT 1 FROM promotion_discards d
-                                                                                   WHERE d.project_id = r.project_id AND d.hash = r.hash)
-                                                                 ON CONFLICT(project_id, hash) DO NOTHING;
-                                                                 DELETE FROM queue_restore;
-                                                                 """;
-
-    public static readonly string SelectWatchFileAtOrUnder = "SELECT EXISTS (SELECT 1 FROM watch_files WHERE " + AtOrUnderPath("watch_files") + ")";
-
-    public static readonly string DeleteWatchFilesByProjectPathCascade = "DELETE FROM watch_files WHERE " + AtOrUnderPath("watch_files");
 
     public const string InsertWatchIfAbsent = """
                                               INSERT INTO watches (project_id, path, created_at, last_change_ts)
@@ -463,9 +251,7 @@ internal static class MemorySql
                                               WHERE excluded.claimed_at - watch_digest_claims.claimed_at > @staleAfterSeconds
                                               """;
 
-    public const string ReleaseWatchDigestClaim = """
-                                                  DELETE FROM watch_digest_claims WHERE project_id = @projectId AND path = @path
-                                                  """;
+    public const string ReleaseWatchDigestClaim = "DELETE FROM watch_digest_claims WHERE project_id = @projectId AND path = @path";
 
     // Counts the project's contexts, labelled or not (ADR-0045) — PendingCount has always counted
     // every row carrying the project id, and a bank holding one context-labelled entry reported
@@ -482,11 +268,17 @@ internal static class MemorySql
         "WHERE embed_state = 'pending' AND embed_attempts < 3 AND project_id = @projectId " +
         "ORDER BY id LIMIT @limit";
 
-    /// <summary>Bank-wide pending-row existence check for PendingEmbedJob.HasWorkAsync, polled every 15s (BankMaintenanceHostedService.OnDemandPollInterval) — EXISTS short-circuits on the first row instead of counting the whole backlog on every poll.</summary>
+    /// <summary>
+    ///     Bank-wide pending-row existence check for PendingEmbedJob.HasWorkAsync, polled every 15s (BankMaintenanceHostedService.OnDemandPollInterval) — EXISTS short-circuits on the first row instead of counting the whole backlog on every
+    ///     poll.
+    /// </summary>
     public const string HasPendingEmbed =
         "SELECT EXISTS(SELECT 1 FROM entries WHERE embed_state = 'pending' AND embed_attempts < 3 LIMIT 1)";
 
-    /// <summary>Bank-wide pending-row COUNT sibling of <see cref="HasPendingEmbed" /> — PendingEmbedJob.CountOutstandingRowsAsync (WP3, #477), only called once per completed run, not on every 15s poll, so counting the whole backlog is affordable here. Counts abandoned rows too: they are still not embedded.</summary>
+    /// <summary>
+    ///     Bank-wide pending-row COUNT sibling of <see cref="HasPendingEmbed" /> — PendingEmbedJob.CountOutstandingRowsAsync (WP3, #477), only called once per completed run, not on every 15s poll, so counting the whole backlog is affordable
+    ///     here. Counts abandoned rows too: they are still not embedded.
+    /// </summary>
     public const string CountPendingEmbed =
         "SELECT COUNT(*) FROM entries WHERE embed_state = 'pending'";
 
@@ -536,50 +328,64 @@ internal static class MemorySql
     public const string MarkAllEmbeddedPending =
         "UPDATE entries SET embed_state = 'pending' WHERE embed_state = 'embedded'";
 
-    /// <summary>The code corpus's own invalidation (§3.3 D-E9, no outbox): every currently-embedded code_entries
-    /// row is stale under the new code engine. Fires vec_code_pending, so the old vectors leave vec_code the
-    /// instant this commits — the code-reindex maintenance job re-embeds the pending rows, not this call.</summary>
+    /// <summary>
+    ///     The code corpus's own invalidation (§3.3 D-E9, no outbox): every currently-embedded code_entries
+    ///     row is stale under the new code engine. Fires vec_code_pending, so the old vectors leave vec_code the
+    ///     instant this commits — the code-reindex maintenance job re-embeds the pending rows, not this call.
+    /// </summary>
     public const string MarkAllCodeEmbeddedPending =
         "UPDATE code_entries SET embed_state = 'pending' WHERE embed_state = 'embedded'";
 
-    /// <summary>Bank-wide pending-row existence check for CodeReindexJob.HasWorkAsync — mirrors HasPendingEmbed.
-    /// S2: excludes a row that crossed CodeCorpusSchema.MaxEmbedAttempts (the literal 3 below MUST track
-    /// that constant — a const string can't interpolate a const int, so LoggerMessageEventIdTests-style
-    /// drift protection isn't available here; MaxEmbedAttemptsSqlLiteralTests pins the two together instead),
-    /// or a permanently-poisoned row would keep this (and therefore the 15s on-demand poll) true forever.</summary>
+    /// <summary>
+    ///     Bank-wide pending-row existence check for CodeReindexJob.HasWorkAsync — mirrors HasPendingEmbed.
+    ///     S2: excludes a row that crossed CodeCorpusSchema.MaxEmbedAttempts (the literal 3 below MUST track
+    ///     that constant — a const string can't interpolate a const int, so LoggerMessageEventIdTests-style
+    ///     drift protection isn't available here; MaxEmbedAttemptsSqlLiteralTests pins the two together instead),
+    ///     or a permanently-poisoned row would keep this (and therefore the 15s on-demand poll) true forever.
+    /// </summary>
     public const string HasPendingCodeEmbed =
         "SELECT EXISTS(SELECT 1 FROM code_entries WHERE embed_state = 'pending' AND embed_attempts < 3 LIMIT 1)";
 
-    /// <summary>Bank-wide pending code-row count — CodeReindexJob.CountOutstandingRowsAsync (WP3, #477) and `doctor`'s
-    /// code-engine report (DoctorCommands.CountPendingCodeRowsAsync) share this one query. Unlike HasPendingCodeEmbed,
-    /// this does NOT exclude embed_attempts >= 3 poison rows — both callers want the literal pending count, not the
-    /// drain-eligible subset, so a quarantined row still shows up here.</summary>
+    /// <summary>
+    ///     Bank-wide pending code-row count — CodeReindexJob.CountOutstandingRowsAsync (WP3, #477) and `doctor`'s
+    ///     code-engine report (DoctorCommands.CountPendingCodeRowsAsync) share this one query. Unlike HasPendingCodeEmbed,
+    ///     this does NOT exclude embed_attempts >= 3 poison rows — both callers want the literal pending count, not the
+    ///     drain-eligible subset, so a quarantined row still shows up here.
+    /// </summary>
     public const string CountPendingCodeEmbed =
         "SELECT COUNT(*) FROM code_entries WHERE embed_state = 'pending'";
 
-    /// <summary>Bank-wide (not project-scoped) pending code rows for the code-reindex drain — mirrors SelectAllPendingForEmbed.
-    /// S2: the same MaxEmbedAttempts exclusion as HasPendingCodeEmbed (see its own remark on the literal 3) — a
-    /// quarantined poison row is never re-selected.</summary>
+    /// <summary>
+    ///     Bank-wide (not project-scoped) pending code rows for the code-reindex drain — mirrors SelectAllPendingForEmbed.
+    ///     S2: the same MaxEmbedAttempts exclusion as HasPendingCodeEmbed (see its own remark on the literal 3) — a
+    ///     quarantined poison row is never re-selected.
+    /// </summary>
     public const string SelectAllPendingCodeForEmbed =
         "SELECT id AS Id, value AS Value, path AS Path, source_file AS SourceFile FROM code_entries " +
         "WHERE embed_state = 'pending' AND embed_attempts < 3 " +
         "ORDER BY id LIMIT @limit";
 
-    /// <summary>Fills the embedding column and flips embed_state — fires vec_code_au, which writes the row into vec_code.
-    /// The @engine guard (S1) blocks the write when a concurrent activation changed embedding.codeEngine after this
-    /// batch's rows were selected: without it, a stale UPDATE would mark the row 'embedded' with a vector generated
-    /// under the PREVIOUS engine, permanently mismatched with the new engine's fingerprint. The row simply stays
-    /// pending — the next drain re-embeds it under whichever engine is current then.</summary>
+    /// <summary>
+    ///     Fills the embedding column and flips embed_state — fires vec_code_au, which writes the row into vec_code.
+    ///     The @engine guard (S1) blocks the write when a concurrent activation changed embedding.codeEngine after this
+    ///     batch's rows were selected: without it, a stale UPDATE would mark the row 'embedded' with a vector generated
+    ///     under the PREVIOUS engine, permanently mismatched with the new engine's fingerprint. The row simply stays
+    ///     pending — the next drain re-embeds it under whichever engine is current then.
+    /// </summary>
     public const string MarkCodeEmbedded =
         "UPDATE code_entries SET embed_state = 'embedded', embedding = @embedding " +
         "WHERE id = @id AND embed_state = 'pending' " +
         "AND (SELECT value FROM settings WHERE key = 'embedding.codeEngine') = @engine";
 
-    /// <summary>S2: bumps a row's failure count after an individual (not whole-batch) embed attempt fails
-    /// — the per-row fallback's own progress marker, so a poison row eventually crosses MaxEmbedAttempts
-    /// and drops out of SelectAllPendingCodeForEmbed/HasPendingCodeEmbed instead of retrying forever.</summary>
-    /// <remarks>RETURNING hands back the new count in the same statement, so the moment a row crosses the
-    /// ceiling is knowable without a second read (#466: crossing it must be logged, not just recorded).</remarks>
+    /// <summary>
+    ///     S2: bumps a row's failure count after an individual (not whole-batch) embed attempt fails
+    ///     — the per-row fallback's own progress marker, so a poison row eventually crosses MaxEmbedAttempts
+    ///     and drops out of SelectAllPendingCodeForEmbed/HasPendingCodeEmbed instead of retrying forever.
+    /// </summary>
+    /// <remarks>
+    ///     RETURNING hands back the new count in the same statement, so the moment a row crosses the
+    ///     ceiling is knowable without a second read (#466: crossing it must be logged, not just recorded).
+    /// </remarks>
     public const string IncrementCodeEmbedAttempts =
         "UPDATE code_entries SET embed_attempts = embed_attempts + 1 WHERE id = @id RETURNING embed_attempts";
 
@@ -598,16 +404,6 @@ internal static class MemorySql
     /// <summary>Exact, case-sensitive name match (BINARY collation, no LIKE), so <c>%</c> and <c>_</c> are literal.</summary>
     public const string SelectProjectIdsByName = "SELECT id FROM projects WHERE name = @name ORDER BY id";
 
-    // ProjectRows.Of(), never Scope(): Scope() carries no project_id, so a Scope()-only predicate
-    // is true for any project- or custom-scoped row in the whole bank, defeating the per-project
-    // answer this query exists to give (ADR-0089 §"Use Of(), never Scope()"). Both legs are
-    // index-served (idx_entries_scope_project, idx_code_entries_project) and short-circuit: a
-    // code-only legacy project (rows in code_entries, none in entries) must still be found, since
-    // ADR-0089 decision 3 tests "no registry row AND no rows" over both corpora, not entries alone.
-    public static readonly string ProjectHasRows =
-        $"SELECT EXISTS(SELECT 1 FROM entries WHERE {ProjectRows.Of()}) " +
-        "OR EXISTS(SELECT 1 FROM code_entries WHERE project_id = @projectId)";
-
     // ---- model_migration (ADR-0076) ----
 
     public const string SelectModelMigration =
@@ -617,8 +413,10 @@ internal static class MemorySql
     public const string HasOpenModelMigration =
         "SELECT count(*) FROM model_migration WHERE id = 1 AND finished_at IS NULL";
 
-    /// <summary>The open migration's lease pre-state — read BEFORE acquiring, so the acquirer can
-    /// name a stale lease's previous holder (LANE P4, 1009). One indexed row (id = 1).</summary>
+    /// <summary>
+    ///     The open migration's lease pre-state — read BEFORE acquiring, so the acquirer can
+    ///     name a stale lease's previous holder (LANE P4, 1009). One indexed row (id = 1).
+    /// </summary>
     public const string SelectOpenModelMigrationLease =
         "SELECT lease_owner AS LeaseOwner, lease_expires_at AS LeaseExpiresAt, started_at AS StartedAt " +
         "FROM model_migration WHERE id = 1 AND finished_at IS NULL";
@@ -723,17 +521,6 @@ internal static class MemorySql
                                               ORDER BY context_label
                                               """;
 
-    public static readonly string CommittedContexts = $"""
-                                                       SELECT DISTINCT CASE
-                                                                WHEN scope = 'shared' THEN 'shared'
-                                                                WHEN scope = 'custom' THEN 'custom:' || context_label
-                                                                ELSE 'project:' || project_id
-                                                              END AS context
-                                                       FROM entries
-                                                       WHERE scope = 'shared' OR ({ProjectRows.Of()})
-                                                       ORDER BY CASE WHEN scope = 'shared' THEN 0 WHEN scope = 'project' THEN 1 ELSE 2 END, context
-                                                       """;
-
     public const string DistinctFilePaths = """
                                             SELECT DISTINCT path
                                             FROM entries
@@ -756,14 +543,14 @@ internal static class MemorySql
                                                    """;
 
     public const string SelectTypedEntryByHashForRead = """
-                                                   SELECT hash AS Hash, path AS Path, value AS Value, scope AS Scope,
-                                                          project_id AS ProjectId, context_label AS ContextLabel,
-                                                          workspace_id AS WorkspaceId, created_at AS CreatedAt, entry_type AS EntryKind
-                                                   FROM entries
-                                                   WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared')
-                                                     AND entry_type = @entryKind
-                                                   LIMIT 1
-                                                   """;
+                                                        SELECT hash AS Hash, path AS Path, value AS Value, scope AS Scope,
+                                                               project_id AS ProjectId, context_label AS ContextLabel,
+                                                               workspace_id AS WorkspaceId, created_at AS CreatedAt, entry_type AS EntryKind
+                                                        FROM entries
+                                                        WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared')
+                                                          AND entry_type = @entryKind
+                                                        LIMIT 1
+                                                        """;
 
     /// <summary>
     ///     One statement, so `rating` is always the rating of the `access_count` stored beside it.
@@ -783,20 +570,16 @@ internal static class MemorySql
         WHERE hash = @hash AND (project_id = @projectId OR scope = 'shared')
         """;
 
-    public const string UpsertSetting = """"
+    public const string UpsertSetting = """
                                         INSERT INTO settings (key, value) VALUES (@key, @value)
                                         ON CONFLICT(key) DO UPDATE SET value = excluded.value
-                                        """";
+                                        """;
 
     public const string SelectSetting =
-        """
-        SELECT value FROM settings WHERE key = @key LIMIT 1
-        """;
+        "SELECT value FROM settings WHERE key = @key LIMIT 1";
 
     public const string SelectWorkspaceStatus =
-        """
-        SELECT status FROM workspaces WHERE id = @workspaceId AND project_id = @projectId LIMIT 1
-        """;
+        "SELECT status FROM workspaces WHERE id = @workspaceId AND project_id = @projectId LIMIT 1";
 
     /// <summary>The status guard's row plus its provenance, so an active-check reads it back for free.</summary>
     public const string SelectWorkspace =
@@ -806,41 +589,10 @@ internal static class MemorySql
         """;
 
     public const string SelectSettingsByPrefix =
-        """
-        SELECT key, value FROM settings WHERE key LIKE @prefix || '%' ORDER BY key
-        """;
+        "SELECT key, value FROM settings WHERE key LIKE @prefix || '%' ORDER BY key";
 
     public const string DeleteSetting =
-        """
-        DELETE FROM settings WHERE key = @key
-        """;
-
-    // Hash alone is not a unique row — identical content under a different label shares one — so
-    // the committed row wins when both exist (ProjectRows.CommittedFirst). It used to be restricted
-    // to scope='project', which turned that tie-break into an existence test: an entry that lived
-    // only in a context was reported unknown-hash (ADR-0046). Setting is Memory-only; clearing
-    // reaches any kind, because the sweep still honours a TTL a File row carried before 2.1.0.
-    public static readonly string UpdateEntryTtl =
-        $"""
-         UPDATE entries
-         SET ttl_days = @ttlDays
-         WHERE id = (SELECT id FROM entries
-                     WHERE hash = @hash AND {ProjectRows.Of()}
-                     ORDER BY {ProjectRows.CommittedFirst()}, id
-                     LIMIT 1)
-           AND (@ttlDays IS NULL OR entries.entry_type = '{EntryKindWireNames.Memory}')
-         """;
-
-    // Reads the same row UpdateEntryTtl writes — the explicit ORDER BY is what makes "the entry
-    // for this hash" deterministic when a labelled sibling shares it (ADR-0046).
-    public static readonly string SelectEntryMetadata =
-        $"""
-         SELECT rating AS Rating, ttl_days AS TtlDays
-         FROM entries
-         WHERE hash = @hash AND {ProjectRows.Of()}
-         ORDER BY {ProjectRows.CommittedFirst()}, id
-         LIMIT 1
-         """;
+        "DELETE FROM settings WHERE key = @key";
 
     public const string SelectEntriesByContext = """
                                                  SELECT id AS Id, hash AS Hash, path AS Path, value AS Value, scope AS Scope,
@@ -877,6 +629,294 @@ internal static class MemorySql
                                                            LIMIT 1
                                                            """;
 
+    /// <summary>
+    ///     Sets one row's document position and section directly — the authoritative-at-insert
+    ///     write (GH #371) FileIngestor uses instead of the id-order recompute, and the write
+    ///     <see cref="AiRaccoon.Infrastructure.Ingestion.ChunkIndexRepair" /> uses to take the section
+    ///     the current chunker reports (docs/adr/0048, #549). The FTS trigger covers section, so the
+    ///     index resyncs.
+    /// </summary>
+    public const string SetChunkPosition =
+        "UPDATE entries SET chunk_index = @chunkIndex, total_chunks = @totalChunks, section = @section WHERE id = @id";
+
+    /// <summary>Sets one row's position and total without touching section, so the full-text trigger does not fire.</summary>
+    public const string SetChunkColumns =
+        "UPDATE entries SET chunk_index = @chunkIndex, total_chunks = @totalChunks WHERE id = @id";
+
+    // Chunk-budget rebudget (config-D P1, ChunkBudgetReconciler): note groups are exactly the
+    // whole-write groups DeleteMatchPredicate's own definition names — one bucket and path, never a
+    // mirror row (path = source_file) — and mirror groups are ReingestRepair's own mirror rows. The
+    // row selection is bucket-scoped so a group is one write's complete chunk run: its rows reassemble
+    // to the body their path names and nothing else is ever in scope for one replace.
+    public const string SelectRebudgetNoteGroups = """
+                                                   SELECT scope AS Scope, project_id AS ProjectId, context_label AS ContextLabel,
+                                                          workspace_id AS WorkspaceId, path AS Path
+                                                   FROM entries
+                                                   WHERE value IS NOT NULL AND path IS NOT NULL
+                                                     AND (source_file IS NULL OR source_file <> path)
+                                                   GROUP BY scope, project_id, context_label, workspace_id, path
+                                                   """;
+
+    public const string SelectRebudgetGroupRows = """
+                                                  SELECT id AS Id, hash AS Hash, value AS Value, source_file AS SourceFile,
+                                                         section AS Section, scope AS Scope, project_id AS ProjectId,
+                                                         context_label AS ContextLabel, workspace_id AS WorkspaceId,
+                                                         agent_id AS AgentId, created_at AS CreatedAt, source_id AS SourceId,
+                                                         chunk_index AS ChunkIndex, ttl_days AS TtlDays, entry_type AS EntryType
+                                                  FROM entries
+                                                  WHERE path = @path AND scope IS @scope AND project_id IS @projectId
+                                                    AND context_label IS @contextLabel AND workspace_id IS @workspaceId
+                                                    AND (source_file IS NULL OR source_file <> path)
+                                                  ORDER BY id
+                                                  """;
+
+    public const string SelectRebudgetMirrorGroups = """
+                                                     SELECT DISTINCT scope AS Scope, project_id AS ProjectId, context_label AS ContextLabel,
+                                                            workspace_id AS WorkspaceId, source_file AS SourceFile
+                                                     FROM entries
+                                                     WHERE source_file IS NOT NULL AND path = source_file
+                                                     """;
+
+    public const string SelectRebudgetMirrorRows = """
+                                                   SELECT id AS Id, hash AS Hash
+                                                   FROM entries
+                                                   WHERE project_id = @projectId AND source_file = @sourceFile
+                                                     AND path = @sourceFile
+                                                     AND scope IS @scope AND context_label IS @contextLabel
+                                                     AND workspace_id IS @workspaceId
+                                                   """;
+
+    // Code corpus (docs/work/2026-08-21-code-search-implementation-plan.md §3.4): dedup key is
+    // (project_id, path, hash) — no bucket (scope/context_label/workspace_id) columns, code is
+    // project-scoped only. Same ON CONFLICT DO NOTHING + post-conflict re-read shape as
+    // InsertEntry/SelectChunkIdByPathAndHashInBucket above.
+    // P2-B (docs/adr/0109): identifiers is filled at insert time from the chunk's own value, via
+    // CodeIngestor — never derived in SQL, since only IdentifierSplitter (C#) knows how to split it.
+    public const string InsertCodeEntry = """
+                                          INSERT INTO code_entries (hash, path, value, source_file, line_start, line_end,
+                                                                    project_id, created_at, updated_at, chunk_index, total_chunks,
+                                                                    identifiers)
+                                          VALUES (@hash, @path, @value, @sourceFile, @lineStart, @lineEnd,
+                                                  @projectId, @createdAt, @updatedAt, @chunkIndex, @totalChunks,
+                                                  @identifiers)
+                                          ON CONFLICT DO NOTHING
+                                          """;
+
+    public const string SelectCodeChunkIdByPathAndHash = """
+                                                         SELECT id FROM code_entries
+                                                         WHERE project_id = @projectId AND path = @path AND hash = @hash
+                                                         LIMIT 1
+                                                         """;
+
+    // D-E11 (deliberate divergence from the memory path): dedup rediscovery refreshes the line
+    // range too, not just chunk_index/total_chunks — for code, the line range IS the retrieval
+    // payload, so a file that gains lines above an unchanged chunk must not keep a stale range.
+    public const string UpdateCodeChunkPosition = """
+                                                  UPDATE code_entries
+                                                     SET line_start = @lineStart, line_end = @lineEnd,
+                                                         chunk_index = @chunkIndex, total_chunks = @totalChunks,
+                                                         updated_at = @updatedAt
+                                                   WHERE id = @id
+                                                  """;
+
+    // Defect B: after a direct ingest reports the chunk set it wrote or rediscovered, everything
+    // else stored under that exact path is a leftover of a previous chunking. Exact path only —
+    // no subtree leg — so re-ingesting one file can never reach a sibling. The predicate is split
+    // out (residual #4) so PruneAsync can tombstone exactly what this reaches
+    // (TombstoneFromPredicate) before the delete runs — a stale chunk a replace prunes must not
+    // resurrect on a peer's next sync pull.
+    public const string DeleteChunksForPathExceptPredicate = """
+                                                             project_id = @projectId AND workspace_id IS NULL
+                                                               AND path = @path AND hash NOT IN @keep
+                                                             """;
+
+    public const string DeleteChunksForPathExcept = $"DELETE FROM entries WHERE {DeleteChunksForPathExceptPredicate}";
+
+    public const string DeleteAllChunksForPathPredicate = """
+                                                          project_id = @projectId AND workspace_id IS NULL
+                                                            AND path = @path
+                                                          """;
+
+    public const string DeleteAllChunksForPath = $"DELETE FROM entries WHERE {DeleteAllChunksForPathPredicate}";
+
+    public static readonly string SelectSourceByHashAndProject = $"""
+                                                                   SELECT e.path AS Path, e.value AS Value, e.source_file AS SourceFile, e.section AS Section,
+                                                                          ms.source_type AS SourceType, ms.heading_path AS HeadingPath
+                                                                  FROM entries e
+                                                                  LEFT JOIN memory_source ms ON ms.id = e.source_id
+                                                                  WHERE e.hash = @hash AND {ProjectRows.Of("e.")}
+                                                                  ORDER BY {ProjectRows.CommittedFirst("e.")}
+                                                                  LIMIT 1
+                                                                  """;
+
+    public static readonly string SelectExtractionCandidates = $"""
+                                                                SELECT e.hash AS Hash, e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
+                                                                       ms.source_type AS SourceType,
+                                                                       e.rating AS Rating, e.access_count AS AccessCount, e.created_at AS CreatedAt,
+                                                                       e.ttl_days AS TtlDays
+                                                                FROM entries e
+                                                                LEFT JOIN memory_source ms ON ms.id = e.source_id
+                                                                WHERE {ProjectRows.Of("e.")} AND e.embed_state = 'embedded'
+                                                                  AND (@includeTtlRows = 1 OR e.ttl_days IS NULL)
+                                                                """;
+
+    public static readonly string SelectProjectIds = $"""
+                                                      SELECT DISTINCT project_id AS ProjectId
+                                                      FROM entries
+                                                      WHERE {ProjectRows.Scope()}
+                                                      ORDER BY project_id
+                                                      """;
+
+    /// <summary>A search hit's kind: the declared kind, or <c>none</c> for a row this build cannot classify.</summary>
+    private static readonly string HitKind =
+        $"CASE WHEN e.entry_type IN ('{EntryKindWireNames.Memory}', '{EntryKindWireNames.File}') THEN e.entry_type ELSE '{EntryKindWireNames.None}' END";
+
+    // Hash tie-break (owner ruling): an exact bm25 score tie is real over short chunks, and without
+    // a total order the result is whatever rowid sqlite happens to visit first -- ties by e.hash
+    // instead, matching the harness's ORDER BY bm25(...), e.hash port
+    // (scripts/retrieval_tuning/llamaindex_harness/ingest.py's _bank_fts_order).
+    private static readonly string SearchTemplate = $$"""
+                                                      SELECT e.hash AS Hash, bm25(entries_fts, 1.0, 8.0, 4.0) AS Ranking,
+                                                             e.path AS Path, e.value AS Value, e.source_file AS SourceFile,
+                                                             e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks,
+                                                             e.id AS Id, {{HitKind}} AS EntryKind
+                                                      FROM entries_fts
+                                                      JOIN entries e ON e.id = entries_fts.rowid
+                                                      WHERE entries_fts MATCH @query AND ({filter}){typeFilter}
+                                                      ORDER BY bm25(entries_fts, 1.0, 8.0, 4.0), e.hash
+                                                      LIMIT @limit
+                                                      """;
+
+    public static readonly string SearchByFilter = SearchTemplate.Replace("{typeFilter}", "");
+
+    // vec0 modality: native KNN over the ctx partition replaces `WHERE {filter}` entirely, since the
+    // partition already selects exactly the rows a search context can retrieve
+    // (docs/plans/2026-08-08-search-knn-perf.md §3.1/§3.4). Row position is the RRF rank; `ORDER BY
+    // v.distance, e.path` preserves the existing distance-tie break. Vector hits carry a fallback
+    // snippet built in C# (the FTS list's snippet() wins for docs both modalities retrieve).
+    private static readonly string VectorSearchTemplate = $$"""
+                                                            SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
+                                                                   v.distance AS Distance, e.source_file AS SourceFile,
+                                                                   e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks, {{HitKind}} AS EntryKind
+                                                            FROM (SELECT rowid, distance FROM vec_entries
+                                                                  WHERE ctx = @ctx AND {typeFilter} embedding MATCH @queryVector AND k = @limit) v
+                                                            JOIN entries e ON e.id = v.rowid
+                                                            ORDER BY v.distance + 0, e.path
+                                                            LIMIT @limit
+                                                            """;
+
+    // Structure modality: cosine KNN over the heading-path vectors (vec_structure),
+    // same shape as the content query (source identity included) so both lists fuse in C# by
+    // entry hash.
+    private static readonly string StructureVectorSearchTemplate = $$"""
+                                                                     SELECT e.hash AS Hash, e.path AS Path, e.value AS Value,
+                                                                            v.distance AS Distance, e.source_file AS SourceFile,
+                                                                            e.chunk_index AS ChunkIndex, e.total_chunks AS TotalChunks, {{HitKind}} AS EntryKind
+                                                                     FROM (SELECT rowid, distance FROM vec_structure
+                                                                           WHERE ctx = @ctx AND {typeFilter} embedding MATCH @queryVector AND k = @limit) v
+                                                                     JOIN entries e ON e.id = v.rowid
+                                                                     ORDER BY v.distance + 0, e.path
+                                                                     LIMIT @limit
+                                                                     """;
+
+    public static readonly string DeleteBySourcePathPredicate = $"{AtOrUnderPath("entries")} AND workspace_id IS NULL";
+
+    public static readonly string DeleteBySourcePath = $"DELETE FROM entries WHERE {DeleteBySourcePathPredicate}";
+
+    // "Backed" means the same rows ShareAsync can resolve — ProjectRows is the one definition
+    // (ADR-0046); this used to be a hand-copied `e.scope = 'project'` in six places.
+    public static readonly string CaptureQueueRowsForSourcePath = $"""
+                                                                   INSERT INTO queue_restore (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
+                                                                   SELECT q.project_id, q.hash, q.path, q.value, q.source_file, q.score, q.reasons, q.created_at, q.updated_at
+                                                                   FROM promotion_queue q
+                                                                   WHERE q.project_id = @projectId
+                                                                     AND EXISTS (SELECT 1 FROM entries e
+                                                                                 WHERE e.project_id = q.project_id AND e.hash = q.hash
+                                                                                   AND {ProjectRows.Scope("e.")}
+                                                                                   AND (e.path = @path OR (e.path >= @subtreeLow AND e.path < @subtreeHigh)))
+                                                                   """;
+
+    // WP12 Fix A gap: a KEPT hash (still in the ingest's "keep" list) is never deleted from entries,
+    // so promotion_queue_entries_ad's cascade — the only thing that used to purge a discarded hash's
+    // queue row on a replace — never fires for it. This sweeps that residue explicitly, scoped to
+    // this path so it costs proportional to one file, not the whole project's queue.
+    public static readonly string DeleteDiscardedQueueRowsForSourcePath = $"""
+                                                                           DELETE FROM promotion_queue
+                                                                           WHERE project_id = @projectId
+                                                                             AND EXISTS (SELECT 1 FROM promotion_discards d
+                                                                                         WHERE d.project_id = promotion_queue.project_id
+                                                                                           AND d.hash = promotion_queue.hash)
+                                                                             AND EXISTS (SELECT 1 FROM entries e
+                                                                                         WHERE e.project_id = promotion_queue.project_id
+                                                                                           AND e.hash = promotion_queue.hash
+                                                                                           AND {ProjectRows.Scope("e.")}
+                                                                                           AND (e.path = @path OR (e.path >= @subtreeLow AND e.path < @subtreeHigh)))
+                                                                           """;
+
+    public static readonly string RestoreQueueRowsStillBacked = $"""
+                                                                 INSERT INTO promotion_queue (project_id, hash, path, value, source_file, score, reasons, created_at, updated_at)
+                                                                 SELECT r.project_id, r.hash, r.path, r.value, r.source_file, r.score, r.reasons, r.created_at, r.updated_at
+                                                                 FROM queue_restore r
+                                                                 WHERE EXISTS (SELECT 1 FROM entries e
+                                                                               WHERE e.project_id = r.project_id AND e.hash = r.hash
+                                                                                 AND {ProjectRows.Scope("e.")})
+                                                                   AND NOT EXISTS (SELECT 1 FROM promotion_discards d
+                                                                                   WHERE d.project_id = r.project_id AND d.hash = r.hash)
+                                                                 ON CONFLICT(project_id, hash) DO NOTHING;
+                                                                 DELETE FROM queue_restore;
+                                                                 """;
+
+    public static readonly string SelectWatchFileAtOrUnder = $"SELECT EXISTS (SELECT 1 FROM watch_files WHERE {AtOrUnderPath("watch_files")})";
+
+    public static readonly string DeleteWatchFilesByProjectPathCascade = $"DELETE FROM watch_files WHERE {AtOrUnderPath("watch_files")}";
+
+    // ProjectRows.Of(), never Scope(): Scope() carries no project_id, so a Scope()-only predicate
+    // is true for any project- or custom-scoped row in the whole bank, defeating the per-project
+    // answer this query exists to give (ADR-0089 §"Use Of(), never Scope()"). Both legs are
+    // index-served (idx_entries_scope_project, idx_code_entries_project) and short-circuit: a
+    // code-only legacy project (rows in code_entries, none in entries) must still be found, since
+    // ADR-0089 decision 3 tests "no registry row AND no rows" over both corpora, not entries alone.
+    public static readonly string ProjectHasRows =
+        $"SELECT EXISTS(SELECT 1 FROM entries WHERE {ProjectRows.Of()}) OR EXISTS(SELECT 1 FROM code_entries WHERE project_id = @projectId)";
+
+    public static readonly string CommittedContexts = $"""
+                                                       SELECT DISTINCT CASE
+                                                                WHEN scope = 'shared' THEN 'shared'
+                                                                WHEN scope = 'custom' THEN 'custom:' || context_label
+                                                                ELSE 'project:' || project_id
+                                                              END AS context
+                                                       FROM entries
+                                                       WHERE scope = 'shared' OR ({ProjectRows.Of()})
+                                                       ORDER BY CASE WHEN scope = 'shared' THEN 0 WHEN scope = 'project' THEN 1 ELSE 2 END, context
+                                                       """;
+
+    // Hash alone is not a unique row — identical content under a different label shares one — so
+    // the committed row wins when both exist (ProjectRows.CommittedFirst). It used to be restricted
+    // to scope='project', which turned that tie-break into an existence test: an entry that lived
+    // only in a context was reported unknown-hash (ADR-0046). Setting is Memory-only; clearing
+    // reaches any kind, because the sweep still honours a TTL a File row carried before 2.1.0.
+    public static readonly string UpdateEntryTtl =
+        $"""
+         UPDATE entries
+         SET ttl_days = @ttlDays
+         WHERE id = (SELECT id FROM entries
+                     WHERE hash = @hash AND {ProjectRows.Of()}
+                     ORDER BY {ProjectRows.CommittedFirst()}, id
+                     LIMIT 1)
+           AND (@ttlDays IS NULL OR entries.entry_type = '{EntryKindWireNames.Memory}')
+         """;
+
+    // Reads the same row UpdateEntryTtl writes — the explicit ORDER BY is what makes "the entry
+    // for this hash" deterministic when a labelled sibling shares it (ADR-0046).
+    public static readonly string SelectEntryMetadata =
+        $"""
+         SELECT rating AS Rating, ttl_days AS TtlDays
+         FROM entries
+         WHERE hash = @hash AND {ProjectRows.Of()}
+         ORDER BY {ProjectRows.CommittedFirst()}, id
+         LIMIT 1
+         """;
+
     // Chunk-column maintenance (docs/plans/2026-08-08-search-knn-perf.md §3.3, GH #371): total_chunks
     // is a pure count, always safe to refresh; chunk_index is filled ONLY where it is still the -1
     // "unknown" sentinel (id order is a best-effort fallback for a row nothing has positioned yet) —
@@ -897,7 +937,10 @@ internal static class MemorySql
                                                                       WHERE entries.id IN (SELECT id FROM grp)
                                                                      """;
 
-    /// <summary>Bank-wide form of <see cref="RecomputeChunkColumnsForContext" /> — no ctx/source_file predicate, used by the v2/v3 migrations and the chunk-oversize backfill (GH #371: both can re-run on a live bank next to groups a document-order write already positioned correctly, so this fills the -1 sentinel only, same as the scoped form).</summary>
+    /// <summary>
+    ///     Bank-wide form of <see cref="RecomputeChunkColumnsForContext" /> — no ctx/source_file predicate, used by the v2/v3 migrations and the chunk-oversize backfill (GH #371: both can re-run on a live bank next to groups a document-order
+    ///     write already positioned correctly, so this fills the -1 sentinel only, same as the scoped form).
+    /// </summary>
     public static readonly string RecomputeChunkColumnsBankWide = $"""
                                                                    WITH grp AS (
                                                                        SELECT id, chunk_index,
@@ -922,53 +965,41 @@ internal static class MemorySql
     ///     total_chunks is the partition row count. Only rows whose values change are written.
     /// </summary>
     public static readonly string RecomputeChunkColumnsBankWideKeepingOrder = $"""
-        WITH base AS (
-            SELECT id, chunk_index, total_chunks, {ContextKeyExpression("")} AS ctx, source_file AS sf,
-                   CASE WHEN path = source_file THEN 1 ELSE 0 END AS f,
-                   CASE WHEN path = source_file AND chunk_index < 0 AND id > @lastId THEN 1 ELSE 0 END AS added
-            FROM entries
-            WHERE source_file IS NOT NULL),
-        agg AS (
-            SELECT ctx, sf, COUNT(*) AS tc, SUM(f) - SUM(added) AS held, SUM(added) AS addedCount,
-                   SUM(CASE WHEN f = 1 AND added = 0 AND chunk_index >= 0 THEN 1 ELSE 0 END) AS known,
-                   COUNT(DISTINCT CASE WHEN f = 1 AND added = 0 AND chunk_index >= 0 THEN chunk_index END) AS distinctKnown,
-                   MAX(CASE WHEN f = 1 AND added = 0 THEN chunk_index END) AS maxKnown
-            FROM base
-            GROUP BY ctx, sf),
-        ranked AS (
-            SELECT b.id, b.chunk_index, b.total_chunks, b.f, b.added, a.tc, a.addedCount,
-                   CASE WHEN a.known = a.distinctKnown AND COALESCE(a.maxKnown, -1) < a.held THEN a.held ELSE a.known END AS fileBase,
-                   a.known = a.distinctKnown AND COALESCE(a.maxKnown, -1) < a.held AS valid,
-                   ROW_NUMBER() OVER (PARTITION BY b.ctx, b.sf, b.f, b.added, b.chunk_index < 0 ORDER BY b.chunk_index, b.id) - 1 AS r,
-                   ROW_NUMBER() OVER (PARTITION BY b.ctx, b.sf, b.f ORDER BY b.chunk_index < 0, b.chunk_index, b.id) - 1 AS nr
-            FROM base b
-            JOIN agg a ON a.ctx = b.ctx AND a.sf = b.sf),
-        numbered AS (
-            SELECT id, chunk_index, total_chunks, tc AS tc,
-                   CASE
-                       WHEN f = 1 AND added = 0 AND chunk_index < 0 THEN -1
-                       WHEN f = 1 AND added = 0 THEN CASE WHEN valid THEN chunk_index ELSE r END
-                       WHEN f = 1 THEN fileBase + r
-                       ELSE fileBase + addedCount + nr
-                   END AS ci
-            FROM ranked)
-        UPDATE entries
-           SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
-               total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
-         WHERE entries.id IN (SELECT id FROM numbered WHERE ci <> chunk_index OR tc <> total_chunks)
-        """;
-
-    /// <summary>Sets one row's document position and section directly — the authoritative-at-insert
-    /// write (GH #371) FileIngestor uses instead of the id-order recompute, and the write
-    /// <see cref="AiRaccoon.Infrastructure.Ingestion.ChunkIndexRepair" /> uses to take the section
-    /// the current chunker reports (docs/adr/0048, #549). The FTS trigger covers section, so the
-    /// index resyncs.</summary>
-    public const string SetChunkPosition =
-        "UPDATE entries SET chunk_index = @chunkIndex, total_chunks = @totalChunks, section = @section WHERE id = @id";
-
-    /// <summary>Sets one row's position and total without touching section, so the full-text trigger does not fire.</summary>
-    public const string SetChunkColumns =
-        "UPDATE entries SET chunk_index = @chunkIndex, total_chunks = @totalChunks WHERE id = @id";
+                                                                               WITH base AS (
+                                                                                   SELECT id, chunk_index, total_chunks, {ContextKeyExpression("")} AS ctx, source_file AS sf,
+                                                                                          CASE WHEN path = source_file THEN 1 ELSE 0 END AS f,
+                                                                                          CASE WHEN path = source_file AND chunk_index < 0 AND id > @lastId THEN 1 ELSE 0 END AS added
+                                                                                   FROM entries
+                                                                                   WHERE source_file IS NOT NULL),
+                                                                               agg AS (
+                                                                                   SELECT ctx, sf, COUNT(*) AS tc, SUM(f) - SUM(added) AS held, SUM(added) AS addedCount,
+                                                                                          SUM(CASE WHEN f = 1 AND added = 0 AND chunk_index >= 0 THEN 1 ELSE 0 END) AS known,
+                                                                                          COUNT(DISTINCT CASE WHEN f = 1 AND added = 0 AND chunk_index >= 0 THEN chunk_index END) AS distinctKnown,
+                                                                                          MAX(CASE WHEN f = 1 AND added = 0 THEN chunk_index END) AS maxKnown
+                                                                                   FROM base
+                                                                                   GROUP BY ctx, sf),
+                                                                               ranked AS (
+                                                                                   SELECT b.id, b.chunk_index, b.total_chunks, b.f, b.added, a.tc, a.addedCount,
+                                                                                          CASE WHEN a.known = a.distinctKnown AND COALESCE(a.maxKnown, -1) < a.held THEN a.held ELSE a.known END AS fileBase,
+                                                                                          a.known = a.distinctKnown AND COALESCE(a.maxKnown, -1) < a.held AS valid,
+                                                                                          ROW_NUMBER() OVER (PARTITION BY b.ctx, b.sf, b.f, b.added, b.chunk_index < 0 ORDER BY b.chunk_index, b.id) - 1 AS r,
+                                                                                          ROW_NUMBER() OVER (PARTITION BY b.ctx, b.sf, b.f ORDER BY b.chunk_index < 0, b.chunk_index, b.id) - 1 AS nr
+                                                                                   FROM base b
+                                                                                   JOIN agg a ON a.ctx = b.ctx AND a.sf = b.sf),
+                                                                               numbered AS (
+                                                                                   SELECT id, chunk_index, total_chunks, tc AS tc,
+                                                                                          CASE
+                                                                                              WHEN f = 1 AND added = 0 AND chunk_index < 0 THEN -1
+                                                                                              WHEN f = 1 AND added = 0 THEN CASE WHEN valid THEN chunk_index ELSE r END
+                                                                                              WHEN f = 1 THEN fileBase + r
+                                                                                              ELSE fileBase + addedCount + nr
+                                                                                          END AS ci
+                                                                                   FROM ranked)
+                                                                               UPDATE entries
+                                                                                  SET chunk_index  = (SELECT ci FROM numbered n WHERE n.id = entries.id),
+                                                                                      total_chunks = (SELECT tc FROM numbered n WHERE n.id = entries.id)
+                                                                                WHERE entries.id IN (SELECT id FROM numbered WHERE ci <> chunk_index OR tc <> total_chunks)
+                                                                               """;
 
     // Renumbers survivors after a row is removed from a (ctx, source_file) group: shifts every
     // later chunk_index down by one and shrinks total_chunks — never re-derives from id order, so it
@@ -982,48 +1013,94 @@ internal static class MemorySql
                                                                      WHERE source_file IS NOT NULL AND ({ContextKeyExpression("")}) = @ctx AND source_file = @sourceFile
                                                                     """;
 
-    // Chunk-budget rebudget (config-D P1, ChunkBudgetReconciler): note groups are exactly the
-    // whole-write groups DeleteMatchPredicate's own definition names — one bucket and path, never a
-    // mirror row (path = source_file) — and mirror groups are ReingestRepair's own mirror rows. The
-    // row selection is bucket-scoped so a group is one write's complete chunk run: its rows reassemble
-    // to the body their path names and nothing else is ever in scope for one replace.
-    public const string SelectRebudgetNoteGroups = """
-                                                   SELECT scope AS Scope, project_id AS ProjectId, context_label AS ContextLabel,
-                                                          workspace_id AS WorkspaceId, path AS Path
-                                                   FROM entries
-                                                   WHERE value IS NOT NULL AND path IS NOT NULL
-                                                     AND (source_file IS NULL OR source_file <> path)
-                                                   GROUP BY scope, project_id, context_label, workspace_id, path
-                                                   """;
+    public static readonly string DeleteCodeBySourcePath = $"DELETE FROM code_entries WHERE {AtOrUnderPath("code_entries")}";
 
-    public const string SelectRebudgetGroupRows = """
-                                                 SELECT id AS Id, hash AS Hash, value AS Value, source_file AS SourceFile,
-                                                        section AS Section, scope AS Scope, project_id AS ProjectId,
-                                                        context_label AS ContextLabel, workspace_id AS WorkspaceId,
-                                                        agent_id AS AgentId, created_at AS CreatedAt, source_id AS SourceId,
-                                                        chunk_index AS ChunkIndex, ttl_days AS TtlDays, entry_type AS EntryType
-                                                 FROM entries
-                                                 WHERE path = @path AND scope IS @scope AND project_id IS @projectId
-                                                   AND context_label IS @contextLabel AND workspace_id IS @workspaceId
-                                                   AND (source_file IS NULL OR source_file <> path)
-                                                 ORDER BY id
-                                                 """;
+    public static readonly string DeleteChunksForPathExceptBucketPredicate = $"""
+                                                                              project_id = @projectId AND path = @path AND hash NOT IN @keep
+                                                                                AND ({ContextKeyExpression("")}) = @ctx
+                                                                              """;
 
-    public const string SelectRebudgetMirrorGroups = """
-                                                     SELECT DISTINCT scope AS Scope, project_id AS ProjectId, context_label AS ContextLabel,
-                                                            workspace_id AS WorkspaceId, source_file AS SourceFile
-                                                     FROM entries
-                                                     WHERE source_file IS NOT NULL AND path = source_file
-                                                     """;
+    public static readonly string DeleteChunksForPathExceptBucket = $"DELETE FROM entries WHERE {DeleteChunksForPathExceptBucketPredicate}";
 
-    public const string SelectRebudgetMirrorRows = """
-                                                   SELECT id AS Id, hash AS Hash
-                                                   FROM entries
-                                                   WHERE project_id = @projectId AND source_file = @sourceFile
-                                                     AND path = @sourceFile
-                                                     AND scope IS @scope AND context_label IS @contextLabel
-                                                     AND workspace_id IS @workspaceId
-                                                   """;
+    public static readonly string DeleteAllChunksForPathBucketPredicate = $"""
+                                                                           project_id = @projectId AND path = @path
+                                                                             AND ({ContextKeyExpression("")}) = @ctx
+                                                                           """;
+
+    public static readonly string DeleteAllChunksForPathBucket = $"DELETE FROM entries WHERE {DeleteAllChunksForPathBucketPredicate}";
+
+    public static readonly string DeleteCodeChunksForPathExcept = $"DELETE FROM code_entries WHERE {AtOrUnderPath("code_entries")} AND hash NOT IN @keep";
+
+    public static readonly string DeleteAllCodeChunksForPath = $"DELETE FROM code_entries WHERE {AtOrUnderPath("code_entries")}";
+
+    /// <summary>
+    ///     The kind a row holds when nothing declared one, as SQL over the given table alias: a row
+    ///     that MIRRORS a file on disk has path = source_file; every other row is agent-written
+    ///     memory.
+    ///     <para>
+    ///         This is the SQL twin of <see cref="EntryKindClassifier.Classify" />, and the two must
+    ///         agree — a comparison test runs both over one fixture. Three call sites need it: the v20
+    ///         backfill, the vector rebuild's kind normalization and the sync merge, so the rule is
+    ///         written once rather than three times.
+    ///     </para>
+    /// </summary>
+    public static string EntryTypeFromShape(string tableAlias) =>
+        $"CASE WHEN {tableAlias}source_file IS NOT NULL AND {tableAlias}source_file <> '' AND {tableAlias}source_file = {tableAlias}path THEN '{EntryKindWireNames.File}' ELSE '{EntryKindWireNames.Memory}' END";
+
+    /// <summary>
+    ///     The kind a row keeps when it comes from somewhere else: the kind it declares, when it
+    ///     declares one this build knows, and otherwise the kind its shape implies. The SQL twin of
+    ///     the classifier's resolve: a declared kind wins, and only an UNDECLARED row (no kind, or
+    ///     the <c>none</c> marker) is resolved from the shape.
+    ///     <para>
+    ///         The kinds it knows are named by the one vocabulary, so the domain has one home.
+    ///     </para>
+    /// </summary>
+    public static string EntryTypeFromDeclarationOrShape(string tableAlias) =>
+        $"CASE WHEN {tableAlias}entry_type IN ('{EntryKindWireNames.Memory}', '{EntryKindWireNames.File}') THEN {tableAlias}entry_type WHEN {tableAlias}entry_type IS NULL OR {tableAlias}entry_type = '{EntryKindWireNames.None}' THEN {EntryTypeFromShape(tableAlias)} ELSE '{EntryKindWireNames.None}' END";
+
+    /// <summary>
+    ///     Asking for both Memory and File is no type filter on the memory corpus (ADR-0141), so it
+    ///     reaches unclassified rows too; a narrower set selects declared kinds only.
+    /// </summary>
+    private static bool FiltersMemoryRows(EntryType types) => (types & (EntryType.Memory | EntryType.File)) != (EntryType.Memory | EntryType.File);
+
+    public static string SearchByTypes(EntryType types) => SearchTemplate.Replace("{typeFilter}", FiltersMemoryRows(types) ? " AND e.entry_type IN @entryTypes" : "");
+
+    public static string VectorSearchByTypes(EntryType types, bool structure = false) =>
+        (structure ? StructureVectorSearchTemplate : VectorSearchTemplate).Replace("{typeFilter}",
+            FiltersMemoryRows(types) ? "type IN @entryTypes AND " : "");
+
+    // Sync propagates deletes through tombstones (FR-NM-8). The set is derived from the rows the
+    // delete's own predicate reaches — delete_entry's is the whole write (N7/F26), so a
+    // multi-chunk write's untombstoned siblings cannot resurrect on the next sync pull — inside the
+    // caller's transaction, before the delete runs. The committed-scope filter is mandatory: a
+    // workspace row's scope is NULL, and tombstoning it would delete a same-hash workspace row on
+    // another replica and push scratch content off-machine. The tombstone carries the deleted row's
+    // own context_label (NULL for project/shared scope, the real label for custom scope) so a
+    // label-scoped delete cannot suppress a peer's same-hash row under a different label. The upsert
+    // refreshes deleted_at so a later delete still suppresses under the P2.2 age guard; INSERT OR
+    // IGNORE would keep the older value. The conflict target matches TombstoneIndexDdl's
+    // COALESCE-based unique index (MemorySchema.cs) — SQLite never dedupes raw NULLs against each other.
+    // received_at (F36) is this bank's OWN clock, always equal to deleted_at for a locally-originated
+    // tombstone — only SyncService's pull merge writes a received_at that differs from deleted_at
+    // (the remote replica's clock), which is the whole point: GC compares receipt time, never a
+    // remote clock, against the local watermark.
+    public static string TombstoneFromPredicate(string predicate) =>
+        $"INSERT INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at, received_at) SELECT DISTINCT project_id, hash, scope, context_label, @deletedAt, @deletedAt FROM entries WHERE {predicate} AND scope IN ('project', 'custom', 'shared') ON CONFLICT(project_id, hash, scope, COALESCE(context_label, '')) DO UPDATE SET deleted_at = excluded.deleted_at, received_at = excluded.received_at";
+
+    // Mirror delete/rename: removes committed chunks of the source path and its subtree (directory
+    // delete cascades; workspace scratch is transient and stays), plus per-path watch fingerprints
+    // so a delete-then-recreate cycle cannot hash-skip back to stale chunks. Watch registration survives.
+    // Matching is on `path`, not `source_file`: mirror/ingest rows carry the real file path in both
+    // columns, while manual add_memory rows carry path = <sha256(content)>.md and merely cite the
+    // file in source_file — the digest owns the mirror rows, never manual rows that cite the file.
+    /// <summary>
+    ///     Rows of <paramref name="table" /> at the path or under it, as two index seeks on
+    ///     (project_id, path) — an OR of the two the planner can only answer by scanning the project.
+    /// </summary>
+    private static string AtOrUnderPath(string table) =>
+        $"rowid IN (SELECT rowid FROM {table} WHERE project_id = @projectId AND path = @path UNION ALL SELECT rowid FROM {table} WHERE project_id = @projectId AND path >= @subtreeLow AND path < @subtreeHigh)";
 
     // The vec0 `ctx` partition key (ADR-0133; a metadata column from v9 to v18, ADR-0068).
     // Length-prefixed, not
@@ -1078,86 +1155,4 @@ internal static class MemorySql
 
         return $"custom:{projectId.Length}:{projectId}:{context}";
     }
-
-    // Code corpus (docs/work/2026-08-21-code-search-implementation-plan.md §3.4): dedup key is
-    // (project_id, path, hash) — no bucket (scope/context_label/workspace_id) columns, code is
-    // project-scoped only. Same ON CONFLICT DO NOTHING + post-conflict re-read shape as
-    // InsertEntry/SelectChunkIdByPathAndHashInBucket above.
-    // P2-B (docs/adr/0109): identifiers is filled at insert time from the chunk's own value, via
-    // CodeIngestor — never derived in SQL, since only IdentifierSplitter (C#) knows how to split it.
-    public const string InsertCodeEntry = """
-                                          INSERT INTO code_entries (hash, path, value, source_file, line_start, line_end,
-                                                                    project_id, created_at, updated_at, chunk_index, total_chunks,
-                                                                    identifiers)
-                                          VALUES (@hash, @path, @value, @sourceFile, @lineStart, @lineEnd,
-                                                  @projectId, @createdAt, @updatedAt, @chunkIndex, @totalChunks,
-                                                  @identifiers)
-                                          ON CONFLICT DO NOTHING
-                                          """;
-
-    public const string SelectCodeChunkIdByPathAndHash = """
-                                                         SELECT id FROM code_entries
-                                                         WHERE project_id = @projectId AND path = @path AND hash = @hash
-                                                         LIMIT 1
-                                                         """;
-
-    // D-E11 (deliberate divergence from the memory path): dedup rediscovery refreshes the line
-    // range too, not just chunk_index/total_chunks — for code, the line range IS the retrieval
-    // payload, so a file that gains lines above an unchanged chunk must not keep a stale range.
-    public const string UpdateCodeChunkPosition = """
-                                                  UPDATE code_entries
-                                                     SET line_start = @lineStart, line_end = @lineEnd,
-                                                         chunk_index = @chunkIndex, total_chunks = @totalChunks,
-                                                         updated_at = @updatedAt
-                                                   WHERE id = @id
-                                                  """;
-
-    public static readonly string DeleteCodeBySourcePath = "DELETE FROM code_entries WHERE " + AtOrUnderPath("code_entries");
-
-    // Defect B: after a direct ingest reports the chunk set it wrote or rediscovered, everything
-    // else stored under that exact path is a leftover of a previous chunking. Exact path only —
-    // no subtree leg — so re-ingesting one file can never reach a sibling. The predicate is split
-    // out (residual #4) so PruneAsync can tombstone exactly what this reaches
-    // (TombstoneFromPredicate) before the delete runs — a stale chunk a replace prunes must not
-    // resurrect on a peer's next sync pull.
-    public const string DeleteChunksForPathExceptPredicate = """
-                                                              project_id = @projectId AND workspace_id IS NULL
-                                                                AND path = @path AND hash NOT IN @keep
-                                                              """;
-
-    public const string DeleteChunksForPathExcept = "DELETE FROM entries WHERE " + DeleteChunksForPathExceptPredicate;
-
-    // config-D F1: the context-preserving replace's prune — the same delete as the pair above,
-    // narrowed to one bucket by the ctx partition key, so replacing a path's rows in one context
-    // can never delete the same path's rows in another. ContextKeyExpression covers every bucket,
-    // including a workspace partition; the unscoped pair stays for the legacy replace path.
-    public static readonly string DeleteChunksForPathExceptBucketPredicate = $"""
-                                                                               project_id = @projectId AND path = @path AND hash NOT IN @keep
-                                                                                 AND ({ContextKeyExpression("")}) = @ctx
-                                                                               """;
-
-    public static readonly string DeleteChunksForPathExceptBucket =
-        "DELETE FROM entries WHERE " + DeleteChunksForPathExceptBucketPredicate;
-
-    public const string DeleteAllChunksForPathPredicate = """
-                                                           project_id = @projectId AND workspace_id IS NULL
-                                                             AND path = @path
-                                                           """;
-
-    public const string DeleteAllChunksForPath = "DELETE FROM entries WHERE " + DeleteAllChunksForPathPredicate;
-
-    public static readonly string DeleteAllChunksForPathBucketPredicate = $"""
-                                                                            project_id = @projectId AND path = @path
-                                                                              AND ({ContextKeyExpression("")}) = @ctx
-                                                                            """;
-
-    public static readonly string DeleteAllChunksForPathBucket =
-        "DELETE FROM entries WHERE " + DeleteAllChunksForPathBucketPredicate;
-
-    // #436, code-corpus leg of Defect B: same predicate as DeleteCodeBySourcePath (path or
-    // subtree prefix) — inert for a single file, since no sibling file's path can equal
-    // "<this file>/…", so a single-file re-ingest cannot reach a sibling.
-    public static readonly string DeleteCodeChunksForPathExcept = "DELETE FROM code_entries WHERE " + AtOrUnderPath("code_entries") + " AND hash NOT IN @keep";
-
-    public static readonly string DeleteAllCodeChunksForPath = "DELETE FROM code_entries WHERE " + AtOrUnderPath("code_entries");
 }

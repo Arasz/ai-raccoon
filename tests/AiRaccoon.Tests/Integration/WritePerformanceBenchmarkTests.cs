@@ -38,7 +38,7 @@ public class WritePerformanceBenchmarkTests(ITestOutputHelper output)
             var allocBefore = GC.GetAllocatedBytesForCurrentThread();
             var sw = Stopwatch.StartNew();
 
-            for (int i = 0; i < iterations; i++)
+            for (var i = 0; i < iterations; i++)
             {
                 var content = $"# Architectural Decision {i}\nIn memory store v4, we use zero-shot semantic noise filtering with cosine distance.";
                 await memoryStore.WriteAsync(new MemoryWriteRequest(projectId, content), TestContext.Current.CancellationToken);
@@ -54,9 +54,9 @@ public class WritePerformanceBenchmarkTests(ITestOutputHelper output)
 
             // 2. Measure Noise Interception Throughput (Terminal completion logs)
             var noiseSw = Stopwatch.StartNew();
-            int interceptedCount = 0;
+            var interceptedCount = 0;
 
-            for (int i = 0; i < iterations; i++)
+            for (var i = 0; i < iterations; i++)
             {
                 var noiseContent = $"[IMPORTANT: Background process proc_{i} completed normally (exit code 0).\nCommand: cd /tmp && dotnet test\nOutput: test]";
                 var entry = await memoryStore.WriteAsync(new MemoryWriteRequest(projectId, noiseContent), TestContext.Current.CancellationToken);

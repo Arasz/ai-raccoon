@@ -15,10 +15,12 @@ public sealed partial class CodeEmbedder(
     IVecDimensionReconciler vecDimensions)
     : ICodeEmbedder
 {
-    /// <summary>Generator-call sub-batch size (§3.3 D-E9: "batches of 32"), mirroring
-    /// EntryEmbedder.EmbedAsync (S8) — a smaller generator call also shrinks S1's stale-engine race
-    /// window and S2's poison-row blast radius, so a caller's own drain-run limit (CodeReindexJob's
-    /// RowsPerRun) can safely exceed this without either risk growing with it.</summary>
+    /// <summary>
+    ///     Generator-call sub-batch size (§3.3 D-E9: "batches of 32"), mirroring
+    ///     EntryEmbedder.EmbedAsync (S8) — a smaller generator call also shrinks S1's stale-engine race
+    ///     window and S2's poison-row blast radius, so a caller's own drain-run limit (CodeReindexJob's
+    ///     RowsPerRun) can safely exceed this without either risk growing with it.
+    /// </summary>
     internal const int BatchSize = 32;
 
     public async Task<QueryVector> EmbedQueryAsync(SqliteConnection connection, string query,
@@ -63,7 +65,7 @@ public sealed partial class CodeEmbedder(
         var engine = await ReadCodeEngineAsync(connection, cancellationToken);
 
         var rows = (await connection.QueryAsync<EmbedRow>(new CommandDefinition(
-                MemorySql.SelectAllPendingCodeForEmbed, new { limit }, cancellationToken: cancellationToken))).ToList();
+            MemorySql.SelectAllPendingCodeForEmbed, new { limit }, cancellationToken: cancellationToken))).ToList();
         if (rows.Count == 0)
         {
             return 0;
@@ -92,77 +94,6 @@ public sealed partial class CodeEmbedder(
 
         return embedded;
     }
-
-    /// <summary>
-    ///     S2: one row's content can break the WHOLE generator call. Falling back to embedding the
-    ///     slice one row at a time lets the healthy rows still make progress instead of every row
-    ///     — including the healthy ones — staying pending for the maintenance loop's 15s on-demand
-    ///     poll to retry identically forever.
-    /// </summary>
-    private async Task<int> EmbedSliceAsync(SqliteConnection connection,
-        IEmbeddingGenerator<string, Embedding<float>> generator, IReadOnlyList<EmbedRow> slice, string? engine,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var result = await generator.GenerateAsync(slice.Select(row => row.Value),
-                cancellationToken: cancellationToken);
-            var embedded = 0;
-            for (var i = 0; i < slice.Count; i++)
-            {
-                embedded += await MarkEmbeddedAsync(connection, slice[i].Id, result[i].Vector, engine,
-                    cancellationToken);
-            }
-
-            return embedded;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // Recoverable on its own — the per-row retry below reports whatever actually fails —
-            // but a batch call that only fails in a batch is invisible without this line.
-            Log.CodeEmbedBatchFellBackToOneRowAtATime(logger, slice.Count, ex);
-            return await EmbedRowByRowAsync(connection, generator, slice, engine, cancellationToken);
-        }
-    }
-
-    /// <summary>
-    ///     S2 fallback: one generator call per row. A row that still fails on its own gets its
-    ///     attempt count bumped and stays pending — CodeCorpusSchema.MaxEmbedAttempts eventually
-    ///     excludes it from future selection, bounding a poison row's cost instead of retrying it
-    ///     forever.
-    /// </summary>
-    private async Task<int> EmbedRowByRowAsync(SqliteConnection connection,
-        IEmbeddingGenerator<string, Embedding<float>> generator, IReadOnlyList<EmbedRow> slice, string? engine,
-        CancellationToken cancellationToken)
-    {
-        var embedded = 0;
-        foreach (var row in slice)
-        {
-            try
-            {
-                var result = await generator.GenerateAsync([row.Value], cancellationToken: cancellationToken);
-                embedded += await MarkEmbeddedAsync(connection, row.Id, result[0].Vector, engine, cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                var attempts = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
-                        MemorySql.IncrementCodeEmbedAttempts, new { id = row.Id }, cancellationToken: cancellationToken));
-                Log.CodeRowEmbedAttemptFailed(logger, row.Id, row.Path, attempts,
-                    CodeCorpusSchema.MaxEmbedAttempts, ex);
-                if (attempts >= CodeCorpusSchema.MaxEmbedAttempts)
-                {
-                    Log.CodeRowAbandonedAfterMaxEmbedAttempts(logger, row.Id, row.Path, row.SourceFile, attempts);
-                }
-            }
-        }
-
-        return embedded;
-    }
-
-    private static async Task<int> MarkEmbeddedAsync(SqliteConnection connection, long id,
-        ReadOnlyMemory<float> vector, string? engine, CancellationToken cancellationToken) =>
-        await connection.ExecuteAsync(new CommandDefinition(MemorySql.MarkCodeEmbedded,
-                new { id, embedding = EmbeddingBlob.ToBytes(vector), engine }, cancellationToken: cancellationToken));
 
     public async Task<bool> ReconcileFingerprintAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -229,8 +160,79 @@ public sealed partial class CodeEmbedder(
         }
 
         return await connection.ExecuteScalarAsync<bool>(new CommandDefinition(
-                MemorySql.HasPendingCodeEmbed, cancellationToken: cancellationToken));
+            MemorySql.HasPendingCodeEmbed, cancellationToken: cancellationToken));
     }
+
+    /// <summary>
+    ///     S2: one row's content can break the WHOLE generator call. Falling back to embedding the
+    ///     slice one row at a time lets the healthy rows still make progress instead of every row
+    ///     — including the healthy ones — staying pending for the maintenance loop's 15s on-demand
+    ///     poll to retry identically forever.
+    /// </summary>
+    private async Task<int> EmbedSliceAsync(SqliteConnection connection,
+        IEmbeddingGenerator<string, Embedding<float>> generator, IReadOnlyList<EmbedRow> slice, string? engine,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await generator.GenerateAsync(slice.Select(row => row.Value),
+                cancellationToken: cancellationToken);
+            var embedded = 0;
+            for (var i = 0; i < slice.Count; i++)
+            {
+                embedded += await MarkEmbeddedAsync(connection, slice[i].Id, result[i].Vector, engine,
+                    cancellationToken);
+            }
+
+            return embedded;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Recoverable on its own — the per-row retry below reports whatever actually fails —
+            // but a batch call that only fails in a batch is invisible without this line.
+            Log.CodeEmbedBatchFellBackToOneRowAtATime(logger, slice.Count, ex);
+            return await EmbedRowByRowAsync(connection, generator, slice, engine, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    ///     S2 fallback: one generator call per row. A row that still fails on its own gets its
+    ///     attempt count bumped and stays pending — CodeCorpusSchema.MaxEmbedAttempts eventually
+    ///     excludes it from future selection, bounding a poison row's cost instead of retrying it
+    ///     forever.
+    /// </summary>
+    private async Task<int> EmbedRowByRowAsync(SqliteConnection connection,
+        IEmbeddingGenerator<string, Embedding<float>> generator, IReadOnlyList<EmbedRow> slice, string? engine,
+        CancellationToken cancellationToken)
+    {
+        var embedded = 0;
+        foreach (var row in slice)
+        {
+            try
+            {
+                var result = await generator.GenerateAsync([row.Value], cancellationToken: cancellationToken);
+                embedded += await MarkEmbeddedAsync(connection, row.Id, result[0].Vector, engine, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                var attempts = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                    MemorySql.IncrementCodeEmbedAttempts, new { id = row.Id }, cancellationToken: cancellationToken));
+                Log.CodeRowEmbedAttemptFailed(logger, row.Id, row.Path, attempts,
+                    CodeCorpusSchema.MaxEmbedAttempts, ex);
+                if (attempts >= CodeCorpusSchema.MaxEmbedAttempts)
+                {
+                    Log.CodeRowAbandonedAfterMaxEmbedAttempts(logger, row.Id, row.Path, row.SourceFile, attempts);
+                }
+            }
+        }
+
+        return embedded;
+    }
+
+    private static async Task<int> MarkEmbeddedAsync(SqliteConnection connection, long id,
+        ReadOnlyMemory<float> vector, string? engine, CancellationToken cancellationToken) =>
+        await connection.ExecuteAsync(new CommandDefinition(MemorySql.MarkCodeEmbedded,
+            new { id, embedding = EmbeddingBlob.ToBytes(vector), engine }, cancellationToken: cancellationToken));
 
     /// <summary>The code corpus always activates local + a manifest directory (§3.3) — no openai/remote code engine in v1.</summary>
     private static EmbeddingSettings SettingsFor(string codeModel) => new("local", codeModel, null, null);

@@ -2,6 +2,7 @@ using System.Text;
 using AiRaccoon.Infrastructure.Assets;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Resilience;
+using Microsoft.ML.OnnxRuntime;
 
 namespace AiRaccoon.Infrastructure.Embedding.Download;
 
@@ -32,8 +33,10 @@ public enum ModelDownloadFailure
     ManifestBug
 }
 
-/// <summary>A download failed after the plan was accepted; <see cref="Failure" /> says how. The failed
-/// run leaves no half-installed model behind.</summary>
+/// <summary>
+///     A download failed after the plan was accepted; <see cref="Failure" /> says how. The failed
+///     run leaves no half-installed model behind.
+/// </summary>
 public sealed class ModelDownloadException(ModelDownloadFailure failure, string message, Exception? inner = null) : Exception(message, inner)
 {
     public ModelDownloadFailure Failure { get; } = failure;
@@ -55,9 +58,11 @@ public sealed class ModelDownloadRejectedException(ModelDownloadRejection reject
 /// <summary>Loads a downloaded ONNX model in ONNX Runtime as an opset compatibility smoke test (D4 m10).</summary>
 public interface IOnnxSmokeTester
 {
-    /// <summary>Loads the graph and reports each output's declared rank — one session load answers
-    /// both "does it run here" and "does it pool itself" (#470), so nothing opens the model twice.
-    /// Throws <see cref="OnnxSmokeTestException" /> when the model cannot be loaded.</summary>
+    /// <summary>
+    ///     Loads the graph and reports each output's declared rank — one session load answers
+    ///     both "does it run here" and "does it pool itself" (#470), so nothing opens the model twice.
+    ///     Throws <see cref="OnnxSmokeTestException" /> when the model cannot be loaded.
+    /// </summary>
     IReadOnlyDictionary<string, int> Verify(string onnxPath);
 }
 
@@ -70,7 +75,7 @@ public sealed class OrtOnnxSmokeTester : IOnnxSmokeTester
     {
         try
         {
-            using var session = new Microsoft.ML.OnnxRuntime.InferenceSession(onnxPath);
+            using var session = new InferenceSession(onnxPath);
             return session.OutputRanks();
         }
         catch (Exception ex)
@@ -96,8 +101,10 @@ public sealed class DiskSpaceProvider : IDiskSpaceProvider
     }
 }
 
-/// <summary>The <c>&lt;data-root&gt;/models/&lt;slug&gt;</c> slug: repo id sanitized for the file
-/// system (plan §5.4, e.g. <c>BAAI/bge-m3</c> → <c>BAAI__bge-m3</c>).</summary>
+/// <summary>
+///     The <c>&lt;data-root&gt;/models/&lt;slug&gt;</c> slug: repo id sanitized for the file
+///     system (plan §5.4, e.g. <c>BAAI/bge-m3</c> → <c>BAAI__bge-m3</c>).
+/// </summary>
 public static class ModelSlug
 {
     public static string Sanitize(string repoId)
@@ -140,10 +147,10 @@ public sealed class ModelDownloadService(
     ISentencePieceVocabularyReader vocabularyReader,
     IFileHasher? fileHasher = null)
 {
-    private readonly IFileHasher hasher = fileHasher ?? new FileHasher();
-
     /// <summary>Downloads above this total size require --yes (plan §8.3 multi-GB guard).</summary>
     public const long LargeDownloadThresholdBytes = 500L * 1024 * 1024;
+
+    private readonly IFileHasher hasher = fileHasher ?? new FileHasher();
 
     public async Task<ModelDownloadResult> DownloadAsync(ModelDownloadRequest request, CancellationToken cancellationToken)
     {
@@ -238,11 +245,13 @@ public sealed class ModelDownloadService(
         }
     }
 
-    /// <summary>Fetches config.json + tokenizer_config.json (the dims/ctx and special-token-id
-    /// sources) and, when present, 1_Pooling/config.json + modules.json (D11 pooling provenance).
-    /// The config candidates are resolved exactly like the planner resolves them (beside the
-    /// model file first, then the repo root) so a repo's own 1_Pooling/config.json is never
-    /// mistaken for the model config.</summary>
+    /// <summary>
+    ///     Fetches config.json + tokenizer_config.json (the dims/ctx and special-token-id
+    ///     sources) and, when present, 1_Pooling/config.json + modules.json (D11 pooling provenance).
+    ///     The config candidates are resolved exactly like the planner resolves them (beside the
+    ///     model file first, then the repo root) so a repo's own 1_Pooling/config.json is never
+    ///     mistaken for the model config.
+    /// </summary>
     private async Task<Dictionary<string, string>> FetchProvenanceAsync(
         ModelDownloadRequest request, IReadOnlyList<HfTreeEntry> tree, CancellationToken cancellationToken)
     {
@@ -269,7 +278,7 @@ public sealed class ModelDownloadService(
         return rawFiles;
     }
 
-    private static string ModelDirectoryOf(string modelFilePath) => modelFilePath.Contains('/') ? modelFilePath[..modelFilePath.LastIndexOf('/')] : string.Empty;
+    private static string ModelDirectoryOf(string modelFilePath) => modelFilePath.Contains('/') ? modelFilePath[..modelFilePath.LastIndexOf('/')] : "";
 
     private static string? TreeEntryAt(IReadOnlyList<HfTreeEntry> tree, string modelDir, string name)
     {
@@ -294,8 +303,10 @@ public sealed class ModelDownloadService(
         return Encoding.UTF8.GetString(bytes);
     }
 
-    /// <summary>Verify-or-delete (BundledResource.IsVerified pattern): skip when the target is
-    /// already verified; otherwise .part → SHA-256 check → atomic rename, delete on mismatch.</summary>
+    /// <summary>
+    ///     Verify-or-delete (BundledResource.IsVerified pattern): skip when the target is
+    ///     already verified; otherwise .part → SHA-256 check → atomic rename, delete on mismatch.
+    /// </summary>
     private async Task DownloadVerifiedAsync(
         ModelDownloadRequest request,
         PinnedFile file,
@@ -313,7 +324,7 @@ public sealed class ModelDownloadService(
             return;
         }
 
-        var partPath = targetPath + ".part";
+        var partPath = $"{targetPath}.part";
         try
         {
             await DownloadToFileAsync(ResolveUrl(request, file.Path), partPath, cancellationToken);
@@ -321,8 +332,7 @@ public sealed class ModelDownloadService(
             if (expected is not null && !actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
             {
                 throw new ModelDownloadException(ModelDownloadFailure.ChecksumMismatch,
-                    $"sha256 mismatch for '{file.Path}': expected {expected}, got {actual}. " +
-                    "The file was deleted — re-run the download; if it keeps failing, the repo changed (re-resolve) or the channel is untrusted.");
+                    $"sha256 mismatch for '{file.Path}': expected {expected}, got {actual}. The file was deleted — re-run the download; if it keeps failing, the repo changed (re-resolve) or the channel is untrusted.");
             }
 
             File.Move(partPath, targetPath);
@@ -349,8 +359,10 @@ public sealed class ModelDownloadService(
         }
     }
 
-    /// <summary>Streams a URL to a file (multi-GB safe — never buffers the body in memory) with
-    /// the same Polly retry pipeline the asset downloader uses, and fails on zero-length bodies.</summary>
+    /// <summary>
+    ///     Streams a URL to a file (multi-GB safe — never buffers the body in memory) with
+    ///     the same Polly retry pipeline the asset downloader uses, and fails on zero-length bodies.
+    /// </summary>
     private async Task DownloadToFileAsync(string url, string targetPath, CancellationToken cancellationToken)
     {
         var pipeline = ResiliencePipelineFactory.CreateAssetDownloaderPipeline();
@@ -386,8 +398,7 @@ public sealed class ModelDownloadService(
         }
 
         var message =
-            $"the download totals {total / (1024.0 * 1024.0):F1} MiB, which exceeds the {LargeDownloadThresholdBytes / (1024.0 * 1024.0):F0} MiB guard. " +
-            "Pass --yes to confirm, or re-run and answer the prompt.";
+            $"the download totals {total / (1024.0 * 1024.0):F1} MiB, which exceeds the {LargeDownloadThresholdBytes / (1024.0 * 1024.0):F0} MiB guard. Pass --yes to confirm, or re-run and answer the prompt.";
         if (request.Yes || request.Confirm?.Invoke(message) == true)
         {
             return;
@@ -431,7 +442,7 @@ public sealed class ModelDownloadService(
             // upstream-verified signature, only "these are the bytes we fetched".
             ProvenanceFiles: [.. plan.ProvenanceFiles.Select(Pinned)],
             Pooling: new PoolingManifest(plan.PoolingMode,
-                new PoolingOutputNames(plan.EmbeddingOutput ?? string.Empty, plan.TokenEmbeddingsOutput ?? string.Empty)),
+                new PoolingOutputNames(plan.EmbeddingOutput ?? "", plan.TokenEmbeddingsOutput ?? "")),
             Tokenizer: new TokenizerManifest(plan.TokenizerFamily,
                 [.. plan.TokenizerFiles.Select(Pinned)],
                 new TokenizerOptionsManifest(plan.AddBeginOfSentence, plan.AddEndOfSentence, plan.SpecialTokens,
@@ -444,7 +455,7 @@ public sealed class ModelDownloadService(
         if (errors.Count > 0)
         {
             throw new ModelDownloadException(ModelDownloadFailure.ManifestBug,
-                "the download succeeded but the manifest failed validation — this is a bug: " + string.Join("; ", errors));
+                $"the download succeeded but the manifest failed validation — this is a bug: {string.Join("; ", errors)}");
         }
 
         var path = Path.Combine(targetDir, EmbeddingManifest.FileName);
@@ -454,13 +465,15 @@ public sealed class ModelDownloadService(
 
     private string ResolveUrl(ModelDownloadRequest request, string path) => $"{treeClient.Endpoint}/{request.RepoId}/resolve/{request.Revision}/{path}";
 
-    /// <summary>On-disk path for a repo file: files inside the model's directory land flat (the
-    /// plan §8.4 layout); external data in deeper subdirectories keeps its relative path so ONNX
-    /// Runtime resolves it against the .onnx location.</summary>
+    /// <summary>
+    ///     On-disk path for a repo file: files inside the model's directory land flat (the
+    ///     plan §8.4 layout); external data in deeper subdirectories keeps its relative path so ONNX
+    ///     Runtime resolves it against the .onnx location.
+    /// </summary>
     private static string TargetPath(string repoPath, string modelFilePath)
     {
-        var modelDir = modelFilePath.Contains('/') ? modelFilePath[..modelFilePath.LastIndexOf('/')] : string.Empty;
-        if (modelDir.Length > 0 && repoPath.StartsWith(modelDir + "/", StringComparison.Ordinal))
+        var modelDir = modelFilePath.Contains('/') ? modelFilePath[..modelFilePath.LastIndexOf('/')] : "";
+        if (modelDir.Length > 0 && repoPath.StartsWith($"{modelDir}/", StringComparison.Ordinal))
         {
             return repoPath[(modelDir.Length + 1)..];
         }

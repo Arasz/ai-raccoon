@@ -12,7 +12,7 @@ using AiRaccoon.Setup.Logging;
 
 namespace AiRaccoon;
 
-public sealed partial class AppRunner
+public sealed class AppRunner
 {
     private readonly Func<ServerConfig, ILoggerFactory, CancellationToken, Task<ISettingsStore>> _acquireServerSettingsStore;
     private readonly CancellationTokenSource _cts = new();
@@ -23,15 +23,19 @@ public sealed partial class AppRunner
     {
     }
 
-    /// <summary>Test seam: substitutes the settings-server acquisition (ADR-0075 §5.1) with a fake, so a
-    /// command routed through the server never needs a real backend to answer.</summary>
+    /// <summary>
+    ///     Test seam: substitutes the settings-server acquisition (ADR-0075 §5.1) with a fake, so a
+    ///     command routed through the server never needs a real backend to answer.
+    /// </summary>
     internal AppRunner(Func<ServerConfig, ILoggerFactory, CancellationToken, Task<ISettingsStore>> acquireServerSettingsStore)
         : this(acquireServerSettingsStore, Environment.ProcessPath)
     {
     }
 
-    /// <summary>Test seam: also fixes this process's path, so the proxy's auto-start verdict does not
-    /// depend on how the test host itself was launched (the dotnet muxer cannot be a backend).</summary>
+    /// <summary>
+    ///     Test seam: also fixes this process's path, so the proxy's auto-start verdict does not
+    ///     depend on how the test host itself was launched (the dotnet muxer cannot be a backend).
+    /// </summary>
     internal AppRunner(Func<ServerConfig, ILoggerFactory, CancellationToken, Task<ISettingsStore>> acquireServerSettingsStore, string? processPath)
     {
         _acquireServerSettingsStore = acquireServerSettingsStore;
@@ -40,9 +44,11 @@ public sealed partial class AppRunner
 
     internal CancellationToken Token => _cts.Token;
 
-    /// <summary>Test seam: counts how many times a one-shot path wired shutdown-signal cancellation —
-    /// the observable that tells a routed launch (proxy or CLI command: 1) from one that returned
-    /// early (parse failure, help/version: 0).</summary>
+    /// <summary>
+    ///     Test seam: counts how many times a one-shot path wired shutdown-signal cancellation —
+    ///     the observable that tells a routed launch (proxy or CLI command: 1) from one that returned
+    ///     early (parse failure, help/version: 0).
+    /// </summary>
     internal int ShutdownCancellationRegistrations { get; private set; }
 
     public async Task<int> Run(string[] args)
@@ -138,12 +144,16 @@ public sealed partial class AppRunner
         return await proxyRunner.RunAsync(cliInput.ServerConfig, _streams, _processPath, Token);
     }
 
-    /// <summary>One-shot graphs get no host logging pipeline; quiet mode must still reach them
-    /// or a quiet stdio bridge prints per-request HttpClient lines to the terminal (QA-4).</summary>
+    /// <summary>
+    ///     One-shot graphs get no host logging pipeline; quiet mode must still reach them
+    ///     or a quiet stdio bridge prints per-request HttpClient lines to the terminal (QA-4).
+    /// </summary>
     private static void ConfigureConsoleLogging(IServiceCollection services, InfrastructureOptions options) => services.AddLogging(builder => ConfigureCliLogging(builder, options));
 
-    /// <summary>Standalone twin of <see cref="ConfigureConsoleLogging" />: the settings-server acquire
-    /// (ADR-0075 §5.1) needs an <see cref="ILoggerFactory" /> before the CLI-command DI graph exists.</summary>
+    /// <summary>
+    ///     Standalone twin of <see cref="ConfigureConsoleLogging" />: the settings-server acquire
+    ///     (ADR-0075 §5.1) needs an <see cref="ILoggerFactory" /> before the CLI-command DI graph exists.
+    /// </summary>
     private static ILoggerFactory CreateCliLoggerFactory(InfrastructureOptions options) => LoggerFactory.Create(builder => ConfigureCliLogging(builder, options));
 
     private static void ConfigureCliLogging(ILoggingBuilder builder, InfrastructureOptions options)

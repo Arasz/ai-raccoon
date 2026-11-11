@@ -11,6 +11,6 @@ internal static class ValidatorConfiguration
 {
     [ModuleInitializer]
     internal static void ConfigureCamelCasePropertyPaths() =>
-        ValidatorOptions.Global.PropertyNameResolver = (_, member, _) =>
-            member.Name.Length == 0 ? member.Name : char.ToLowerInvariant(member.Name[0]) + member.Name[1..];
+        ValidatorOptions.Global.PropertyNameResolver = static (_, member, _) =>
+            member.Name.Length == 0 ? member.Name : $"{char.ToLowerInvariant(member.Name[0])}{member.Name[1..]}";
 }

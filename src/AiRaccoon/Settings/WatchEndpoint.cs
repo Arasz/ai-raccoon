@@ -80,7 +80,7 @@ internal static class WatchEndpoint
                 extensions[WatchProtocol.CoveringPathExtension] = covering;
             }
 
-            return Results.Problem(detail: ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity,
+            return Results.Problem(ex.Message, statusCode: StatusCodes.Status422UnprocessableEntity,
                 title: "Watch refused", extensions: extensions);
         }
     }

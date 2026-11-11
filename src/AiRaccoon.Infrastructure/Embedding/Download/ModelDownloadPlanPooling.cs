@@ -1,4 +1,3 @@
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 
 namespace AiRaccoon.Infrastructure.Embedding.Download;

@@ -17,7 +17,7 @@ internal static partial class TurnMirrorPrefix
     /// </summary>
     internal static TurnMirrorSplit Split(string value)
     {
-        var v = value ?? string.Empty;
+        var v = value ?? "";
         var matches = Markup().Matches(v);
         if (matches.Count == 0)
         {

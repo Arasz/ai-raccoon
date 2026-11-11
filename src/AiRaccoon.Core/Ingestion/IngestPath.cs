@@ -9,6 +9,8 @@ namespace AiRaccoon.Core.Ingestion;
 /// </summary>
 public static class IngestPath
 {
+    private const int MaxSymlinkDepth = 40;
+
     private static readonly StringComparison Comparison =
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
@@ -40,7 +42,7 @@ public static class IngestPath
     private static string ResolveReal(string path, int depth)
     {
         var normalized = Normalize(path);
-        var root = Path.GetPathRoot(normalized) ?? string.Empty;
+        var root = Path.GetPathRoot(normalized) ?? "";
         var segments = normalized[root.Length..]
             .Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
 
@@ -56,8 +58,6 @@ public static class IngestPath
 
         return current;
     }
-
-    private const int MaxSymlinkDepth = 40;
 
     /// <summary>True when the path equals the scope entry or lies under it (entry covers all subdirectories), comparing real (symlink-resolved) paths on both sides.</summary>
     public static bool IsWithinScope(string path, string scopeEntry)

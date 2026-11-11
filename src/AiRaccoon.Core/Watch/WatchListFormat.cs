@@ -10,7 +10,7 @@ public static class WatchListFormat
     {
         var header = $"target: {target}  enabled: {config.Enabled.ToString().ToLowerInvariant()}  concurrency: {config.Concurrency}  scope:";
         return config.Scope.Count == 0
-            ? header + " (none)"
-            : header + "\n" + string.Join('\n', config.Scope.Select(path => "  " + path));
+            ? $"{header} (none)"
+            : $"{header}\n{string.Join('\n', config.Scope.Select(static path => $"  {path}"))}";
     }
 }

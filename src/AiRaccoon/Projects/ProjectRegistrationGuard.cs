@@ -76,8 +76,7 @@ public sealed partial class ProjectRegistrationGuard(
     internal static string Remedy(string projectId) =>
         Guid.TryParse(projectId, out _)
             ? $"register it with 'ai-raccoon project id register {projectId}'"
-            : "fold it into a registered project with 'ai-raccoon repair project-ids --map <file> --apply', " +
-              $"or keep it with 'ai-raccoon project id register {projectId}'";
+            : $"fold it into a registered project with 'ai-raccoon repair project-ids --map <file> --apply', or keep it with 'ai-raccoon project id register {projectId}'";
 
     internal static partial class Log
     {

@@ -72,7 +72,7 @@ public sealed class WatchScheduler : IWatchScheduler
         return result;
     }
 
-    private static string WatchKey(WatchJob job) => job.Event.ProjectId + "\u0000" + job.WatchPath;
+    private static string WatchKey(WatchJob job) => $"{job.Event.ProjectId}\u0000{job.WatchPath}";
 
     private static async Task RunGuardedAsync(WatchJob job, SemaphoreSlim gate,
         Func<WatchJob, CancellationToken, Task> runJob, CancellationToken cancellationToken)

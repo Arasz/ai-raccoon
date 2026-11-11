@@ -27,8 +27,7 @@ public enum ProjectRegistrationOutcome
     [JsonStringEnumMemberName("already-registered")]
     AlreadyRegistered,
 
-    [JsonStringEnumMemberName("retired")]
-    Retired,
+    [JsonStringEnumMemberName("retired")] Retired,
 
     [JsonStringEnumMemberName("not-a-guid")]
     NotAGuid
@@ -40,12 +39,9 @@ public sealed record ProjectIdCheck(string ProjectId, ProjectIdStatus Status);
 [JsonConverter(typeof(JsonStringEnumConverter<ProjectIdStatus>))]
 public enum ProjectIdStatus
 {
-    [JsonStringEnumMemberName("known")]
-    Known,
+    [JsonStringEnumMemberName("known")] Known,
 
-    [JsonStringEnumMemberName("unknown")]
-    Unknown,
+    [JsonStringEnumMemberName("unknown")] Unknown,
 
-    [JsonStringEnumMemberName("retired")]
-    Retired
+    [JsonStringEnumMemberName("retired")] Retired
 }

@@ -19,7 +19,7 @@ public sealed class McpToolInventoryGenerator : IIncrementalGenerator
         "MCP tool method '{0}' must declare a non-empty Name",
         "McpToolInventory",
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        true);
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -109,7 +109,7 @@ public sealed class McpToolInventoryGenerator : IIncrementalGenerator
         source.AppendLine("    {");
         foreach (var name in names)
         {
-            source.Append("        ").Append(SymbolDisplay.FormatLiteral(name, quote: true)).AppendLine(",");
+            source.Append("        ").Append(SymbolDisplay.FormatLiteral(name, true)).AppendLine(",");
         }
 
         source.AppendLine("    };");
@@ -131,7 +131,7 @@ public sealed class McpToolInventoryGenerator : IIncrementalGenerator
         scopeSource.AppendLine("        {");
         foreach (var scope in scopes)
         {
-            scopeSource.Append("            { ").Append(SymbolDisplay.FormatLiteral(scope.Name, quote: true))
+            scopeSource.Append("            { ").Append(SymbolDisplay.FormatLiteral(scope.Name, true))
                 .Append(", ").Append(scope.Scope).AppendLine(" },");
         }
 

@@ -27,15 +27,19 @@ public static class QueryLengthGuard
 {
     public const string WarnPolicyName = "QueryOverEmbeddingWindow";
 
-    /// <summary>The bundled all-MiniLM-L6-v2 model's content-token budget — applied when the caller
-    /// does not supply the active engine's real one.</summary>
+    /// <summary>
+    ///     The bundled all-MiniLM-L6-v2 model's content-token budget — applied when the caller
+    ///     does not supply the active engine's real one.
+    /// </summary>
     public const int BundledBudgetTokens = 254;
 
     /// <summary>The bundled budget's own char threshold (~1,000 characters of English prose).</summary>
     public const int WarnThresholdChars = 1000;
 
-    /// <summary>Bundled chars-per-token rule of thumb, applied to any other budget so its threshold
-    /// scales rather than staying pinned to the bundled model's own number.</summary>
+    /// <summary>
+    ///     Bundled chars-per-token rule of thumb, applied to any other budget so its threshold
+    ///     scales rather than staying pinned to the bundled model's own number.
+    /// </summary>
     private const double CharsPerTokenEstimate = (double)WarnThresholdChars / BundledBudgetTokens;
 
     public static QueryGuardVerdict Evaluate(string query, int budgetTokens = BundledBudgetTokens)
@@ -47,8 +51,10 @@ public static class QueryLengthGuard
             : QueryGuardVerdict.Clean;
     }
 
-    /// <summary>Exact for the bundled budget (no floating-point rounding involved); scaled from the
-    /// bundled ratio for any other budget.</summary>
+    /// <summary>
+    ///     Exact for the bundled budget (no floating-point rounding involved); scaled from the
+    ///     bundled ratio for any other budget.
+    /// </summary>
     private static int ThresholdCharsFor(int budgetTokens) =>
         budgetTokens == BundledBudgetTokens
             ? WarnThresholdChars

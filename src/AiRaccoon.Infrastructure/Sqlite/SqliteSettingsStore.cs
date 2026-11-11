@@ -21,7 +21,7 @@ public sealed class SqliteSettingsStore(ISqliteConnectionFactory factory) : ISet
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(
-                new CommandDefinition(MemorySql.UpsertSetting, new { key, value }, cancellationToken: cancellationToken));
+            new CommandDefinition(MemorySql.UpsertSetting, new { key, value }, cancellationToken: cancellationToken));
     }
 
     public async Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
@@ -31,8 +31,8 @@ public sealed class SqliteSettingsStore(ISqliteConnectionFactory factory) : ISet
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         var rows = await connection.QueryAsync<SettingRow>(
-                new CommandDefinition(MemorySql.SelectSettingsByPrefix, new { prefix },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(MemorySql.SelectSettingsByPrefix, new { prefix },
+                cancellationToken: cancellationToken));
         return rows.ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
     }
 
@@ -42,7 +42,7 @@ public sealed class SqliteSettingsStore(ISqliteConnectionFactory factory) : ISet
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(
-                new CommandDefinition(MemorySql.DeleteSetting, new { key }, cancellationToken: cancellationToken));
+            new CommandDefinition(MemorySql.DeleteSetting, new { key }, cancellationToken: cancellationToken));
     }
 
     private sealed record SettingRow(string Key, string Value);

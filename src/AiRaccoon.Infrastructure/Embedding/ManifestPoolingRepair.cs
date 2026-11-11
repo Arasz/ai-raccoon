@@ -8,8 +8,10 @@ namespace AiRaccoon.Infrastructure.Embedding;
 /// <summary>Corrects an on-disk manifest whose pooling mode the model's own graph makes unappliable.</summary>
 public interface IManifestPoolingRepair
 {
-    /// <summary>Rewrites the pooling block to 'model-output' when the graph pools itself; true when
-    /// the manifest changed.</summary>
+    /// <summary>
+    ///     Rewrites the pooling block to 'model-output' when the graph pools itself; true when
+    ///     the manifest changed.
+    /// </summary>
     bool Repair(string modelDirectory);
 }
 
@@ -101,10 +103,12 @@ public sealed partial class ManifestPoolingRepair(
         return false;
     }
 
-    /// <summary>The rewritten manifest: <paramref name="embeddingOutputName" /> becomes
-    /// <c>onnx.embeddingOutput</c>. <c>pooling.outputNames.tokenEmbeddings</c> is preserved from
-    /// whatever the manifest already said (falling back to <paramref name="tokenOutput" /> only
-    /// when unset) by the SAME rule for both repair shapes — neither one overwrites it.</summary>
+    /// <summary>
+    ///     The rewritten manifest: <paramref name="embeddingOutputName" /> becomes
+    ///     <c>onnx.embeddingOutput</c>. <c>pooling.outputNames.tokenEmbeddings</c> is preserved from
+    ///     whatever the manifest already said (falling back to <paramref name="tokenOutput" /> only
+    ///     when unset) by the SAME rule for both repair shapes — neither one overwrites it.
+    /// </summary>
     private static EmbeddingManifest Repaired(EmbeddingManifest manifest, string embeddingOutputName, string tokenOutput) =>
         manifest with
         {
@@ -113,9 +117,11 @@ public sealed partial class ManifestPoolingRepair(
             Onnx = manifest.Onnx with { EmbeddingOutput = embeddingOutputName }
         };
 
-    /// <summary>Validates then writes <paramref name="repaired" /> in place; <paramref name="failureReason" />
-    /// names why on a false return. Shared by both repair shapes — each call site logs its own
-    /// truthful message with the id its shape owns.</summary>
+    /// <summary>
+    ///     Validates then writes <paramref name="repaired" /> in place; <paramref name="failureReason" />
+    ///     names why on a false return. Shared by both repair shapes — each call site logs its own
+    ///     truthful message with the id its shape owns.
+    /// </summary>
     private bool WriteManifest(string manifestPath, EmbeddingManifest repaired, out string? failureReason)
     {
         var errors = validator.Validate(repaired);
@@ -129,7 +135,7 @@ public sealed partial class ManifestPoolingRepair(
         // through an in-place write would leave a truncated manifest nothing on this path detects.
         // The rename would happily replace a read-only manifest — an in-place write could not — so
         // that intent is honoured explicitly rather than lost to the change of mechanism.
-        var temporaryPath = manifestPath + ".repair.tmp";
+        var temporaryPath = $"{manifestPath}.repair.tmp";
         try
         {
             if (File.GetAttributes(manifestPath).HasFlag(FileAttributes.ReadOnly))
@@ -184,9 +190,11 @@ public sealed partial class ManifestPoolingRepair(
 
     public static partial class Log
     {
-        /// <summary>#470: the manifest's sole output already served both roles, corrected once.
-        /// Relocated from 424 (2026-08-23, #497/#504 review): a second, truthful pair was needed
-        /// for the #497 shape below, and the gate forbids a second block per owner.</summary>
+        /// <summary>
+        ///     #470: the manifest's sole output already served both roles, corrected once.
+        ///     Relocated from 424 (2026-08-23, #497/#504 review): a second, truthful pair was needed
+        ///     for the #497 shape below, and the gate forbids a second block per owner.
+        /// </summary>
         [LoggerMessage(EventId = 429, Level = LogLevel.Information,
             Message = "Model '{Model}' pools inside its own ONNX graph, so its manifest's pooling mode "
                       + "'{Pooling}' could never be applied: '{Manifest}' now says 'model-output' with "
@@ -194,8 +202,10 @@ public sealed partial class ManifestPoolingRepair(
                       + "produced before and after this correction are the same.")]
         public static partial void PoolingModeRepaired(ILogger logger, string model, string pooling, string output, string manifest);
 
-        /// <summary>The #470-shape correction could not be written; event 417 keeps firing on every
-        /// load until it can (relocated from 425, same review as above).</summary>
+        /// <summary>
+        ///     The #470-shape correction could not be written; event 417 keeps firing on every
+        ///     load until it can (relocated from 425, same review as above).
+        /// </summary>
         [LoggerMessage(EventId = 430, Level = LogLevel.Warning,
             Message = "Manifest '{Manifest}' declares a pooling mode its own ONNX graph makes unappliable "
                       + "and could not be corrected: {Reason}. Embedding is unaffected (the graph's own "

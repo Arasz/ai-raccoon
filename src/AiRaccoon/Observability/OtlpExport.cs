@@ -85,7 +85,7 @@ internal static partial class OtlpExport
     /// </summary>
     private static bool HasSignalPath(string endpoint, string signalPath) =>
         endpoint.EndsWith(signalPath, StringComparison.OrdinalIgnoreCase) ||
-        endpoint.EndsWith(signalPath + "/", StringComparison.OrdinalIgnoreCase);
+        endpoint.EndsWith($"{signalPath}/", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsHttpProtobuf(string? protocol) => string.Equals(protocol?.Trim(), "http/protobuf", StringComparison.OrdinalIgnoreCase);
 

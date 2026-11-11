@@ -1,7 +1,6 @@
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Infrastructure.Sync;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using Xunit;
 using xRetry.v3;

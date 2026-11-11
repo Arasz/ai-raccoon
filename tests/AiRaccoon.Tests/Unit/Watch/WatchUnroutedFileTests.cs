@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
 using Shouldly;
 using Xunit;
@@ -49,7 +48,7 @@ public sealed class WatchUnroutedFileTests
     {
         using var dir = TempDir.New("unrouted-late-nul");
         var file = dir.File("big.xyz");
-        await File.WriteAllTextAsync(file, new string('a', BinaryContent.InspectedLength) + "\0tail",
+        await File.WriteAllTextAsync(file, $"{new string('a', BinaryContent.InspectedLength)}\0tail",
             TestContext.Current.CancellationToken);
         var stack = await StackAsync(dir);
 

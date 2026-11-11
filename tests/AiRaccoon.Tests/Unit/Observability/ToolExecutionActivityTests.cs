@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Observability;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Diagnostics.Metrics.Testing;
+using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 
@@ -13,6 +15,50 @@ namespace AiRaccoon.Tests.Unit.Observability;
 [Collection(ObservabilityCollection.Name)]
 public class ToolExecutionActivityTests
 {
+    [Fact]
+    public void RecordInvocation_RecordsDispatchDelayFromTheRequestStartTimestamp()
+    {
+        var timeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var requestStart = timeProvider.GetTimestamp();
+        var requestContext = new DefaultHttpContext();
+        requestContext.Items[OtlpNames.McpRequestStartTimestampKey] = requestStart;
+        timeProvider.Advance(TimeSpan.FromSeconds(2));
+        var metrics = new ToolCallMetrics();
+        var recorder = new RecordingRecorder();
+        using var collector = new Microsoft.Extensions.Diagnostics.Metrics.Testing.MetricCollector<double>(
+            metrics.Meter, "ai_raccoon.mcp.dispatch.delay");
+
+        using (var activity = new ToolExecutionActivity(metrics, "query", "acme", recorder: recorder,
+                   timeProvider: timeProvider, requestContext: requestContext))
+        {
+            activity.RecordInvocation();
+        }
+
+        var metric = collector.GetMeasurementSnapshot().ShouldHaveSingleItem();
+        metric.Value.ShouldBeGreaterThan(1.0);
+        metric.Tags.ShouldBeEmpty();
+        var dispatch = recorder.Recorded.Single(m => m.Name == "mcp.dispatch.delay_ms");
+        dispatch.ProjectId.ShouldBe("acme");
+        dispatch.Value.ShouldBe(2000);
+    }
+
+    [Fact]
+    public void RecordInvocation_DoesNotRecordDispatchDelayWithoutAspNetCoreParent()
+    {
+        var metrics = new ToolCallMetrics();
+        using var collector = new Microsoft.Extensions.Diagnostics.Metrics.Testing.MetricCollector<double>(
+            metrics.Meter, "ai_raccoon.mcp.dispatch.delay");
+        var recorder = new RecordingRecorder();
+
+        using (var activity = new ToolExecutionActivity(metrics, "query", "acme", recorder: recorder))
+        {
+            activity.RecordInvocation();
+        }
+
+        collector.GetMeasurementSnapshot().ShouldBeEmpty();
+        recorder.Recorded.ShouldHaveSingleItem().Name.ShouldBe("query");
+    }
+
     [Fact]
     public void Ctor_StartsActivity_WithToolAndProjectIdTags()
     {

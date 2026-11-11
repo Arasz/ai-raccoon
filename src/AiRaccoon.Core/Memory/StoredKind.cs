@@ -20,11 +20,11 @@ public enum StoredKindState
 /// </summary>
 public readonly record struct StoredKind(StoredKindState State, EntryKind Kind, string? Raw)
 {
-    /// <summary>A row that declares the given kind.</summary>
-    public static StoredKind Of(EntryKind kind) => new(StoredKindState.Declared, kind, null);
-
     /// <summary>A row that declares no kind.</summary>
     public static StoredKind Undeclared => new(StoredKindState.Undeclared, EntryKind.None, null);
+
+    /// <summary>A row that declares the given kind.</summary>
+    public static StoredKind Of(EntryKind kind) => new(StoredKindState.Declared, kind, null);
 
     /// <summary>A row carrying a value this build does not know.</summary>
     public static StoredKind OfUnknown(string raw) => new(StoredKindState.Unknown, EntryKind.None, raw);

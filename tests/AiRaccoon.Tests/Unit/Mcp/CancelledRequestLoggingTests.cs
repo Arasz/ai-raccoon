@@ -1,6 +1,5 @@
 using System.Reflection;
 using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Settings;
 using AiRaccoon.Setup.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

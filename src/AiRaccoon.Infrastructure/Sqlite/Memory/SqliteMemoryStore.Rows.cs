@@ -87,7 +87,7 @@ public sealed partial class SqliteMemoryStore
 
     private sealed record SourceRow(string Path, string Value, string? SourceFile, string? Section, string? SourceType, string? HeadingPath);
 
-    private sealed record DeleteRecomputeRow(string? Scope, string? ContextLabel, string? WorkspaceId, string? SourceFile, long ChunkIndex);
+    internal sealed record DeleteRecomputeRow(string? Scope, string? ContextLabel, string? WorkspaceId, string? SourceFile, long ChunkIndex);
 
     private sealed record SharedRow(string Path, string Value);
 
@@ -116,4 +116,35 @@ public sealed partial class SqliteMemoryStore
 
     /// <summary>A source_file classified into its SourceType and normalized locator.</summary>
     private readonly record struct SourceClassification(SourceType Type, string Locator);
+}
+
+internal static class RowExtensions
+{
+    extension(SqliteMemoryStore.DeleteRecomputeRow row)
+    {
+        public string ContextStringOf(string projectId) => ContextStringOf(row.Scope, row.ContextLabel, row.WorkspaceId, projectId);
+    }
+
+    extension(SqliteMemoryStore.EntryRow row)
+    {
+        internal MemoryEntry ToEntry() => new(row.Hash, row.Path, ContextStringOf(row), row.Value, row.CreatedAt, EntryKind: row.EntryKind);
+    }
+
+    private static string ContextStringOf(SqliteMemoryStore.EntryRow row) => ContextStringOf(row.Scope, row.ContextLabel, row.WorkspaceId, row.ProjectId);
+
+    private static string ContextStringOf(string? scope, string? contextLabel, string? workspaceId, string projectId)
+    {
+        if (workspaceId is not null)
+        {
+            return ContextNaming.WorkspaceContext(workspaceId);
+        }
+
+        return scope switch
+        {
+            MemoryScopes.SharedScope => ContextNaming.SharedContext,
+            MemoryScopes.ProjectScope => ContextNaming.ProjectContext(projectId),
+            MemoryScopes.CustomScope => contextLabel ?? "",
+            _ => ""
+        };
+    }
 }

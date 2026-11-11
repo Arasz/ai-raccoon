@@ -14,19 +14,20 @@ public sealed class SharedProjectScope : ISharedProjectScope
     /// <inheritdoc />
     public bool IsReserved(string? projectId) => IsReservedId(projectId);
 
-    /// <summary>True when the id names the reserved shared target — the one id check, for the call sites that hold no scope.</summary>
-    public static bool IsReservedId(string? projectId) => string.Equals(projectId, Id, StringComparison.Ordinal);
-
     /// <inheritdoc />
-    public string ContextFor(string projectId) => IsReserved(projectId)
-        ? ContextNaming.SharedContext
-        : ContextNaming.ProjectContext(projectId);
+    public string ContextFor(string projectId) =>
+        IsReserved(projectId)
+            ? ContextNaming.SharedContext
+            : ContextNaming.ProjectContext(projectId);
 
     /// <inheritdoc />
     public bool CanExecuteInSharedScope(SearchQuery query) =>
-        !IsReserved(query.ProjectId) || (query.Scope != SearchScope.Project
-            && string.IsNullOrWhiteSpace(query.WorkspaceId) && string.IsNullOrWhiteSpace(query.ContextLabel));
+        !IsReserved(query.ProjectId) || query.Scope != SearchScope.Project
+        && string.IsNullOrWhiteSpace(query.WorkspaceId) && string.IsNullOrWhiteSpace(query.ContextLabel);
 
     /// <inheritdoc />
     public bool CanExecuteInSharedScope(MemoryWriteRequest request) => !IsReserved(request.ProjectId);
+
+    /// <summary>True when the id names the reserved shared target — the one id check, for the call sites that hold no scope.</summary>
+    public static bool IsReservedId(string? projectId) => string.Equals(projectId, Id, StringComparison.Ordinal);
 }

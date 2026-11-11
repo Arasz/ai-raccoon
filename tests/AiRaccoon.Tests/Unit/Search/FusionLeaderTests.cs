@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite.Memory;
 using Shouldly;
 using Xunit;

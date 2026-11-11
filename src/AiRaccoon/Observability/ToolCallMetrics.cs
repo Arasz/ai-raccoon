@@ -6,12 +6,14 @@ namespace AiRaccoon.Observability;
 /// <summary>
 ///     OpenTelemetry-compatible metrics and traces for AiRaccoon MCP tool invocations.
 ///     Meter name is "AiRaccoon.MemoryTools" for discoverability by dotnet-counters.
-///     project_id tags the counter but not the histogram, on cardinality grounds — see ADR 0002.
+///     project_id tags the invocation counter but not the histograms, on cardinality grounds — see ADR 0002.
 /// </summary>
 public sealed class ToolCallMetrics : IToolCallMetrics
 {
+    private readonly Histogram<double> _dispatchDelay;
     private readonly Counter<long> _invocationCount;
     private readonly Histogram<double> _invocationDuration;
+    private readonly Histogram<double> _requestDuration;
 
     public ToolCallMetrics()
     {
@@ -33,6 +35,20 @@ public sealed class ToolCallMetrics : IToolCallMetrics
             OtlpNames.ToolDuration,
             "s",
             "Duration of MCP tool invocations",
+            null,
+            advice);
+
+        _dispatchDelay = Meter.CreateHistogram(
+            OtlpNames.McpDispatchDelay,
+            "s",
+            "Elapsed time from HTTP request start to MCP tool dispatch",
+            null,
+            advice);
+
+        _requestDuration = Meter.CreateHistogram(
+            OtlpNames.McpRequestDuration,
+            "s",
+            "Duration of an HTTP MCP request through response completion",
             null,
             advice);
     }
@@ -74,5 +90,11 @@ public sealed class ToolCallMetrics : IToolCallMetrics
         _invocationDuration.Record(duration.TotalSeconds, histoTags);
     }
 
+    /// <summary>Records dispatch delay without caller-controlled tags.</summary>
+    public void RecordDispatchDelay(TimeSpan duration) => _dispatchDelay.Record(duration.TotalSeconds);
+
     public void Dispose() => Meter.Dispose();
+
+    /// <summary>Records HTTP MCP request duration through response completion.</summary>
+    public void RecordRequestDuration(TimeSpan duration) => _requestDuration.Record(duration.TotalSeconds);
 }

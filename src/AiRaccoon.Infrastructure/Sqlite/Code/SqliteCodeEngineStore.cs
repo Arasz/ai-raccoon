@@ -43,11 +43,7 @@ public sealed class SqliteCodeEngineStore(
         if (chunkBudget < CodeChunker.DefaultBudget)
         {
             throw new CodeEngineActivationRefusedException(
-                $"Manifest '{fullPath}' resolves to a {chunkBudget}-token chunk budget (min(510, context - " +
-                $"reservation)), narrower than the {CodeChunker.DefaultBudget}-token chunks the code corpus's " +
-                "chunker emits — that engine would silently truncate every chunk at embed time. Point " +
-                $"'model code set local' at a manifest whose window is at least {CodeChunker.DefaultBudget} " +
-                "content tokens.");
+                $"Manifest '{fullPath}' resolves to a {chunkBudget}-token chunk budget (min(510, context - reservation)), narrower than the {CodeChunker.DefaultBudget}-token chunks the code corpus's chunker emits — that engine would silently truncate every chunk at embed time. Point 'model code set local' at a manifest whose window is at least {CodeChunker.DefaultBudget} content tokens.");
         }
 
         if (!bundled)

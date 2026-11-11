@@ -1,5 +1,5 @@
+using System.Globalization;
 using System.Net;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AiRaccoon.Core.Decisions;
@@ -18,9 +18,9 @@ internal sealed class DecisionHttpClient : IDecisionClient
     private const int RefusalBodyMaxLength = 4096;
 
     private readonly HttpClient _client;
-    private readonly TimeSpan _requestDeadline;
 
     private readonly TimeSpan _refusalBodyDeadline;
+    private readonly TimeSpan _requestDeadline;
 
     public DecisionHttpClient(HttpClient client, TimeSpan requestDeadline)
         : this(client, requestDeadline, TimeSpan.FromSeconds(5))
@@ -157,7 +157,7 @@ internal sealed class DecisionHttpClient : IDecisionClient
         var (body, complete) = await ReadBoundedAsync(response.Content, _refusalBodyDeadline, cancellationToken);
         var (kind, detail) = complete ? Problem(body) : (null, null);
         throw new DecisionRefusedException(kind ?? $"http-{(int)response.StatusCode}", (int)response.StatusCode,
-            TerminalText.Sanitize($"the server refused the decision request ({kind ?? ((int)response.StatusCode).ToString(System.Globalization.CultureInfo.InvariantCulture)}): {detail ?? body}"));
+            TerminalText.Sanitize($"the server refused the decision request ({kind ?? ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture)}): {detail ?? body}"));
     }
 
     private static (string? Kind, string? Detail) Problem(string body)
@@ -173,10 +173,12 @@ internal sealed class DecisionHttpClient : IDecisionClient
             return (null, null);
         }
 
-        static string? Text(JsonElement root, string name) =>
-            root.ValueKind == JsonValueKind.Object && root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+        static string? Text(JsonElement root, string name)
+        {
+            return root.ValueKind == JsonValueKind.Object && root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
                 ? value.GetString()
                 : null;
+        }
     }
 
     /// <summary>

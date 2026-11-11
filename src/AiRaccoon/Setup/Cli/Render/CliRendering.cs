@@ -58,7 +58,7 @@ internal static class CliRendering
     {
         var helpResult = CliCommandTree.BuildFullRootCommand()
             .Parse([.. cliInput.CommandPath, "--help"], CliArgs.ParserConfiguration);
-        streams.WriteErrorLine(string.Empty);
+        streams.WriteErrorLine("");
         helpResult.Invoke(new InvocationConfiguration { Output = streams.Error, Error = streams.Error });
     }
 

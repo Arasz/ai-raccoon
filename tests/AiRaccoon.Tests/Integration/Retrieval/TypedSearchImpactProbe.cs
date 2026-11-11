@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
-using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -55,7 +54,7 @@ public sealed class TypedSearchImpactProbe(ITestOutputHelper output)
         }
         var artifactPath = Environment.GetEnvironmentVariable("AIRACCOON_TYPED_SEARCH_REPORT")
             ?? Path.Combine(Path.GetTempPath(), "typed-search-impact.json");
-        using var pin = JsonDocument.Parse(await File.ReadAllTextAsync(sourcePath + ".pin.json", TestContext.Current.CancellationToken));
+        using var pin = JsonDocument.Parse(await File.ReadAllTextAsync($"{sourcePath}.pin.json", TestContext.Current.CancellationToken));
         await using var source = File.OpenRead(sourcePath);
         var sourceHash = Convert.ToHexString(await SHA256.HashDataAsync(source, TestContext.Current.CancellationToken)).ToLowerInvariant();
         sourceHash.ShouldBe(pin.RootElement.GetProperty("sha256").GetString());
@@ -88,7 +87,7 @@ public sealed class TypedSearchImpactProbe(ITestOutputHelper output)
                 """);
             var queryRows = embeddedRows.GroupBy(row => row.ProjectId).OrderByDescending(group => group.Count())
                 .Take(2).Select(group => group.OrderBy(row => row.Hash, StringComparer.Ordinal).First()).ToArray();
-            var vectors = queryRows.ToDictionary(row => "pinned-vector-" + row.Id, row => row.Embedding!, StringComparer.Ordinal);
+            var vectors = queryRows.ToDictionary(row => $"pinned-vector-{row.Id}", row => row.Embedding!, StringComparer.Ordinal);
             var embedder = Substitute.For<IEntryEmbedder>();
             embedder.EmbedQueryAsync(Arg.Any<SqliteConnection>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(call => Task.FromResult(new QueryVector(vectors[call.Arg<string>()])));
@@ -106,7 +105,7 @@ public sealed class TypedSearchImpactProbe(ITestOutputHelper output)
                         .OrderByDescending(hit => hit.Cosine).ThenBy(hit => hit.Row.Hash, StringComparer.Ordinal)
                         .Select(hit => new OracleHit(hit.Row.Hash, hit.Cosine)).ToArray();
                     var expected = oracle.Take(10).ToArray();
-                    var query = new SearchQuery(queryRow.ProjectId, "pinned-vector-" + queryRow.Id, SearchScope.Project,
+                    var query = new SearchQuery(queryRow.ProjectId, $"pinned-vector-{queryRow.Id}", SearchScope.Project,
                         Limit: 10, MinRelativeScore: 0, FtsWeight: 0, VectorWeight: 1, SourceLambda: 0, EntryTypes: types);
                     SearchResults result = null!;
                     for (var warmup = 0; warmup < 3; warmup++)

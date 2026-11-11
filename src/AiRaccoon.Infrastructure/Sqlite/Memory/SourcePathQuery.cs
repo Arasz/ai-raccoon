@@ -38,7 +38,7 @@ internal static partial class SourcePathQuery
         return anchorFile.StartsWith('/')
             ? sourceFile.Equals(anchorFile, StringComparison.OrdinalIgnoreCase)
             : sourceFile.Equals(anchorFile, StringComparison.OrdinalIgnoreCase)
-              || sourceFile.EndsWith("/" + anchorFile, StringComparison.OrdinalIgnoreCase);
+              || sourceFile.EndsWith($"/{anchorFile}", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryParse(string query, out string file, out string ftsExpression)

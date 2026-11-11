@@ -24,13 +24,27 @@ internal record WriteRequest(string TaskId, string SessionId, string RequestId, 
 internal sealed record RegisterTaskRequest(string TaskId, string SessionId, string RequestId, string Title, string? SourceRef = null, string? Actor = null)
     : WriteRequest(TaskId, SessionId, RequestId, Actor)
 {
-    public Task<DecisionResult<DecisionTask>> SendAsync(IDecisionService service, string projectId, CancellationToken ct) =>
-        service.RegisterTaskAsync(projectId, Write(), Title, SourceRef, ct);
+    public Task<DecisionResult<DecisionTask>> SendAsync(IDecisionService service, string projectId, CancellationToken ct) => service.RegisterTaskAsync(projectId, Write(), Title, SourceRef, ct);
 }
 
-internal sealed record RecordRequest(string TaskId, string SessionId, string RequestId, string Title, string Category, string Scenario, string Outcome, string Reasoning,
-    DecisionStatus Status = DecisionStatus.Proposed, double? Confidence = null, string? Maker = null, IReadOnlyList<string>? Alternatives = null,
-    IReadOnlyList<string>? Consequences = null, IReadOnlyList<DecisionSource>? Sources = null, DateTimeOffset? ValidFrom = null, DateTimeOffset? ValidUntil = null, string? Actor = null)
+internal sealed record RecordRequest(
+    string TaskId,
+    string SessionId,
+    string RequestId,
+    string Title,
+    string Category,
+    string Scenario,
+    string Outcome,
+    string Reasoning,
+    DecisionStatus Status = DecisionStatus.Proposed,
+    double? Confidence = null,
+    string? Maker = null,
+    IReadOnlyList<string>? Alternatives = null,
+    IReadOnlyList<string>? Consequences = null,
+    IReadOnlyList<DecisionSource>? Sources = null,
+    DateTimeOffset? ValidFrom = null,
+    DateTimeOffset? ValidUntil = null,
+    string? Actor = null)
     : WriteRequest(TaskId, SessionId, RequestId, Actor)
 {
     public Task<DecisionResult<DecisionVersion>> SendAsync(IDecisionService service, string projectId, CancellationToken ct) =>
@@ -52,16 +66,32 @@ internal sealed record TransitionRequest(string TaskId, string SessionId, string
         service.TransitionAsync(projectId, Write(), decisionId, ExpectedVersion, TargetStatus, ChangeReason, ct);
 }
 
-internal sealed record SupersedeRequest(string TaskId, string SessionId, string RequestId, string ReplacementId, string ReplacedId,
-    int ExpectedReplacementVersion, int ExpectedReplacedVersion, string Reason, string? Actor = null)
+internal sealed record SupersedeRequest(
+    string TaskId,
+    string SessionId,
+    string RequestId,
+    string ReplacementId,
+    string ReplacedId,
+    int ExpectedReplacementVersion,
+    int ExpectedReplacedVersion,
+    string Reason,
+    string? Actor = null)
     : WriteRequest(TaskId, SessionId, RequestId, Actor)
 {
     public Task<DecisionResult<DecisionSupersession>> SendAsync(IDecisionService service, string projectId, CancellationToken ct) =>
         service.SupersedeAsync(projectId, Write(), ReplacementId, ReplacedId, ExpectedReplacementVersion, ExpectedReplacedVersion, Reason, ct);
 }
 
-internal sealed record LinkRequest(string TaskId, string SessionId, string RequestId, string SourceId, string TargetId, DecisionEdgeKind Kind,
-    string Reason, long ExpectedProjectRevision, string? Actor = null)
+internal sealed record LinkRequest(
+    string TaskId,
+    string SessionId,
+    string RequestId,
+    string SourceId,
+    string TargetId,
+    DecisionEdgeKind Kind,
+    string Reason,
+    long ExpectedProjectRevision,
+    string? Actor = null)
     : WriteRequest(TaskId, SessionId, RequestId, Actor)
 {
     public Task<DecisionResult<DecisionEdge>> SendAsync(IDecisionService service, string projectId, CancellationToken ct) =>
@@ -83,8 +113,7 @@ internal sealed record PrecedentsRequest(string Scenario, string? Category = nul
 
 internal sealed record SelectionRequest(DecisionTaskSelector? Selector = null)
 {
-    public Task<DecisionResult<DecisionExport>> SendAsync(IDecisionService service, string projectId, CancellationToken ct) =>
-        service.ExportAsync(projectId, Selector, ct);
+    public Task<DecisionResult<DecisionExport>> SendAsync(IDecisionService service, string projectId, CancellationToken ct) => service.ExportAsync(projectId, Selector, ct);
 }
 
 internal sealed record ImportPreviewRequest(byte[] Source, byte[] Mapping)
@@ -93,8 +122,15 @@ internal sealed record ImportPreviewRequest(byte[] Source, byte[] Mapping)
         service.PreviewSemanticaImportAsync(projectId, Source, Mapping, ct);
 }
 
-internal sealed record ImportApplyRequest(string SessionId, string RequestId, byte[] Source, byte[] Mapping,
-    string SourceDigest, string MappingDigest, long ExpectedProjectRevision, string? Actor = null)
+internal sealed record ImportApplyRequest(
+    string SessionId,
+    string RequestId,
+    byte[] Source,
+    byte[] Mapping,
+    string SourceDigest,
+    string MappingDigest,
+    long ExpectedProjectRevision,
+    string? Actor = null)
 {
     public Task<DecisionResult<DecisionImportOutcome>> SendAsync(IDecisionService service, string projectId, CancellationToken ct) =>
         service.ApplySemanticaImportAsync(projectId, new DecisionImportCommand(SessionId, RequestId, Source, Mapping,

@@ -3,7 +3,6 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Projects;
-using AiRaccoon.Tests;
 using AiRaccoon.Tests.Unit.Projects;
 using AiRaccoon.Tools;
 using ModelContextProtocol;

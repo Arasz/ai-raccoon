@@ -95,7 +95,7 @@ public sealed class MetricsReportService(ISqliteConnectionFactory factory, TimeP
         parameters.Add("ToUnix", now.ToUnixTimeSeconds());
         for (var i = 0; i < MetricsConfigKeys.InternalSeriesPrefixes.Count; i++)
         {
-            parameters.Add($"Prefix{i}", MetricsConfigKeys.InternalSeriesPrefixes[i] + "%");
+            parameters.Add($"Prefix{i}", $"{MetricsConfigKeys.InternalSeriesPrefixes[i]}%");
         }
 
         var names = await connection.QueryAsync<string>(new CommandDefinition(DiscoverInternalSeriesNamesSql,

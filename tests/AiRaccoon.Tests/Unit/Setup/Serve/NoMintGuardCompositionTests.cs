@@ -1,5 +1,4 @@
 using AiRaccoon.Hosting.Common;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli.Commands;

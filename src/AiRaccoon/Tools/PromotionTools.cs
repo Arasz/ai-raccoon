@@ -67,7 +67,7 @@ public sealed class PromotionTools(
     private static string Truncate(string value) =>
         value.Length <= SharedExtractionService.PreviewLength
             ? value
-            : value[..(SharedExtractionService.PreviewLength - 1)] + "…";
+            : $"{value[..(SharedExtractionService.PreviewLength - 1)]}…";
 
     [McpServerTool(Name = TnDeleteMemoryFromRanking)]
     [McpToolScope(ToolScope.Project)]

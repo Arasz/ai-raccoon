@@ -133,20 +133,21 @@ public static class IdentityProof
     ///     branches (a local check and a remote answer), so the text names both rather than picking
     ///     one as fact.
     /// </summary>
-    public static string RefusalText(IdentityProofFailure failure) => failure switch
-    {
-        IdentityProofFailure.NoKey =>
-            "this data root has no identity key, or the listener reported it has none",
-        IdentityProofFailure.RootMismatch =>
-            "it serves another data root",
-        IdentityProofFailure.BadSignature =>
-            "its signature does not match this data root's identity key",
-        IdentityProofFailure.Malformed =>
-            "its answer was not a valid identity proof",
-        IdentityProofFailure.NonSuccessStatus =>
-            "it did not answer the identity challenge — an older ai-raccoon build, a non-ai-raccoon listener and a refused connection all look the same",
-        IdentityProofFailure.Timeout =>
-            "it did not answer the identity challenge in time",
-        _ => ThrowHelper.ThrowArgumentOutOfRangeException<string>(nameof(failure))
-    };
+    public static string RefusalText(IdentityProofFailure failure) =>
+        failure switch
+        {
+            IdentityProofFailure.NoKey =>
+                "this data root has no identity key, or the listener reported it has none",
+            IdentityProofFailure.RootMismatch =>
+                "it serves another data root",
+            IdentityProofFailure.BadSignature =>
+                "its signature does not match this data root's identity key",
+            IdentityProofFailure.Malformed =>
+                "its answer was not a valid identity proof",
+            IdentityProofFailure.NonSuccessStatus =>
+                "it did not answer the identity challenge — an older ai-raccoon build, a non-ai-raccoon listener and a refused connection all look the same",
+            IdentityProofFailure.Timeout =>
+                "it did not answer the identity challenge in time",
+            _ => ThrowHelper.ThrowArgumentOutOfRangeException<string>(nameof(failure))
+        };
 }

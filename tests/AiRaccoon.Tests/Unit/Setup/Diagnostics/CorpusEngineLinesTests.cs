@@ -4,7 +4,6 @@ using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Diagnostics;
-using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Shouldly;

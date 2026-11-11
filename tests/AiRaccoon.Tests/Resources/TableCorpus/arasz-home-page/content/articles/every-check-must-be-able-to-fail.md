@@ -16,8 +16,7 @@ My release guard compares the working tree against the last release tag: if a sh
 changed, `VERSION` must have been bumped. It passed 32 consecutive times.
 
 It was, throughout, incapable of failing. It derived its baseline from the last tag — and the last
-tag was eighteen minor versions stale. Against a baseline that old it *always* found changes and
-*always* found a differing `VERSION`. One answer, every time, and that answer looked exactly like
+tag was eighteen minor versions stale. Against a baseline that old it *always* found changes and *always* found a differing `VERSION`. One answer, every time, and that answer looked exactly like
 success.
 
 Nothing in the output distinguished the eight days it was broken from the eight days it worked. A
@@ -27,15 +26,14 @@ check whose verdict cannot vary is not a weak check. It is a decoration that con
 
 Once I had a name for it, I went looking. This is what I found in my own repository:
 
-| Where                          | The degeneracy                                                                                     |
-|--------------------------------|----------------------------------------------------------------------------------------------------|
-| `release_guard` (0.21.0)       | Baseline 18 minors stale — always found changes *and* a bump, so it passed 32 releases              |
-| `release_guard` (0.35.3)       | **Detected** untagged releases, printed `UNTAGGED RELEASES`, and returned `0`                       |
-| `is_instrumented()` (0.34.0)   | Read a command string still containing the literal `${CLAUDE_PROJECT_DIR}`, so every read failed and every hook reported "not instrumented" |
-| `drift.compare()` (#110)       | Hashed the scaffolded copy against the hash recorded when that copy was written — both sides the project's own state, so they always matched |
+| Where                        | The degeneracy                                                                                                                               |
+|------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| `release_guard` (0.21.0)     | Baseline 18 minors stale — always found changes *and* a bump, so it passed 32 releases                                                       |
+| `release_guard` (0.35.3)     | **Detected** untagged releases, printed `UNTAGGED RELEASES`, and returned `0`                                                                |
+| `is_instrumented()` (0.34.0) | Read a command string still containing the literal `${CLAUDE_PROJECT_DIR}`, so every read failed and every hook reported "not instrumented"  |
+| `drift.compare()` (#110)     | Hashed the scaffolded copy against the hash recorded when that copy was written — both sides the project's own state, so they always matched |
 
-Two different failure modes hide in that list. The first and last are checks that always return
-*pass*. The middle one always returns *fail* — every hook reported "not instrumented", which is just
+Two different failure modes hide in that list. The first and last are checks that always return *pass*. The middle one always returns *fail* — every hook reported "not instrumented", which is just
 as uninformative and considerably more annoying. The third reports a real finding and then exits
 zero, which is the purest form: it *knows*, and it doesn't act.
 
@@ -80,8 +78,7 @@ def _release_guard_no_bump(work: Path, provoked: bool) -> Outcome:
     return _run_gate("gates/release_guard.py", "--root", str(repo))
 ```
 
-A real git repository under `tmp_path`, a real tag, a real commit, and the gate invoked as a
-**subprocess** — because this defect class lives in the wiring at least as often as in the logic. A
+A real git repository under `tmp_path`, a real tag, a real commit, and the gate invoked as a **subprocess** — because this defect class lives in the wiring at least as often as in the logic. A
 gate that works when imported and dies when executed is exactly the kind of thing that passes a unit
 test and protects nothing.
 

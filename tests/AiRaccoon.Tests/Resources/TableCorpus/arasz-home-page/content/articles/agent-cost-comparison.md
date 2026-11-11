@@ -13,17 +13,27 @@ categories: [agent-cost]
 
 # What AI Coding Agents Actually Cost: Real Usage Data Across 3 Agents
 
-> **Updated:** Correction, 2026-08-15. Two rows in "Cost Per Million Tokens (Actual API Rates)" misstate the rate that produced the number beside them. The first names the wrong model: it reads `claude-opus-4 (API) | $75.00`, but the usage it points at is `claude-opus-4-8`, a different model, priced at $5.00 input and $25.00 output per million tokens. The $75.00 rate belongs to `claude-opus-4`, which produced none of the tokens measured here. The second is subtler: `claude-sonnet-5 (API) | $15.00` quotes list price, while the $1,141.24 beside it was priced at the introductory $2/$10 rate. The dollar totals are unaffected either way, and so are the ROI multiples downstream. Those totals came out of ccusage, which prices each model at the rate it was actually served at, not out of these explanatory rows. The arithmetic settles it in both cases. At `claude-opus-4` rates, cache reads alone would cost $1,709 (1,139,582,023 tokens at $1.50 per million, the standard tenth-of-input cache rate), blowing past the $938.41 total before a single output token is counted; at `claude-opus-4-8` rates the same reads cost $570, output adds $149, and the remainder leaves room for input and cache writes. Sonnet fails the same test at list price, where reads and output together come to $1,351 against a $1,141.24 total, and passes at the introductory rate at $901. The labels are wrong; the totals are right, and the 7.6x return stands ($3,021 against $399, both in dollars). A third figure does not. The "~26x return on the subscription alone" below divides a dollar value by a euro cost: $3,021 over €114. Like for like it is 23x, using the $130 this article prints beside that €114. The mistake is mine and it runs against the rule stated further down, that every figure here is in USD unless noted.
+> **Updated:** Correction, 2026-08-15. Two rows in "Cost Per Million Tokens (Actual API Rates)" misstate the rate that produced the number beside them. The first names the wrong model: it reads `claude-opus-4 (API) | $75.00`, but the usage
+> it points at is `claude-opus-4-8`, a different model, priced at $5.00 input and $25.00 output per million tokens. The $75.00 rate belongs to `claude-opus-4`, which produced none of the tokens measured here. The second is subtler:
+> `claude-sonnet-5 (API) | $15.00` quotes list price, while the $1,141.24 beside it was priced at the introductory $2/$10 rate. The dollar totals are unaffected either way, and so are the ROI multiples downstream. Those totals came out of
+> ccusage, which prices each model at the rate it was actually served at, not out of these explanatory rows. The arithmetic settles it in both cases. At `claude-opus-4` rates, cache reads alone would cost $1,709 (1,139,582,023 tokens at $1.50
+> per million, the standard tenth-of-input cache rate), blowing past the $938.41 total before a single output token is counted; at `claude-opus-4-8` rates the same reads cost $570, output adds $149, and the remainder leaves room for input and
+> cache writes. Sonnet fails the same test at list price, where reads and output together come to $1,351 against a $1,141.24 total, and passes at the introductory rate at $901. The labels are wrong; the totals are right, and the 7.6x return
+> stands ($3,021 against $399, both in dollars). A third figure does not. The "~26x return on the subscription alone" below divides a dollar value by a euro cost: $3,021 over €114. Like for like it is 23x, using the $130 this article prints
+> beside that €114. The mistake is mine and it runs against the rule stated further down, that every figure here is in USD unless noted.
 
 ## TL;DR
 
-Tracked every token across Claude Code, Hermes Agent (via OpenRouter), and GitHub Copilot for two weeks of real software development. Claude Max delivered $3,021 in API-equivalent value for €350/mo (~$399) but hit weekly limits after ~2 heavy days. mimo-v2.5-pro via OpenRouter cost $0.10/MTok with no usage caps — 1/37th of Claude Sonnet's rate. GitHub Copilot's credit system is consumption-based with variable discounts, not flat-rate. The cost-effective strategy: mimo for 80% of daily work (~$8.60–65.70/day), Claude for high-stakes tasks, Copilot for code review. Total: ~$1,436/mo across all three agents.
+Tracked every token across Claude Code, Hermes Agent (via OpenRouter), and GitHub Copilot for two weeks of real software development. Claude Max delivered $3,021 in API-equivalent value for €350/mo (~$399) but hit weekly limits after ~2
+heavy days. mimo-v2.5-pro via OpenRouter cost $0.10/MTok with no usage caps — 1/37th of Claude Sonnet's rate. GitHub Copilot's credit system is consumption-based with variable discounts, not flat-rate. The cost-effective strategy: mimo for
+80% of daily work (~$8.60–65.70/day), Claude for high-stakes tasks, Copilot for code review. Total: ~$1,436/mo across all three agents.
 
 ---
 
 ## The Agents Tested
 
-> **Note:** All costs below are **what I actually paid** — not universal API pricing. Claude is billed in EUR (includes 23% Polish VAT), everything else in USD. The per-token costs reflect my real spend divided by real token counts from the tracking tools.
+> **Note:** All costs below are **what I actually paid** — not universal API pricing. Claude is billed in EUR (includes 23% Polish VAT), everything else in USD. The per-token costs reflect my real spend divided by real token counts from the
+> tracking tools.
 
 | Agent              | Models                               | Cost / 1M Total Tokens     | Availability                                                                                                                          |
 |--------------------|--------------------------------------|----------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
@@ -33,10 +43,12 @@ Tracked every token across Claude Code, Hermes Agent (via OpenRouter), and GitHu
 
 ### Tracking Tools Used
 
-- **ccusage** (`npx ccusage daily --json`) — the primary tracker. Auto-detects Claude Code, Hermes, Copilot CLI, and many others from their local data files. Provides per-day, per-session, per-model, per-agent breakdowns with cost calculations.
+- **ccusage** (`npx ccusage daily --json`) — the primary tracker. Auto-detects Claude Code, Hermes, Copilot CLI, and many others from their local data files. Provides per-day, per-session, per-model, per-agent breakdowns with cost
+  calculations.
 - **OpenRouter Explorer** — built-in dashboard with per-model token counts, spend, and request counts. Exported as CSV and PDF for this analysis.
 - **OpenRouter Activity API** — granular per-call data including provider routing, cache hits, generation time, and cost breakdowns. 4,454 API calls analyzed from a 2-day period (Jul 22–23).
-- **GitHub Copilot AI Usage Report** — billing export with per-model, per-day credit consumption, discount rates, and quota information. Available from GitHub's billing settings. This is the most granular Copilot data available for individual accounts.
+- **GitHub Copilot AI Usage Report** — billing export with per-model, per-day credit consumption, discount rates, and quota information. Available from GitHub's billing settings. This is the most granular Copilot data available for
+  individual accounts.
 - **GitHub Copilot OTEL** — file-based telemetry export (newly configured). Currently tracking MCP server connections; token-level data will accumulate over time.
 
 ---
@@ -55,9 +67,11 @@ Tracked every token across Claude Code, Hermes Agent (via OpenRouter), and GitHu
 
 The most important difference between these agents isn't cost per token — it's **availability**.
 
-**Claude Max** hits its weekly token limit after ~2 days of heavy use. Sessions terminate mid-task. There's no auto-resume. You either buy additional tokens (€250/mo) or wait for the weekly reset. When you're in flow state on a complex feature, this disrupts workflow.
+**Claude Max** hits its weekly token limit after ~2 days of heavy use. Sessions terminate mid-task. There's no auto-resume. You either buy additional tokens (€250/mo) or wait for the weekly reset. When you're in flow state on a complex
+feature, this disrupts workflow.
 
-**mimo-v2.5-pro via Hermes** has no session limits, no weekly caps, no interruptions. You can work 24 hours straight, 7 days a week. The model is always available. At ~$65.70/day on heavy work days (ccusage, Jul 23), it's a coding partner that never says "you've reached your limit." The 7-day OpenRouter average is lower (~$8.62/day for mimo alone), reflecting lighter usage on some days.
+**mimo-v2.5-pro via Hermes** has no session limits, no weekly caps, no interruptions. You can work 24 hours straight, 7 days a week. The model is always available. At ~$65.70/day on heavy work days (ccusage, Jul 23), it's a coding partner
+that never says "you've reached your limit." The 7-day OpenRouter average is lower (~$8.62/day for mimo alone), reflecting lighter usage on some days.
 
 **The core trade-off:** cost per token matters less than consistent availability.
 
@@ -71,9 +85,11 @@ The most important difference between these agents isn't cost per token — it's
 | Daily cost            | ~$8.60–65.70 (varies) | ~$13.30 (avg, total spend)                                                                                                 |
 | Cost for 2 heavy days | **~$131**             | ~$131 (subscription + overages prorated)                                                                                   |
 
-**The fair comparison:** Claude Max 5x ($100/mo) lets you work roughly 2 heavy days per week before hitting limits. At that usage level, mimo costs about the same (~$131 for 2 days). But mimo doesn't stop there — you can keep going for the remaining 5 days at ~$65.70/day, totaling ~$460/week for uninterrupted 7-day work. Claude would need additional token purchases (€250/mo) and still can't match the continuity.
+**The fair comparison:** Claude Max 5x ($100/mo) lets you work roughly 2 heavy days per week before hitting limits. At that usage level, mimo costs about the same (~$131 for 2 days). But mimo doesn't stop there — you can keep going for the
+remaining 5 days at ~$65.70/day, totaling ~$460/week for uninterrupted 7-day work. Claude would need additional token purchases (€250/mo) and still can't match the continuity.
 
-> **Note:** Anthropic [no longer publishes fixed hours-per-week figures](https://www.morphllm.com/claude-code-usage-limits). The "2 heavy days" is based on observed usage patterns, not official numbers. Your actual limits depend on conversation complexity, model choice, and session activity.
+> **Note:** Anthropic [no longer publishes fixed hours-per-week figures](https://www.morphllm.com/claude-code-usage-limits). The "2 heavy days" is based on observed usage patterns, not official numbers. Your actual limits depend on
+> conversation complexity, model choice, and session activity.
 
 **The trade-off:** mimo costs more per month for continuous use but provides uninterrupted access. Claude is cheaper per-token but subject to session and weekly caps that can interrupt work mid-task.
 
@@ -88,7 +104,8 @@ The most important difference between these agents isn't cost per token — it's
 <!-- Below: checkmarks for mimo (no interruptions, predictable cost, 24/7) -->
 <!-- and X marks for Claude (sessions end, no auto-resume, limits hit mid-work). -->
 
-**The recommended pattern:** Use mimo for the 80% of daily work where continuity matters (implementation, tests, docs, iteration). Use Claude for the 20% where peak quality matters and you can plan around the limits (architecture decisions, complex refactors, code review).
+**The recommended pattern:** Use mimo for the 80% of daily work where continuity matters (implementation, tests, docs, iteration). Use Claude for the 20% where peak quality matters and you can plan around the limits (architecture decisions,
+complex refactors, code review).
 
 ---
 
@@ -96,7 +113,8 @@ The most important difference between these agents isn't cost per token — it's
 
 ### Claude Code — The Subscription Advantage
 
-Claude Code runs on the **Claude Max subscription** (€100/mo, billed in EUR from the EU, includes 23% Polish VAT). The ccusage tool calculates per-token API costs to show what the usage *would have cost* at pay-per-token rates — but the actual out-of-pocket cost is the subscription plus overages.
+Claude Code runs on the **Claude Max subscription** (€100/mo, billed in EUR from the EU, includes 23% Polish VAT). The ccusage tool calculates per-token API costs to show what the usage *would have cost* at pay-per-token rates — but the
+actual out-of-pocket cost is the subscription plus overages.
 
 **API-equivalent value consumed (Jul 8–21, 10 days):**
 
@@ -111,19 +129,22 @@ Claude Code runs on the **Claude Max subscription** (€100/mo, billed in EUR fr
 <!-- Bar widths proportional to cost. Total: $3,021 API-equivalent. -->
 <!-- Note: Actual cost was $399/mo (subscription + overages). | -->
 
-| Model | API-Equivalent Cost | Output Tokens | Cache Read Tokens |
-|---|---|---|---|
-| claude-sonnet-5 | $1,141.24 | 15,294,898 | 3,738,126,393 |
-| claude-opus-4-8 | $938.41 | 5,955,019 | 1,139,582,023 |
-| claude-fable-5 | $912.73 | 3,653,646 | 439,609,992 |
-| claude-haiku-4-5 | $28.41 | 792,839 | 153,025,656 |
-| **Total** | **$3,020.79** | **25,696,402** | **5,470,344,064** |
+| Model            | API-Equivalent Cost | Output Tokens  | Cache Read Tokens |
+|------------------|---------------------|----------------|-------------------|
+| claude-sonnet-5  | $1,141.24           | 15,294,898     | 3,738,126,393     |
+| claude-opus-4-8  | $938.41             | 5,955,019      | 1,139,582,023     |
+| claude-fable-5   | $912.73             | 3,653,646      | 439,609,992       |
+| claude-haiku-4-5 | $28.41              | 792,839        | 153,025,656       |
+| **Total**        | **$3,020.79**       | **25,696,402** | **5,470,344,064** |
 
-**What this means:** The Max plan delivered **$3,021 worth of API tokens for €114 (~$130 incl. VAT)** — a ~26x return on the subscription alone. Cache reads are 98.6% of all input tokens, meaning the sessions are heavily context-reuse driven.
+**What this means:** The Max plan delivered **$3,021 worth of API tokens for €114 (~$130 incl. VAT)** — a ~26x return on the subscription alone. Cache reads are 98.6% of all input tokens, meaning the sessions are heavily context-reuse
+driven.
 
-**Additional token costs:** The Max plan's weekly allowance wasn't enough for the workload. An additional **€250 (~$285 at €1 = $1.14) in token purchases** were needed to cover overages when the weekly limit was hit mid-session. **Total actual Claude spend: ~$399/mo** ($114 subscription + $285 additional tokens). This is still a massive discount vs. pure API pricing ($3,021), but it's important to note the subscription alone doesn't cover heavy usage.
+**Additional token costs:** The Max plan's weekly allowance wasn't enough for the workload. An additional **€250 (~$285 at €1 = $1.14) in token purchases** were needed to cover overages when the weekly limit was hit mid-session. **Total
+actual Claude spend: ~$399/mo** ($114 subscription + $285 additional tokens). This is still a massive discount vs. pure API pricing ($3,021), but it's important to note the subscription alone doesn't cover heavy usage.
 
-**Currency & VAT note:** Claude's pricing is in **EUR** (billed from the EU). All other services (OpenRouter, Copilot) are billed in **USD**. The EUR amounts include **23% Polish VAT**, which inflates the real cost. The most cost-effective strategy is to **buy additional tokens in bulk** — larger purchases have a lower per-unit cost after VAT, so topping up once when you hit the limit is cheaper than multiple small purchases throughout the month.
+**Currency & VAT note:** Claude's pricing is in **EUR** (billed from the EU). All other services (OpenRouter, Copilot) are billed in **USD**. The EUR amounts include **23% Polish VAT**, which inflates the real cost. The most cost-effective
+strategy is to **buy additional tokens in bulk** — larger purchases have a lower per-unit cost after VAT, so topping up once when you hit the limit is cheaper than multiple small purchases throughout the month.
 
 **Daily API-equivalent cost variance:**
 
@@ -225,11 +246,14 @@ This is where the actual money goes. OpenRouter charges per-token, and the costs
 - Most calls: mimo-v2.5-pro via Xiaomi ($0.003/call) or Novita ($0.005/call)
 - Most expensive calls: mimo-v2.5-pro via DeepInfra ($0.099/call)
 
-**Why mimo-v2.5-pro dominates:** It's the workhorse — 93% of all Hermes cost. The model handles multi-step coding tasks reliably, follows project conventions (reads CLAUDE.md, respects invariants), and manages context windows well. Costs roughly 1/37th of Claude Sonnet per output token.
+**Why mimo-v2.5-pro dominates:** It's the workhorse — 93% of all Hermes cost. The model handles multi-step coding tasks reliably, follows project conventions (reads CLAUDE.md, respects invariants), and manages context windows well. Costs
+roughly 1/37th of Claude Sonnet per output token.
 
-**DeepSeek V4 Pro — underperformed:** Despite consuming 40.3% of total tokens (399M tokens, $35.94), DeepSeek V4 Pro's outputs required significantly more rework. The model missed project conventions and produced less reliable code. The per-token cost was low, but the rework overhead made it poor value in this testing.
+**DeepSeek V4 Pro — underperformed:** Despite consuming 40.3% of total tokens (399M tokens, $35.94), DeepSeek V4 Pro's outputs required significantly more rework. The model missed project conventions and produced less reliable code. The
+per-token cost was low, but the rework overhead made it poor value in this testing.
 
-**Xiaomi's cost advantage:** mimo-v2.5-pro via Xiaomi's direct API was the cheapest routing option at **$0.003/call** (2,632 calls, $8.49 total). The same model via DeepInfra cost **$0.099/call** — 33x more expensive. OpenRouter's automatic provider routing sometimes picked expensive providers, resulting in up to 33x cost variation for the same model.
+**Xiaomi's cost advantage:** mimo-v2.5-pro via Xiaomi's direct API was the cheapest routing option at **$0.003/call** (2,632 calls, $8.49 total). The same model via DeepInfra cost **$0.099/call** — 33x more expensive. OpenRouter's automatic
+provider routing sometimes picked expensive providers, resulting in up to 33x cost variation for the same model.
 
 **Strengths:**
 
@@ -307,22 +331,27 @@ Each model consumes credits at different rates, and discounts are applied based 
 **Key findings:**
 
 - **Code Review model is the biggest consumer** — 12,354 credits ($30.23 net) across 4 days. This is Copilot's automated PR review, and it's heavily used.
-- **Plan upgrades trigger temporary discounts** — the data shows you upgraded from Pro ($10/mo, 1,500 credits) to Pro+ ($39/mo, 7,000 credits) on Jul 12, then to Max ($100/mo, 20,000 credits) on Jul 14. Each upgrade triggered massive 100% discounts on many models that day, which reverted to normal rates the next day. This is likely an upgrade bonus, not a permanent feature. Credits reset monthly (1st of each month at 00:00 UTC), not weekly.
+- **Plan upgrades trigger temporary discounts** — the data shows you upgraded from Pro ($10/mo, 1,500 credits) to Pro+ ($39/mo, 7,000 credits) on Jul 12, then to Max ($100/mo, 20,000 credits) on Jul 14. Each upgrade triggered massive 100%
+  discounts on many models that day, which reverted to normal rates the next day. This is likely an upgrade bonus, not a permanent feature. Credits reset monthly (1st of each month at 00:00 UTC), not weekly.
 - **Discount rates vary wildly** — from 0% to 100%, with an average of 63%. The high discounts are tied to plan upgrades, not permanent features.
 - **12 models available** — far more than expected. Includes Claude Fable 5, Claude Opus 4.8, GPT-5.6 Terra/Luna, and a dedicated Code Review model.
 - **Agent mode vs chat mode** — agent mode (coding_agent_ai_credit) consumed 3,460 credits ($25.03), while chat/inline/review consumed 18,345 credits ($54.97). Code review dominates.
 
-**Projected monthly cost:** At $80/4 days = ~$600/month net — but this is unstable. The discount structure depends on plan tier, upgrade timing, and model selection. On a stable Max plan without mid-cycle upgrades, expect the full 20,000 credits at face value (~$200/month) plus any overages. The $80/4 days figure includes upgrade bonuses that won't recur monthly.
+**Projected monthly cost:** At $80/4 days = ~$600/month net — but this is unstable. The discount structure depends on plan tier, upgrade timing, and model selection. On a stable Max plan without mid-cycle upgrades, expect the full 20,000
+credits at face value (~$200/month) plus any overages. The $80/4 days figure includes upgrade bonuses that won't recur monthly.
 
 **Practical lessons from 4 days of heavy Copilot use:**
 
 - **Run demanding tasks at the end of the month** — credits reset on the 1st at 00:00 UTC. If you burn through your allowance early, you're stuck waiting. Front-loading heavy work into the first week means sitting idle for 3 weeks.
 
-- **Fable has a separate counter** — different models draw from different pools. If you exhaust one model's limit, you can't redirect unused credits from another. This happened during testing: Opus was set as the default model, its limit was hit, and 50% of the Fable allowance remained unused.
+- **Fable has a separate counter** — different models draw from different pools. If you exhaust one model's limit, you can't redirect unused credits from another. This happened during testing: Opus was set as the default model, its limit
+  was hit, and 50% of the Fable allowance remained unused.
 
-- **Manage model selection consciously** — the best strategy is to exhaust premium model credits (Fable) first for high-value work, then fall back to cheaper models for the rest of the cycle. But this requires constant attention to which model is active and how much allowance remains.
+- **Manage model selection consciously** — the best strategy is to exhaust premium model credits (Fable) first for high-value work, then fall back to cheaper models for the rest of the cycle. But this requires constant attention to which
+  model is active and how much allowance remains.
 
-- **Delegation burns limits fast** — you can't just delegate work freely. Every subagent call, every code review, every chat message consumes credits. The moment you stop paying attention to model selection, you waste allowance on the wrong model. This is the biggest operational overhead of Copilot vs. flat-rate alternatives.
+- **Delegation burns limits fast** — you can't just delegate work freely. Every subagent call, every code review, every chat message consumes credits. The moment you stop paying attention to model selection, you waste allowance on the wrong
+  model. This is the biggest operational overhead of Copilot vs. flat-rate alternatives.
 
 ---
 
@@ -348,7 +377,8 @@ Here's the honest comparison — what actually came out of pocket:
 | **GitHub Copilot**               | ~$600/mo               | $80/4 days             | 4 days  | ~20M tokens (est.), 21,805 credits, 12 models        |
 | **Total**                        | **~$1,436/mo**         |                        |         | **~23.8B tokens/month**                              |
 
-> **Token estimates:** Claude tokens from ccusage (includes 98.6% cache reads at Anthropic's discounted rate). Copilot tokens estimated from $80 net spend ÷ blended ~$4/MTok for the Claude/GPT model mix. Hermes tokens are actual counts from OpenRouter Explorer and ccusage. Copilot's $600/mo projection is based on the test period which included plan upgrade bonuses — on a stable Max plan without upgrades, expect ~$100/mo subscription plus overages at $0.01/credit for heavy use.
+> **Token estimates:** Claude tokens from ccusage (includes 98.6% cache reads at Anthropic's discounted rate). Copilot tokens estimated from $80 net spend ÷ blended ~$4/MTok for the Claude/GPT model mix. Hermes tokens are actual counts from
+> OpenRouter Explorer and ccusage. Copilot's $600/mo projection is based on the test period which included plan upgrade bonuses — on a stable Max plan without upgrades, expect ~$100/mo subscription plus overages at $0.01/credit for heavy use.
 
 ### Cost Per Million Tokens (Actual API Rates)
 
@@ -359,7 +389,9 @@ Here's the honest comparison — what actually came out of pocket:
 | xiaomi/mimo-v2.5-pro  | $0.40         | $60/week       | **Real spend via OpenRouter**                       |
 | deepseek-v4-pro       | $1.10         | $36/week       | **Underperformed — rework overhead offset savings** |
 
-**The subscription arbitrage:** Claude Max gives you $3,021 worth of API tokens for €114 ($130, incl. 23% VAT) — but heavy users will hit the weekly limit and need additional purchases (€250/mo = $285). At $399/mo total, you're still getting a 7.6x return vs. pure API pricing. The most cost-effective approach is to **buy additional tokens in bulk** — one large top-up has a lower per-unit cost than multiple small purchases. The question is whether you *need* Claude for everything — and the answer is no. mimo-v2.5-pro handles 80% of implementation work at 1/37th the cost.
+**The subscription arbitrage:** Claude Max gives you $3,021 worth of API tokens for €114 ($130, incl. 23% VAT) — but heavy users will hit the weekly limit and need additional purchases (€250/mo = $285). At $399/mo total, you're still
+getting a 7.6x return vs. pure API pricing. The most cost-effective approach is to **buy additional tokens in bulk** — one large top-up has a lower per-unit cost than multiple small purchases. The question is whether you *need* Claude for
+everything — and the answer is no. mimo-v2.5-pro handles 80% of implementation work at 1/37th the cost.
 
 ---
 
@@ -402,7 +434,8 @@ Here's the honest comparison — what actually came out of pocket:
 
 2. **Cache awareness**: Keep context byte-stable across turns. Claude's cache reads cost 1/10th of writes. OpenRouter cache efficiency is 88.9% — rewriting state files mid-session kills this.
 
-3. **Provider selection on OpenRouter**: The same model costs vastly different amounts depending on the provider. mimo-v2.5-pro via Xiaomi is $0.003/call; via DeepInfra it's $0.099/call. OpenRouter routes automatically, but you can influence it.
+3. **Provider selection on OpenRouter**: The same model costs vastly different amounts depending on the provider. mimo-v2.5-pro via Xiaomi is $0.003/call; via DeepInfra it's $0.099/call. OpenRouter routes automatically, but you can
+   influence it.
 
 4. **Skill loading**: Load skills on-demand, not every turn. Reduces context token overhead significantly.
 
@@ -445,16 +478,17 @@ npx ccusage session --json
 
 ## Code Quality Case Study
 
-A common concern with AI-generated code is quality. Here's evidence from the largest project — job-search-ai-assistant (private repo) — a .NET/C# backend + React 19 frontend built primarily with Claude Code and Hermes Agent. **All code was hand-reviewed and refactored by a human developer before merging.**
+A common concern with AI-generated code is quality. Here's evidence from the largest project — job-search-ai-assistant (private repo) — a .NET/C# backend + React 19 frontend built primarily with Claude Code and Hermes Agent. **All code was
+hand-reviewed and refactored by a human developer before merging.**
 
 ### Backend
 
-| Metric          | Result                                                   |
-|-----------------|----------------------------------------------------------|
+| Metric          | Result                                                    |
+|-----------------|-----------------------------------------------------------|
 | Build           | ✅ 0 warnings, 0 errors                                   |
 | Tests           | ✅ 2,302 passed, 0 failed (1 skipped — visual PDF review) |
-| Critical issues | **None found**                                           |
-| Overall grade   | **Strong** — production-quality                          |
+| Critical issues | **None found**                                            |
+| Overall grade   | **Strong** — production-quality                           |
 
 **Strong points:**
 
@@ -485,7 +519,8 @@ A common concern with AI-generated code is quality. Here's evidence from the lar
 - Tailwind CSS v4 `@theme` configuration rated "exemplary"
 - React 19 ref-as-prop pattern correctly adopted (no deprecated `forwardRef`)
 
-**Note:** This code was built by AI agents (Claude Code + Hermes) but **hand-reviewed and refactored by a human developer**. The reviews above are independent assessments of the final merged code, not the raw AI output. The combination of AI speed + human judgment produces code that passes professional code review standards.
+**Note:** This code was built by AI agents (Claude Code + Hermes) but **hand-reviewed and refactored by a human developer**. The reviews above are independent assessments of the final merged code, not the raw AI output. The combination of
+AI speed + human judgment produces code that passes professional code review standards.
 
 ---
 
@@ -493,9 +528,9 @@ A common concern with AI-generated code is quality. Here's evidence from the lar
 
 - All data collected from July 8–23, 2026 (16 active days)
 - Tasks were real production work across **three projects**:
-  - arasz-home-page (this repo) — Angular + Azure Functions + Terraform (this blog, infrastructure)
-  - job-search-ai-assistant (private repo) — .NET/C# + React 19 + Cosmos DB (the main product)
-  - ai-badger — AI agent marketplace/catalog framework ([GitHub](https://github.com/Arasz/ai-badger))
+    - arasz-home-page (this repo) — Angular + Azure Functions + Terraform (this blog, infrastructure)
+    - job-search-ai-assistant (private repo) — .NET/C# + React 19 + Cosmos DB (the main product)
+    - ai-badger — AI agent marketplace/catalog framework ([GitHub](https://github.com/Arasz/ai-badger))
 - **Claude Code**: Claude Max subscription (€100/mo) + €250 in additional token purchases. Billed in EUR, includes 23% Polish VAT. Converted to USD at €1 = $1.14. API-equivalent costs calculated by ccusage for comparison only.
 - **Hermes Agent**: OpenRouter API (pay-per-token). Actual spend tracked via OpenRouter Explorer and ccusage.
 - **GitHub Copilot**: Business plan. AI credit system with per-model consumption tracked via GitHub's AI Usage Report (billing export). Used primarily via Rider IDE integration, but billing and usage data come from GitHub, not JetBrains.

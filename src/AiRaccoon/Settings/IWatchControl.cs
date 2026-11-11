@@ -36,7 +36,7 @@ internal sealed class WatchRefusedException(string kind, string message, string?
             "project-not-registered" =>
                 $" Fix: look up this repository's id with 'ai-raccoon project id get --name <repo>', or register it with 'ai-raccoon project id register {project}'.",
             "project-retired" => " Fix: use the id it was folded into; 'ai-raccoon project id check <id>' tells which ids are known.",
-            _ => string.Empty
+            _ => ""
         };
         return new WatchRefusedException(refusal.Kind, $"{refusal.Kind}: {refusal.Message}{fix}", refusal.CoveringPath);
     }
@@ -51,6 +51,5 @@ internal sealed class DirectGraphWatchControl : IWatchControl
 
     public Task<IReadOnlyList<WatchStatus>> StatusAsync(string? projectId, CancellationToken cancellationToken = default) => throw Refused();
 
-    private static NotSupportedException Refused() =>
-        new("ai-raccoon: watch registrations change only through the server; this command writes the bank directly");
+    private static NotSupportedException Refused() => new("ai-raccoon: watch registrations change only through the server; this command writes the bank directly");
 }

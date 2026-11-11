@@ -9,7 +9,10 @@ namespace AiRaccoon.Tools;
 public sealed class McpToolScopeAttribute : Attribute
 {
     /// <summary>Declares the tool's scope. The argument is required: the decision is the point.</summary>
-    public McpToolScopeAttribute(ToolScope Scope) => this.Scope = Scope;
+    public McpToolScopeAttribute(ToolScope Scope)
+    {
+        this.Scope = Scope;
+    }
 
     /// <summary>The scope the tool declares.</summary>
     public ToolScope Scope { get; }

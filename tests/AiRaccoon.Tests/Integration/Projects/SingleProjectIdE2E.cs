@@ -1,6 +1,4 @@
 using AiRaccoon.Access;
-using AiRaccoon.Core.Access;
-using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Projects;

@@ -16,6 +16,7 @@ namespace AiRaccoon.Hosting.Common;
 /// </summary>
 public sealed class ServerProbe : IServerProbe
 {
+    public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(1);
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly TimeSpan _requestTimeout;
     private readonly ResiliencePipeline _resiliencePipeline;
@@ -33,8 +34,6 @@ public sealed class ServerProbe : IServerProbe
         : this(new SingleClientFactory(httpClient), resiliencePipeline, requestTimeout)
     {
     }
-
-    public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(1);
 
     public Task<bool> RespondsAsync(int port, CancellationToken ctx) => RespondsAsync(EndpointFor(port), ctx);
 

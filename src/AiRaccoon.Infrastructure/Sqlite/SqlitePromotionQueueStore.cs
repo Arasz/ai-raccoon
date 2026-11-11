@@ -17,8 +17,8 @@ public sealed class SqlitePromotionQueueStore(
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestPromotionQueuePrune,
-                new { requestedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
-                cancellationToken: cancellationToken));
+            new { requestedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
+            cancellationToken: cancellationToken));
     }
 
     public async Task<UpsertOutcome> UpsertAsync(string projectId, IReadOnlyList<QueueCandidate> rows,
@@ -86,10 +86,10 @@ public sealed class SqlitePromotionQueueStore(
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         var rows = await connection.QueryAsync<PromotionQueueRowRow>(
-                new CommandDefinition(
-                    PromotionQueueSql.List,
-                    new { ProjectId = projectId },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                PromotionQueueSql.List,
+                new { ProjectId = projectId },
+                cancellationToken: cancellationToken));
         return [.. rows.Select(ToRow)];
     }
 
@@ -98,10 +98,10 @@ public sealed class SqlitePromotionQueueStore(
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         var removed = await connection.QueryAsync<PromotionQueueRowRow>(
-                new CommandDefinition(
-                    PromotionQueueSql.Discard,
-                    new { ProjectId = projectId, Hash = hash },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                PromotionQueueSql.Discard,
+                new { ProjectId = projectId, Hash = hash },
+                cancellationToken: cancellationToken));
         return [.. removed.Select(ToRow)];
     }
 
@@ -110,21 +110,21 @@ public sealed class SqlitePromotionQueueStore(
         var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         var total = await connection.ExecuteScalarAsync<int>(
-                new CommandDefinition(
-                    "SELECT count(*) FROM promotion_queue",
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                "SELECT count(*) FROM promotion_queue",
+                cancellationToken: cancellationToken));
         var avgWait = await connection.ExecuteScalarAsync<double?>(
-                new CommandDefinition(
-                    "SELECT CAST(avg(@Now - created_at) AS REAL) FROM promotion_queue",
-                    new { Now = now },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                "SELECT CAST(avg(@Now - created_at) AS REAL) FROM promotion_queue",
+                new { Now = now },
+                cancellationToken: cancellationToken));
         // The single stalest row's age: an average hides one very old row once enough fresh
         // rows join the same queue, and nothing else drains a propose-only queue.
         var oldestWait = await connection.ExecuteScalarAsync<double?>(
-                new CommandDefinition(
-                    "SELECT CAST(max(@Now - created_at) AS REAL) FROM promotion_queue",
-                    new { Now = now },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                "SELECT CAST(max(@Now - created_at) AS REAL) FROM promotion_queue",
+                new { Now = now },
+                cancellationToken: cancellationToken));
         // Dynamic query: an empty GROUP BY yields no rows, and Dapper still builds a typed
         // deserializer from the NULL-typed count(*) column — the dynamic path materializes
         // per row and skips that entirely.
@@ -147,10 +147,10 @@ public sealed class SqlitePromotionQueueStore(
         // Dynamic query: over an empty queue the aggregates are untyped NULLs, and Dapper cannot
         // build a typed deserializer from those — the dynamic path materializes the row instead.
         var row = await connection.QuerySingleAsync(
-                new CommandDefinition(
-                    PromotionQueueSql.WaitStats,
-                    new { Now = now, ProjectId = projectId },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                PromotionQueueSql.WaitStats,
+                new { Now = now, ProjectId = projectId },
+                cancellationToken: cancellationToken));
         return new PromotionWaitStats(
             (int)(long)row.WaitingCount,
             (double?)row.AvgWaitSeconds,
@@ -163,10 +163,10 @@ public sealed class SqlitePromotionQueueStore(
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         var victim = await connection.QuerySingleOrDefaultAsync<PromotionQueueRowRow>(
-                new CommandDefinition(
-                    PromotionQueueSql.EvictVictim,
-                    new { ProjectId = projectId },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                PromotionQueueSql.EvictVictim,
+                new { ProjectId = projectId },
+                cancellationToken: cancellationToken));
         return victim is null ? null : ToRow(victim);
     }
 
@@ -175,10 +175,10 @@ public sealed class SqlitePromotionQueueStore(
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await connection.ExecuteAsync(
-                new CommandDefinition(
-                    PromotionQueueSql.ClearStale,
-                    new { ProjectId = projectId, CurrentVersion = currentScorerVersion },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                PromotionQueueSql.ClearStale,
+                new { ProjectId = projectId, CurrentVersion = currentScorerVersion },
+                cancellationToken: cancellationToken));
     }
 
     public async Task RememberDiscardsAsync(string projectId, IReadOnlyList<string> hashes,
@@ -195,11 +195,11 @@ public sealed class SqlitePromotionQueueStore(
         foreach (var hash in hashes.Distinct(StringComparer.Ordinal))
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        PromotionQueueSql.RememberDiscard,
-                        new { ProjectId = projectId, Hash = hash, DiscardedAt = now },
-                        transaction,
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    PromotionQueueSql.RememberDiscard,
+                    new { ProjectId = projectId, Hash = hash, DiscardedAt = now },
+                    transaction,
+                    cancellationToken: cancellationToken));
         }
 
         await transaction.CommitAsync(cancellationToken);
@@ -212,8 +212,8 @@ public sealed class SqlitePromotionQueueStore(
         var cutoff = nowUnixSeconds - (long)retentionDays * 86_400;
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await connection.ExecuteAsync(
-                new CommandDefinition(PromotionQueueSql.PurgeOldDiscards, new { cutoff },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(PromotionQueueSql.PurgeOldDiscards, new { cutoff },
+                cancellationToken: cancellationToken));
     }
 
     public async Task<int> PruneRejectedAsync(string projectId,
@@ -221,10 +221,10 @@ public sealed class SqlitePromotionQueueStore(
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await connection.ExecuteAsync(
-                new CommandDefinition(
-                    PromotionQueueSql.PruneRejected,
-                    new { ProjectId = projectId },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                PromotionQueueSql.PruneRejected,
+                new { ProjectId = projectId },
+                cancellationToken: cancellationToken));
     }
 
     /// <summary>
@@ -259,25 +259,27 @@ public sealed class SqlitePromotionQueueStore(
         }
 
         var removed = await connection.ExecuteAsync(
-                new CommandDefinition(PromotionQueueSql.DeleteOrphans,
-                    transaction: transaction, cancellationToken: cancellationToken));
+            new CommandDefinition(PromotionQueueSql.DeleteOrphans,
+                transaction: transaction, cancellationToken: cancellationToken));
         await transaction.CommitAsync(cancellationToken);
 
         return new PromotionQueueOrphanReport(removed, perProject);
     }
 
-    /// <summary>The real claim (WP5b/A-F11): conditional on claimed_at still being NULL, so a
-    /// concurrent claim of the same row can never both succeed.</summary>
+    /// <summary>
+    ///     The real claim (WP5b/A-F11): conditional on claimed_at still being NULL, so a
+    ///     concurrent claim of the same row can never both succeed.
+    /// </summary>
     public async Task<PromotionQueueRow?> ClaimAsync(string projectId, string hash,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         var claimedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds();
         var row = await connection.QuerySingleOrDefaultAsync<PromotionQueueRowRow>(
-                new CommandDefinition(
-                    PromotionQueueSql.Claim,
-                    new { ProjectId = projectId, Hash = hash, ClaimedAt = claimedAt },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                PromotionQueueSql.Claim,
+                new { ProjectId = projectId, Hash = hash, ClaimedAt = claimedAt },
+                cancellationToken: cancellationToken));
         return row is null ? null : ToRow(row);
     }
 
@@ -286,10 +288,10 @@ public sealed class SqlitePromotionQueueStore(
         var cutoffAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() - (long)staleAfter.TotalSeconds;
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         return await connection.ExecuteAsync(
-                new CommandDefinition(
-                    PromotionQueueSql.ReclaimStaleClaims,
-                    new { CutoffAt = cutoffAt },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                PromotionQueueSql.ReclaimStaleClaims,
+                new { CutoffAt = cutoffAt },
+                cancellationToken: cancellationToken));
     }
 
     private static PromotionQueueRow ToRow(PromotionQueueRowRow row) =>

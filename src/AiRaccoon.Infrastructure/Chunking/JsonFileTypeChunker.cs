@@ -124,7 +124,7 @@ public sealed class JsonFileTypeChunker : IJsonChunker
 
             if (currentItems.Count > 0 && currentTokens + itemTokens + 1 > maxTokens)
             {
-                chunks.Add("[\n  " + string.Join(",\n  ", currentItems) + "\n]");
+                chunks.Add($"[\n  {string.Join(",\n  ", currentItems)}\n]");
                 currentItems.Clear();
                 currentTokens = countTokens("[\n]");
             }
@@ -143,7 +143,7 @@ public sealed class JsonFileTypeChunker : IJsonChunker
 
         if (currentItems.Count > 0)
         {
-            chunks.Add("[\n  " + string.Join(",\n  ", currentItems) + "\n]");
+            chunks.Add($"[\n  {string.Join(",\n  ", currentItems)}\n]");
         }
 
         return EnsureWithinBudget(chunks.Count > 0 ? chunks : ChunkFallback(rawText, maxTokens, countTokens),

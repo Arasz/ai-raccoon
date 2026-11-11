@@ -1,9 +1,7 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
-using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Projects;
-using AiRaccoon.Tests;
 using AiRaccoon.Tools;
 using Shouldly;
 using Xunit;

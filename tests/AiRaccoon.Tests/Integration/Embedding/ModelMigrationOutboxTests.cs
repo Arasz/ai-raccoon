@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -77,7 +76,7 @@ public sealed class ModelMigrationOutboxTests : IAsyncLifetime
 
             var migration = await ReadMigrationAsync();
             migration.ShouldNotBeNull();
-            migration!.IsOpen.ShouldBeTrue();
+            migration.IsOpen.ShouldBeTrue();
             migration.Engine.ShouldBe($"local:{otherPath}");
         }
         finally

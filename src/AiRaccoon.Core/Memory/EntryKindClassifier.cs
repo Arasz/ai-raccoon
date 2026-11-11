@@ -50,22 +50,24 @@ public sealed class EntryKindClassifier : IEntryKindClassifier
     ///     SET has no stored form — a row holds one kind — so a set is refused loudly rather than
     ///     written as a value nothing can read.
     /// </summary>
-    public string ToStoredValue(EntryKind kind) => kind switch
-    {
-        EntryKind.None => EntryKindWireNames.None,
-        EntryKind.Memory => EntryKindWireNames.Memory,
-        EntryKind.File => EntryKindWireNames.File,
-        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind,
-            "A row holds one kind; a set of kinds is the query parameter's vocabulary, not a row's")
-    };
+    public string ToStoredValue(EntryKind kind) =>
+        kind switch
+        {
+            EntryKind.None => EntryKindWireNames.None,
+            EntryKind.Memory => EntryKindWireNames.Memory,
+            EntryKind.File => EntryKindWireNames.File,
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind,
+                "A row holds one kind; a set of kinds is the query parameter's vocabulary, not a row's")
+        };
 
     /// <summary>The kind a stored value names; <see cref="EntryKind.None" /> for null or an unknown value.</summary>
-    public EntryKind FromStoredValue(string? value) => value switch
-    {
-        EntryKindWireNames.Memory => EntryKind.Memory,
-        EntryKindWireNames.File => EntryKind.File,
-        _ => EntryKind.None
-    };
+    public EntryKind FromStoredValue(string? value) =>
+        value switch
+        {
+            EntryKindWireNames.Memory => EntryKind.Memory,
+            EntryKindWireNames.File => EntryKind.File,
+            _ => EntryKind.None
+        };
 
     /// <summary>
     ///     A stored kind, read as one of its THREE states: a kind the row declares, a row that

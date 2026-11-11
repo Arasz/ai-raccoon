@@ -24,7 +24,8 @@ public sealed class ShareTools(
     [Description(
         "Promotes an existing project entry into the flat shared context — the curated, cross-project, sweep-exempt tier. Nothing is shared without this explicit promotion.")]
     public async Task<ApiEnvelope<ShareResult>> Share(
-        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description("The content hash to promote.")]
         string hash,
         CancellationToken cancellationToken = default)
@@ -74,8 +75,8 @@ public sealed class ShareTools(
         foreach (var projectId in request.ProjectIds)
         {
             canonicalIds.Add(await gate.RequireAsync(projectId,
-                    request.Promotes ? AccessRequirement.Write : AccessRequirement.Read,
-                    TnTriggerMemorySharing, cancellationToken));
+                request.Promotes ? AccessRequirement.Write : AccessRequirement.Read,
+                TnTriggerMemorySharing, cancellationToken));
         }
 
         // Fragments of one project meet here (old-id + Old-Id both fold to old-id under an

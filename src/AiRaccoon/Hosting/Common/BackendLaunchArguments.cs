@@ -9,8 +9,10 @@ namespace AiRaccoon.Hosting.Common;
 /// </summary>
 internal static partial class BackendLaunchArguments
 {
-    /// <summary>The dotnet host's own file name: what `Environment.ProcessPath` names under `dotnet run`,
-    /// `dotnet exec`, or a dotnet-tool published without an apphost (a `dotnet &lt;dll&gt;` shim).</summary>
+    /// <summary>
+    ///     The dotnet host's own file name: what `Environment.ProcessPath` names under `dotnet run`,
+    ///     `dotnet exec`, or a dotnet-tool published without an apphost (a `dotnet &lt;dll&gt;` shim).
+    /// </summary>
     private const string DotnetMuxerFileName = "dotnet";
 
     /// <summary>This binary's own filename on the dotnet global-tool shim and on PATH (".exe" on Windows).</summary>
@@ -34,9 +36,11 @@ internal static partial class BackendLaunchArguments
         processPath is not null &&
         string.Equals(Path.GetFileNameWithoutExtension(processPath), DotnetMuxerFileName, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The reason a caller reports when <see cref="Executable()" /> returns null (no leading
-    /// "ai-raccoon: " — callers own their own prefix): names the unpackaged shape and the manual
-    /// `serve` command when that is the reason, else stays generic.</summary>
+    /// <summary>
+    ///     The reason a caller reports when <see cref="Executable()" /> returns null (no leading
+    ///     "ai-raccoon: " — callers own their own prefix): names the unpackaged shape and the manual
+    ///     `serve` command when that is the reason, else stays generic.
+    /// </summary>
     public static string UnavailableExecutableMessage(ServerConfig config) => UnavailableExecutableMessage(Environment.ProcessPath, config);
 
     internal static string UnavailableExecutableMessage(string? processPath, ServerConfig config) =>

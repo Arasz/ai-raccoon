@@ -1,7 +1,6 @@
 using AiRaccoon.Access;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Extraction;
-using AiRaccoon.Tests;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;

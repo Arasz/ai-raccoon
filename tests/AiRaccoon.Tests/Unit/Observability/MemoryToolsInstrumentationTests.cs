@@ -6,7 +6,6 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Observability;
-using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;

@@ -4,7 +4,14 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Core.Decisions;
 
 [JsonConverter(typeof(DecisionEnumConverter<DecisionStatus>))]
-public enum DecisionStatus { Proposed, Accepted, Rejected, Superseded, Deprecated }
+public enum DecisionStatus
+{
+    Proposed,
+    Accepted,
+    Rejected,
+    Superseded,
+    Deprecated
+}
 
 /// <summary>A decision's immutable lifecycle state; transitions return a new value.</summary>
 public sealed record DecisionState
@@ -18,8 +25,7 @@ public sealed record DecisionState
     public DecisionStatus Status { get; }
 
     /// <summary>True for the statuses an import may create directly; superseded needs its replacement edge.</summary>
-    public static bool Importable(DecisionStatus status) =>
-        status is DecisionStatus.Proposed or DecisionStatus.Accepted or DecisionStatus.Rejected or DecisionStatus.Deprecated;
+    public static bool Importable(DecisionStatus status) => status is DecisionStatus.Proposed or DecisionStatus.Accepted or DecisionStatus.Rejected or DecisionStatus.Deprecated;
 
     public void EnsureCanAmend()
     {

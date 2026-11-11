@@ -6,12 +6,11 @@ using AiRaccoon.Core.Observability;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Maintenance;
 using AiRaccoon.Infrastructure.Sqlite;
-using static AiRaccoon.Infrastructure.Sqlite.Sql;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
+using static AiRaccoon.Infrastructure.Sqlite.Sql;
 
 namespace AiRaccoon.Infrastructure.Embedding;
 
@@ -44,13 +43,17 @@ public sealed partial class EntryEmbedder(
 
     private const string BundledModel = "bundled";
 
-    /// <summary>The open migration (its started_at) whose blank-provider state already produced
-    /// the 1012 Warning — one per process per migration, so the 15s relay poll cannot flood (M8).</summary>
-    private long? _warnedNoProviderMigration;
-
-    /// <summary>Spent once this process force-opened its one budget-drift migration: a run whose retryable
-    /// skips withhold the <c>embedding.chunkBudget</c> stamp waits for the next server start to retry (P1c).</summary>
+    /// <summary>
+    ///     Spent once this process force-opened its one budget-drift migration: a run whose retryable
+    ///     skips withhold the <c>embedding.chunkBudget</c> stamp waits for the next server start to retry (P1c).
+    /// </summary>
     private bool _budgetDriftAttempted;
+
+    /// <summary>
+    ///     The open migration (its started_at) whose blank-provider state already produced
+    ///     the 1012 Warning — one per process per migration, so the 15s relay poll cannot flood (M8).
+    /// </summary>
+    private long? _warnedNoProviderMigration;
 
     /// <summary>
     ///     Opens a migration when the engine fingerprint no longer matches the bank's record, or — config-D
@@ -87,40 +90,6 @@ public sealed partial class EntryEmbedder(
         return await ReconcileChunkBudgetAsync(connection, settings, engine, cancellationToken);
     }
 
-    /// <summary>
-    ///     The budget-drift trigger (P1c): budget drift is an equal-fingerprint case, so
-    ///     <see cref="StartMigrationAsync" />'s short-circuit would silently no-op it — this force-opens the
-    ///     outbox transaction WITHOUT <c>MarkAllEmbeddedPending</c>: drift moves chunk boundaries, never
-    ///     vectors, so unchanged rows keep the vectors they have (review F4).
-    /// </summary>
-    private async Task<bool> ReconcileChunkBudgetAsync(SqliteConnection connection, EmbeddingSettings settings,
-        string engine, CancellationToken cancellationToken)
-    {
-        if (_budgetDriftAttempted)
-        {
-            return false;
-        }
-
-        var state = await chunkBudgets.CheckAsync(connection, cancellationToken);
-        if (state.Matches)
-        {
-            return false;
-        }
-
-        if (state.BankIsEmpty)
-        {
-            // Nothing to re-chunk and nothing to prove: stamp silently (plan P1c).
-            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.ChunkBudget,
-                state.ResolvedBudget.ToString(CultureInfo.InvariantCulture), cancellationToken);
-            return false;
-        }
-
-        await OpenMigrationAsync(connection, settings.Provider, settings.Model, settings.BaseUrl, engine,
-            timeProvider.GetUtcNow(), markAllEmbeddedPending: false, cancellationToken);
-        _budgetDriftAttempted = true;
-        return true;
-    }
-
     /// <inheritdoc />
     public async Task<EmbeddingConfig> StartMigrationAsync(SqliteConnection connection, string provider,
         string? model, string? baseUrl, DateTimeOffset now, CancellationToken cancellationToken)
@@ -134,62 +103,12 @@ public sealed partial class EntryEmbedder(
             await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken);
             await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.BaseUrl, baseUrl, cancellationToken);
             await connection.ExecuteAsync(Def(MemorySql.UpsertSetting,
-                    new { key = EmbeddingSettingsKeys.Engine, value = engine }, cancellationToken));
+                new { key = EmbeddingSettingsKeys.Engine, value = engine }, cancellationToken));
             return new EmbeddingConfig(provider, model ?? BundledModel, engine);
         }
 
         return await OpenMigrationAsync(connection, provider, model, baseUrl, engine, now,
-            markAllEmbeddedPending: true, cancellationToken);
-    }
-
-    /// <summary>
-    ///     The outbox transaction both open paths share: the engine settings, the migration-started row,
-    ///     and — only when <paramref name="markAllEmbeddedPending" /> — every embedded row marked pending
-    ///     with its embed attempts reset (a re-embed). The budget-drift trigger passes false: its phase
-    ///     re-chunks, and replacement rows arrive <c>pending</c> on their own (plan P1c, review F4).
-    /// </summary>
-    private async Task<EmbeddingConfig> OpenMigrationAsync(SqliteConnection connection, string provider,
-        string? model, string? baseUrl, string engine, DateTimeOffset now, bool markAllEmbeddedPending,
-        CancellationToken cancellationToken)
-    {
-        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
-        try
-        {
-            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Provider, provider, cancellationToken, transaction);
-            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken, transaction);
-            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.BaseUrl, baseUrl, cancellationToken, transaction);
-            await connection.ExecuteAsync(Def(MemorySql.UpsertSetting,
-                    new { key = EmbeddingSettingsKeys.Engine, value = engine }, cancellationToken, transaction));
-
-            var started = await connection.ExecuteAsync(Def(MemorySql.StartModelMigration,
-                    new { provider, model, baseUrl, engine, startedAt = now.ToUnixTimeSeconds() }, cancellationToken,
-                    transaction));
-            if (started == 0)
-            {
-                await transaction.RollbackAsync(cancellationToken);
-                throw new ModelMigrationInProgressException(
-                    "ai-raccoon: a model migration is already in progress; wait for it to finish before starting another");
-            }
-
-            if (markAllEmbeddedPending)
-            {
-                await connection.ExecuteAsync(Def(MemorySql.MarkAllEmbeddedPending, cancellationToken, transaction));
-                await connection.ExecuteAsync(Def(MemorySql.ResetEmbedAttempts, cancellationToken, transaction));
-            }
-
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch (ModelMigrationInProgressException)
-        {
-            throw;
-        }
-        catch
-        {
-            await transaction.RollbackAsync(CancellationToken.None);
-            throw;
-        }
-
-        return new EmbeddingConfig(provider, model ?? BundledModel, engine);
+            true, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -288,7 +207,7 @@ public sealed partial class EntryEmbedder(
             }
 
             await connection.ExecuteAsync(Def(MemorySql.FinishModelMigration,
-                    new { finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() }, cancellationToken));
+                new { finishedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() }, cancellationToken));
             if (drained > 0)
             {
                 pass.NoteWork();
@@ -341,18 +260,18 @@ public sealed partial class EntryEmbedder(
 
         var result = headingPath.Length > 0
             ? await generator.GenerateAsync([embeddings.DocumentText(settings, value), embeddings.DocumentText(settings, headingPath)],
-                    cancellationToken: cancellationToken)
+                cancellationToken: cancellationToken)
             : await generator.GenerateAsync([embeddings.DocumentText(settings, value)], cancellationToken: cancellationToken);
         var structureEmbedding = headingPath.Length > 0 ? EmbeddingBlob.ToBytes(result[1].Vector) : null;
 
         await connection.ExecuteAsync(Def(MemorySql.MarkEmbedded,
-                new
-                {
-                    id,
-                    embedding = EmbeddingBlob.ToBytes(result[0].Vector),
-                    headingPath,
-                    structureEmbedding
-                }, cancellationToken));
+            new
+            {
+                id,
+                embedding = EmbeddingBlob.ToBytes(result[0].Vector),
+                headingPath,
+                structureEmbedding
+            }, cancellationToken));
     }
 
     /// <summary>Embeds a project's pending rows in batches with the configured engine.</summary>
@@ -369,7 +288,7 @@ public sealed partial class EntryEmbedder(
             }
 
             var batch = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectPendingForEmbed,
-                    new { projectId, limit = Math.Min(BatchSize, remaining) }, cancellationToken))).ToList();
+                new { projectId, limit = Math.Min(BatchSize, remaining) }, cancellationToken))).ToList();
             if (batch.Count == 0)
             {
                 break;
@@ -427,6 +346,90 @@ public sealed partial class EntryEmbedder(
                 NumberStyles.Integer, CultureInfo.InvariantCulture, out var dimensions)
                 ? dimensions
                 : null);
+
+    /// <summary>
+    ///     The budget-drift trigger (P1c): budget drift is an equal-fingerprint case, so
+    ///     <see cref="StartMigrationAsync" />'s short-circuit would silently no-op it — this force-opens the
+    ///     outbox transaction WITHOUT <c>MarkAllEmbeddedPending</c>: drift moves chunk boundaries, never
+    ///     vectors, so unchanged rows keep the vectors they have (review F4).
+    /// </summary>
+    private async Task<bool> ReconcileChunkBudgetAsync(SqliteConnection connection, EmbeddingSettings settings,
+        string engine, CancellationToken cancellationToken)
+    {
+        if (_budgetDriftAttempted)
+        {
+            return false;
+        }
+
+        var state = await chunkBudgets.CheckAsync(connection, cancellationToken);
+        if (state.Matches)
+        {
+            return false;
+        }
+
+        if (state.BankIsEmpty)
+        {
+            // Nothing to re-chunk and nothing to prove: stamp silently (plan P1c).
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.ChunkBudget,
+                state.ResolvedBudget.ToString(CultureInfo.InvariantCulture), cancellationToken);
+            return false;
+        }
+
+        await OpenMigrationAsync(connection, settings.Provider, settings.Model, settings.BaseUrl, engine,
+            timeProvider.GetUtcNow(), false, cancellationToken);
+        _budgetDriftAttempted = true;
+        return true;
+    }
+
+    /// <summary>
+    ///     The outbox transaction both open paths share: the engine settings, the migration-started row,
+    ///     and — only when <paramref name="markAllEmbeddedPending" /> — every embedded row marked pending
+    ///     with its embed attempts reset (a re-embed). The budget-drift trigger passes false: its phase
+    ///     re-chunks, and replacement rows arrive <c>pending</c> on their own (plan P1c, review F4).
+    /// </summary>
+    private async Task<EmbeddingConfig> OpenMigrationAsync(SqliteConnection connection, string provider,
+        string? model, string? baseUrl, string engine, DateTimeOffset now, bool markAllEmbeddedPending,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Provider, provider, cancellationToken, transaction);
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.Model, model, cancellationToken, transaction);
+            await UpsertOrDeleteAsync(connection, EmbeddingSettingsKeys.BaseUrl, baseUrl, cancellationToken, transaction);
+            await connection.ExecuteAsync(Def(MemorySql.UpsertSetting,
+                new { key = EmbeddingSettingsKeys.Engine, value = engine }, cancellationToken, transaction));
+
+            var started = await connection.ExecuteAsync(Def(MemorySql.StartModelMigration,
+                new { provider, model, baseUrl, engine, startedAt = now.ToUnixTimeSeconds() }, cancellationToken,
+                transaction));
+            if (started == 0)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw new ModelMigrationInProgressException(
+                    "ai-raccoon: a model migration is already in progress; wait for it to finish before starting another");
+            }
+
+            if (markAllEmbeddedPending)
+            {
+                await connection.ExecuteAsync(Def(MemorySql.MarkAllEmbeddedPending, cancellationToken, transaction));
+                await connection.ExecuteAsync(Def(MemorySql.ResetEmbedAttempts, cancellationToken, transaction));
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (ModelMigrationInProgressException)
+        {
+            throw;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
+
+        return new EmbeddingConfig(provider, model ?? BundledModel, engine);
+    }
 
     /// <summary>
     ///     Embeds a set of rows with the configured engine; missing rows are skipped. A sub-batch
@@ -515,7 +518,7 @@ public sealed partial class EntryEmbedder(
         CancellationToken cancellationToken)
     {
         var attempts = await connection.ExecuteScalarAsync<int>(Def(MemorySql.IncrementEmbedAttempts,
-                new { id = row.Id }, cancellationToken));
+            new { id = row.Id }, cancellationToken));
         Log.RowEmbedAttemptFailed(logger, row.Id, row.Source, attempts, MaxEmbedAttempts, error);
         if (attempts >= MaxEmbedAttempts)
         {
@@ -524,8 +527,7 @@ public sealed partial class EntryEmbedder(
     }
 
     /// <summary>A failure one row can cause: not cancellation, and not another writer holding the bank's lock.</summary>
-    private static bool IsRowFailure(Exception ex) =>
-        ex is not OperationCanceledException and not SqliteException { SqliteErrorCode: SqliteBusy or SqliteLocked };
+    private static bool IsRowFailure(Exception ex) => ex is not OperationCanceledException and not SqliteException { SqliteErrorCode: SqliteBusy or SqliteLocked };
 
     /// <summary>
     ///     One generator call for the rows and one for their distinct headings, then every
@@ -552,14 +554,14 @@ public sealed partial class EntryEmbedder(
                 var headingPath = headingPaths[i];
                 structure.TryGetValue(headingPath, out var structureEmbedding);
                 affected += await connection.ExecuteAsync(Def(MemorySql.MarkEmbedded,
-                        new
-                        {
-                            id = batch[i].Id,
-                            embedding = embeddingBlobs[i],
-                            headingPath,
-                            structureEmbedding
-                        },
-                        cancellationToken));
+                    new
+                    {
+                        id = batch[i].Id,
+                        embedding = embeddingBlobs[i],
+                        headingPath,
+                        structureEmbedding
+                    },
+                    cancellationToken));
             }
         }, cancellationToken);
 
@@ -579,7 +581,7 @@ public sealed partial class EntryEmbedder(
         while (remaining > 0)
         {
             var candidates = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectStructureHealCandidates,
-                    new { projectId, limit = Math.Min(BatchSize, remaining) }, cancellationToken))).ToList();
+                new { projectId, limit = Math.Min(BatchSize, remaining) }, cancellationToken))).ToList();
             if (candidates.Count == 0)
             {
                 return;
@@ -613,7 +615,7 @@ public sealed partial class EntryEmbedder(
 
                 structure.TryGetValue(headingPath, out var structureEmbedding);
                 await connection.ExecuteAsync(Def(MemorySql.MarkStructure,
-                        new { id = candidates[i].Id, headingPath, structureEmbedding }, cancellationToken));
+                    new { id = candidates[i].Id, headingPath, structureEmbedding }, cancellationToken));
             }
 
             remaining -= candidates.Count;
@@ -691,9 +693,17 @@ public sealed partial class EntryEmbedder(
         await connection.QuerySingleOrDefaultAsync<OpenMigrationState>(
             Def(MemorySql.SelectOpenModelMigrationLease, cancellationToken));
 
-    /// <summary>The open migration's pre-acquisition lease state (LANE P4): the previous holder
-    /// and the row's age, read before the lease is taken — after acquisition the row carries our
-    /// owner, so the pre-state is the only place 1009's facts exist.</summary>
+    private static async Task UpsertOrDeleteAsync(SqliteConnection connection, string key, string? value,
+        CancellationToken cancellationToken, SqliteTransaction? transaction = null) =>
+        await connection.ExecuteAsync(value is null
+            ? Def(MemorySql.DeleteSetting, new { key }, cancellationToken, transaction)
+            : Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken, transaction));
+
+    /// <summary>
+    ///     The open migration's pre-acquisition lease state (LANE P4): the previous holder
+    ///     and the row's age, read before the lease is taken — after acquisition the row carries our
+    ///     owner, so the pre-state is the only place 1009's facts exist.
+    /// </summary>
     internal sealed record OpenMigrationState
     {
         public string? LeaseOwner { get; init; }
@@ -702,17 +712,10 @@ public sealed partial class EntryEmbedder(
 
         public long? StartedAt { get; init; }
 
-        public bool LeaseWasStale(long now) =>
-            LeaseOwner is not null && LeaseExpiresAt is { } expiresAt && expiresAt < now;
+        public bool LeaseWasStale(long now) => LeaseOwner is not null && LeaseExpiresAt is { } expiresAt && expiresAt < now;
 
         public TimeSpan Age(long now) => TimeSpan.FromSeconds(Math.Max(0, now - (StartedAt ?? now)));
     }
-
-    private static async Task UpsertOrDeleteAsync(SqliteConnection connection, string key, string? value,
-        CancellationToken cancellationToken, SqliteTransaction? transaction = null) =>
-        await connection.ExecuteAsync(value is null
-            ? Def(MemorySql.DeleteSetting, new { key }, cancellationToken, transaction)
-            : Def(MemorySql.UpsertSetting, new { key, value }, cancellationToken, transaction));
 
     internal sealed record EmbedRow
     {

@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Fusion;
 
 namespace AiRaccoon.Infrastructure.Sqlite.Memory;
@@ -14,8 +13,7 @@ public sealed record SearchResults
     public TimeSpan FtsTotalTiming => TimeSpan.FromMilliseconds(Fts.Sum(result => result.SearchTiming.TotalMilliseconds));
 
     /// <summary>Hashes the keyword leg matched on every query term, across all searched contexts.</summary>
-    public IReadOnlySet<string> AllTermsMatched =>
-        Fts.SelectMany(result => result.AllTermsMatched).ToHashSet(StringComparer.Ordinal);
+    public IReadOnlySet<string> AllTermsMatched => Fts.SelectMany(result => result.AllTermsMatched).ToHashSet(StringComparer.Ordinal);
 
     public void AddResults(VectorSearchResult vector, FtsSearchResult fts)
     {

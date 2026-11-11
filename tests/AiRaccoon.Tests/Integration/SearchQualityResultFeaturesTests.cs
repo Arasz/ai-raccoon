@@ -153,7 +153,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
         await EnsureSchemaAsync();
 
         await _sut.RecordSearchAsync("corr-feat-null", "query", "all", "proj-a", "memory", "sess-test",
-            0, [], TestContext.Current.CancellationToken, null);
+            0, [], TestContext.Current.CancellationToken);
 
         (await ReadResultFeaturesAsync("corr-feat-null")).ShouldBeNull("absent evidence writes exactly as before");
     }
@@ -253,7 +253,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
     public async Task DispatchAsync_KindCode_WritesRowWithNullResultFeatures()
     {
         await EnsureSchemaAsync();
-        var dispatcher = new SearchDispatcher(new StubSearchStore([], null),
+        var dispatcher = new SearchDispatcher(new StubSearchStore([]),
             new StubCodeSearch([new CodeSearchResult("code-hash", 1.0, "Foo.cs", "class Foo", 1, 10)]), _sut, TestData.SharedScope);
 
         await dispatcher.DispatchAsync(new SearchQuery("proj-a", "query"),
@@ -341,9 +341,9 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
     {
         public override Task<SearchResults> SearchAsync(SearchQuery query, CancellationToken cancellationToken = default)
         {
-            IReadOnlyDictionary<string, RetrievalEvidence>? byHash = evidenceByHash
-                ?? evidenceRows?.ToDictionary(row => row.Hash, row => row, StringComparer.Ordinal);
-            return Task.FromResult(new SearchResults(results, SearchTimings.Empty, null, byHash, null));
+            var byHash = evidenceByHash
+                         ?? evidenceRows?.ToDictionary(row => row.Hash, row => row, StringComparer.Ordinal);
+            return Task.FromResult(new SearchResults(results, SearchTimings.Empty, null, byHash));
         }
     }
 
@@ -352,7 +352,7 @@ public sealed class SearchQualityResultFeaturesTests : IDisposable
         private readonly IReadOnlyList<CodeSearchResult> _results = results ?? [];
 
         public Task<CodeSearchResults> SearchAsync(CodeSearchQuery query, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new CodeSearchResults(_results, null));
+            Task.FromResult(new CodeSearchResults(_results));
 
         public Task<CodeEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
             Task.FromResult<CodeEntry?>(null);

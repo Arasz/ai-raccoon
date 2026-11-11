@@ -61,7 +61,7 @@ public sealed class ReciprocalRankFusionEvidenceTests
             Candidate("b", -2.4, "a-tie.md"),
             Candidate("m", -3.0, "m.md"),
             Candidate("t", -3.5, "t-tail.md"),
-            Candidate("x", -4.0, "x-flip.md", "x.md", 0),
+            Candidate("x", -4.0, "x-flip.md", "x.md"),
             Candidate("h", -4.5, "h-cut.md", "x.md", 1),
         };
         var vector = new[]

@@ -163,7 +163,7 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
         }
     }
 
-    private static string FallbackSnippet(string value) => value.Length <= 200 ? value : value[..200] + "…";
+    private static string FallbackSnippet(string value) => value.Length <= 200 ? value : $"{value[..200]}…";
 
     /// <summary>
     ///     Mirrors SqliteMemoryStore.GetSearchParameterDefaultsAsync's settings-snapshot shape (not
@@ -174,7 +174,7 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
         CancellationToken cancellationToken)
     {
         var rows = (await connection.QueryAsync<SettingRow>(new CommandDefinition(
-                MemorySql.SelectSettingsByPrefix, new { prefix = "retrieval." }, cancellationToken: cancellationToken))).ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
+            MemorySql.SelectSettingsByPrefix, new { prefix = "retrieval." }, cancellationToken: cancellationToken))).ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
         return new RetrievalSettingsSource(rows);
     }
 
@@ -226,11 +226,11 @@ public sealed class SqliteCodeSearchService(ISqliteConnectionFactory factory, IC
 
     private sealed class CodeEntryRow
     {
-        public string Hash { get; init; } = "";
+        public string Hash { get; } = "";
 
-        public string Value { get; init; } = "";
+        public string Value { get; } = "";
 
-        public string Path { get; init; } = "";
+        public string Path { get; } = "";
 
         public int LineStart { get; init; }
 
