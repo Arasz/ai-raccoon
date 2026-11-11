@@ -2,9 +2,9 @@
 
 Registers as a MemoryProvider plugin (agent/memory_provider.py ABC),
 giving the agent project-scoped persistent memory over the AiRaccoon
-bank: per-turn prefetch (memory_search), background sync
-(memory_write), the curated tool surface (memory_search / memory_write
-/ memory_stats / memory_share), and mirroring of built-in memory
+bank: per-turn prefetch (query), background sync
+(add_memory), the curated tool surface (query / add_memory
+/ get_store_statistics / share_memory), and mirroring of built-in memory
 writes.
 
 Transport: stdio by default (spawns the installed ``ai-raccoon`` binary
@@ -53,7 +53,7 @@ _SYNC_JOIN_TIMEOUT_S = 15.0
 
 TOOL_SCHEMAS: List[Dict[str, Any]] = [
     {
-        "name": "memory_search",
+        "name": "query",
         "description": (
             "Hybrid semantic search over the AiRaccoon memory bank. "
             "scope=all (default) searches shared + project (+ workspace when named); "
@@ -73,7 +73,7 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         },
     },
     {
-        "name": "memory_write",
+        "name": "add_memory",
         "description": (
             "Writes content into the AiRaccoon memory bank. Writes land in the project's "
             "committed context by default; naming a workspace_id routes them into that "
@@ -92,12 +92,12 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         },
     },
     {
-        "name": "memory_stats",
+        "name": "get_store_statistics",
         "description": "Reports entry count, pending (deferred-embedding) count, and the bank's committed contexts.",
         "parameters": {"type": "object", "properties": {}},
     },
     {
-        "name": "memory_share",
+        "name": "share_memory",
         "description": (
             "Promotes an existing project entry into the flat shared context — the curated, "
             "cross-project, sweep-exempt tier. Nothing is shared without this explicit promotion."
@@ -114,22 +114,22 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
 
 # MCP tool name -> (client method, arg mapping)
 _TOOL_DISPATCH = {
-    "memory_search": ("search", {
+    "query": ("search", {
         "query": "query",
         "scope": "scope",
         "limit": "limit",
         "minRelativeScore": "min_relative_score",
         "contextLabel": "context_label",
     }),
-    "memory_write": ("write", {
+    "add_memory": ("write", {
         "content": "content",
         "sourceFile": "source_file",
         "section": "section",
         "workspaceId": "workspace_id",
         "context": "context",
     }),
-    "memory_stats": ("stats", {}),
-    "memory_share": ("share", {"hash": "hash_"}),
+    "get_store_statistics": ("stats", {}),
+    "share_memory": ("share", {"hash": "hash_"}),
 }
 
 
@@ -223,19 +223,20 @@ class AiRaccoonMemoryProvider(MemoryProvider):
         return (
             "# AiRaccoon Memory\n"
             "Active. Search memory FIRST — before web search or asking — with "
-            "memory_search (2-3 query formulations) and cite what you find. "
-            "Write durable facts back with memory_write (include sourceFile/section). "
-            "Use memory_stats to check the bank, memory_share to promote cross-project facts."
+            "the query tool (2-3 query formulations) and cite what you find. "
+            "Write durable facts back with add_memory (include sourceFile/section). "
+            "Use get_store_statistics to check the bank, share_memory to promote cross-project facts."
         )
 
     def prefetch(self, query: str, *, session_id: str = "") -> str:
         if self._client is None or self._project_id is None or not query:
             return ""
-        self._emit_word("memory_search")
+        self._emit_word("query")
         try:
             payload = self._client.search(
                 self._project_id,
                 query,
+                session_id=session_id or self._session_id or "unknown",
                 scope=self._config.get("scope", "all"),
                 limit=int(self._config.get("search_limit", 5)),
                 # "min_score" is the pre-ADR-0047 key; still honoured so an existing config does
@@ -263,7 +264,7 @@ class AiRaccoonMemoryProvider(MemoryProvider):
         target_session = session_id or self._session_id or "unknown"
 
         def _sync() -> None:
-            self._emit_word("memory_write")
+            self._emit_word("add_memory")
             try:
                 client.write(
                     pid,
@@ -305,6 +306,8 @@ class AiRaccoonMemoryProvider(MemoryProvider):
             call_args = {target: args[key] for key, target in mapping.items() if key in args}
             if method_name == "write" and "agent_id" not in call_args:
                 call_args["agent_id"] = f"hermes-{self._agent_identity}"
+            if method_name == "search":
+                call_args["session_id"] = self._session_id or "unknown"
             result = method(self._project_id, **call_args)
         except KeyError as exc:
             # Defensive: the arg mapping is `in`-guarded, so this only fires if a
@@ -322,7 +325,7 @@ class AiRaccoonMemoryProvider(MemoryProvider):
         pid = self._project_id
         if action != "add" or client is None or pid is None:
             return
-        self._emit_word("memory_write")
+        self._emit_word("add_memory")
         try:
             client.write(
                 pid,

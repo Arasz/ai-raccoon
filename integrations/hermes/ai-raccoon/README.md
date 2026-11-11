@@ -38,11 +38,18 @@ Rollback: `hermes config set memory.provider holographic` (or empty for built-in
 
 | Hermes lifecycle point | AiRaccoon call |
 |---|---|
-| `prefetch(query)` | `memory_search` (scope all, limit 5, no relative-score floor) → `## AiRaccoon Memory` block |
-| `sync_turn(user, assistant)` | `memory_write` of the assistant message, `sourceFile=hermes/<session>`, `section=turn` (background) |
-| tools | `memory_search`, `memory_write`, `memory_stats`, `memory_share` (curated surface, `projectId` injected) |
-| `on_memory_write(add, …)` | `memory_write` mirror, `sourceFile=hermes-memory` |
+| `prefetch(query)` | `query` (scope all, limit 5, no relative-score floor) → `## AiRaccoon Memory` block |
+| `sync_turn(user, assistant)` | `add_memory` of the assistant message, `sourceFile=hermes/<session>`, `section=turn` (background) |
+| tools | `query`, `add_memory`, `get_store_statistics`, `share_memory` (curated surface, `projectId` injected) |
+| `on_memory_write(add, …)` | `add_memory` mirror, `sourceFile=hermes-memory` |
 | `shutdown()` | terminates the spawned child / closes the HTTP session — in stdio mode that child is the proxy; the `serve` backend it started keeps running until its own idle watchdog fires (4h default) |
+
+## Changes
+
+0.1.1 calls the 2.x tool names (`query`, `add_memory`, `get_store_statistics`,
+`share_memory`) and sends the `sessionId` the 2.x `query` tool requires. 0.1.0 does not
+work with ai-raccoon 2.x. The plugin exposes the same names to Hermes agents that it
+sends to the server, so one name is one tool on both sides.
 
 ## Config
 

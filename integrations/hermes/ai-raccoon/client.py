@@ -135,16 +135,17 @@ class _MCPClient:
 
     # -- duck-typed surface (snake_case; camelCase over the wire) -----------
 
-    def search(self, project_id: str, query: str, scope: str = "all",
+    def search(self, project_id: str, query: str, session_id: str, scope: str = "all",
                limit: int = 5, min_relative_score: float = 0.0,
                context_label: Optional[str] = None) -> Any:
         # The floor is relative to this response's top hit (ADR-0047), so it cannot express
         # "only good matches"; 0.0 is off, and is what returns the `limit` the caller asked for.
-        args: Dict[str, Any] = {"projectId": project_id, "query": query, "scope": scope,
+        args: Dict[str, Any] = {"projectId": project_id, "query": query, "sessionId": session_id,
+                                "scope": scope,
                                 "limit": limit, "minRelativeScore": min_relative_score}
         if context_label:
             args["contextLabel"] = context_label
-        return self._call("memory_search", args)
+        return self._call("query", args)
 
     def write(self, project_id: str, content: str, workspace_id: Optional[str] = None,
               agent_id: Optional[str] = None, context: Optional[str] = None,
@@ -160,13 +161,13 @@ class _MCPClient:
             args["sourceFile"] = source_file
         if section:
             args["section"] = section
-        return self._call("memory_write", args)
+        return self._call("add_memory", args)
 
     def stats(self, project_id: str) -> Any:
-        return self._call("memory_stats", {"projectId": project_id})
+        return self._call("get_store_statistics", {"projectId": project_id})
 
     def share(self, project_id: str, hash_: str) -> Any:
-        return self._call("memory_share", {"projectId": project_id, "hash": hash_})
+        return self._call("share_memory", {"projectId": project_id, "hash": hash_})
 
 
 class StdioClient(_MCPClient):
