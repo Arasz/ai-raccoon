@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["pydantic>=2.12,<3"]
+# dependencies = ["pydantic>=2.14.3,<3"]
 # ///
 # the frozen §2 tool surface is one interface with one protocol loop; splitting it would
 # scatter the contract across modules, so the module budget yields (same as badger_store.py)

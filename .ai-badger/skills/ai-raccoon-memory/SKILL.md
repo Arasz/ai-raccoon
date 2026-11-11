@@ -29,10 +29,6 @@ is not in the watched list, run `add_watch(projectId, <absolute path to docs>)` 
 it into memory. The watch starts `scanning` and settles to `healthy`; an already-watched path is
 a no-op.
 
-Also watch `.semantica/` (one-time per project): `mkdir -p .semantica`, then
-`add_watch(projectId, <absolute path to .semantica>)`. Re-adding is a no-op; the durable
-record lives in memory, so gitignore `.semantica/` in the consumer repo.
-
 **CLI prerequisite (only when the watch errors):** `watching-disabled` or `path-outside-scope`
 means the one-time per-install setup is missing (quote the `*` so the shell does not expand it):
 `ai-raccoon watch scope add '<project-id|*>' <path>`, then
@@ -225,8 +221,40 @@ this port collapses line breaks in paths and ranks to one space (pi keeps them r
 for a list or object rank, counts truncation in code points, and cuts a path at 300 and a rank
 at 32 characters. The "Parity with pi" section of ADR-0031 lists every divergence.
 
-## 9. Verification Checklist
+## 9. Decisions
+
+ai-raccoon also keeps versioned decision records for each task. Every write takes four ids:
+
+- `projectId`: the same id you use for memory.
+- `taskId`: the `/task` id from the task tracker.
+- `sessionId`: your own session id.
+- `requestId`: a fresh UUID for each command. Send the same requestId again only to replay that
+  command; the server then returns the first result and writes nothing new.
+
+Write in this order. Run `register_decision_task` once, before the first decision of the task.
+Then run `record_decision`. To change a decision later, use `amend_decision` (new content),
+`transition_decision` (accepted, rejected or deprecated), `supersede_decision` (the only way to
+make a supersedes edge) or `link_decisions` (depends_on, supports, contradicts). To read, use
+`query_decisions`, `find_decision_precedents`, `get_decision_graph`, `preview_decisions` and
+`export_decisions`.
+
+```text
+record_decision {"projectId": "<id>", "taskId": "aib-example", "sessionId": "<session id>",
+  "requestId": "<fresh UUID>", "title": "Use SQLite for the cache", "category": "architecture",
+  "scenario": "The cache must survive a restart", "outcome": "SQLite file per project",
+  "reasoning": "No server to run; the stdlib reads it"}
+```
+
+**When the reply is rejected.** In ai-raccoon 2.6.0 and earlier, the decision tools commit the
+write, but a host that validates the tool output schema (Claude Code is the one known host) can
+reject the reply (null fields marked required). Do not retry. Check the write with
+`ai-raccoon decisions preview --project-id <id> --task-id <taskId>`. If a retry is necessary, send the same sessionId and the same requestId,
+so the server replays the first result. Where MCP is not available (pi), the CLI
+`ai-raccoon decisions task register | record | get | query | export | preview` is the primary path.
+
+## 10. Verification Checklist
 
 - [ ] `get_watch_status` shows the docs dir `healthy`
 - [ ] `query(projectId, sessionId, scope=all)` returns docs-derived hits
 - [ ] A durable finding was written back with `add_memory`, source path included
+- [ ] Each task decision was recorded under a registered task, and `query_decisions` returns it

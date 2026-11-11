@@ -166,13 +166,6 @@ def main() -> int:
         return 0
 
     parts: list[str] = []
-    session_id = payload.get("session_id") or payload.get("sessionId")
-
-    # Semantica once-per-session export nudge (issue #418)
-    if context_enrichment.semantica_indexed(index):
-        if not context_enrichment.semantica_nudge_already_shown(session_id):
-            context_enrichment.record_semantica_nudge_shown(session_id)
-            parts.append(context_enrichment.NUDGE_LINE)
 
     # MCP tool index recommendations
     if prompt:

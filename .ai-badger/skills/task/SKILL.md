@@ -89,8 +89,8 @@ full-suite run.
 
 **close task** — Close tracking, remove clean worktree, update state files.
 
-**reflect** — Check memory, semantica, session history. Distil durable facts. Promote to shared
-context.
+**reflect** — Check memory, `query_decisions`, session history. Distil durable facts. Promote to
+shared context.
 
 **merge** — Final PR merge.
 
@@ -315,11 +315,10 @@ Exit: merged, state updated, tracking closed.
 4. Close tracking: `python3 .ai-badger/skills/task/scripts/task_tracker.py finish <taskId>`. This
    also removes the task's worktree — **unless it still holds work that exists nowhere else** (see
    `references/tracking-visibility.md` when it refuses).
-5. **Reflect.** Examine what was learned during this task. Check AiRaccoon memory for the
-   current workspace, query semantica entries if available, and review the session history.
-   Distil: what should be remembered as durable facts? Write any cross-task learnings to
-   memory. Promote high-value entries to shared context if applicable. Record decisions in
-   semantica.
+5. **Reflect.** Check AiRaccoon memory and the session history. Run `query_decisions` with `selector.taskIds` set to
+   the taskId to confirm the pre-implementation decision exists; never record it again. Call
+   `transition_decision` to accepted if the outcome held, else to rejected. Write durable facts: `add_memory`.
+   Promote high-value entries to shared.
 6. Ask the user to grade the skill 0–5: `python3 .ai-badger/skills/task/scripts/task_tracker.py grade <taskId> <0-5>`
    (skip/leave unset if autonomous).
 7. Report the task's token cost and recommend `/compact` or a fresh session before the next
@@ -364,6 +363,6 @@ machine-run gates that close the task.
 - [ ] Task-ID derived per the `{repo-alias}-{key}` formula and is unique
 - [ ] Task `loop` (low or high) was determined before implementation began
 - [ ] High-effort tasks ran QA test quality & coverage step
-- [ ] `reflect` step examined memory, semantica, and session history for learnings
+- [ ] `reflect` ran `query_decisions` for the task, then `transition_decision`
 - [ ] `finish` left no worktree with unmerged or uncommitted work — `keptBecause` empty or resolved
 - [ ] Token cost reported and compact/fresh-session advice given (or the auto-continue condition held)

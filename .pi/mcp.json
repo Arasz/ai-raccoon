@@ -7,13 +7,6 @@
       ],
       "exposure": "direct"
     },
-    "semantica": {
-      "command": "~/.local/bin/semantica-mcp",
-      "env": {
-        "SEMANTICA_DISABLE_PROGRESS": "1"
-      },
-      "exposure": "direct"
-    },
     "playwright": {
       "command": "npx",
       "args": [

@@ -6,7 +6,7 @@ C# .NET 10 MCP server exposing agent memory management over sqlite-memory: proje
 
 > Domain: Provides AI agents with persistent, project-scoped memory over the Model Context Protocol, backed by sqlite-memory.
 > Stacks: dotnet, mcp, python, github, ai-raccoon, changelog
-> Scaffolded by ai-badger 0.217.3. Source of truth for this file: `.ai-badger/copilot-instructions.md`.
+> Scaffolded by ai-badger 0.218.0. Source of truth for this file: `.ai-badger/copilot-instructions.md`.
 
 ## Commands
 
@@ -70,17 +70,6 @@ facts. Keep the docs directory searchable: check `get_watch_status`, then `add_w
 (projectId + absolute path) when no watch exists.
 
 Decision tools before 2.6.1 commit but Claude Code rejects the reply (null fields marked required): do not retry — verify and continue with `ai-raccoon decisions task register|record|get|query|export|preview`.
-
-<!-- semantica MCP tools -->
-## MCP Tools: semantica
-
-Semantica is the project knowledge graph. It complements AiRaccoon: AiRaccoon answers
-"what do we know?"; Semantica answers "how are things connected?" and "why was this
-decision made?".
-
-Start with `get_graph_summary` for orientation. Record architectural decisions with
-`record_decision`. Drill into specifics with `query_decisions`, `find_precedents`, or
-`get_causal_chain`. Each tool's own description covers the rest.
 
 <!-- Playwright MCP tools -->
 ## MCP Tools: playwright

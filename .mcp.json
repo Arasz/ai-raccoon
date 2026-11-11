@@ -9,15 +9,6 @@
         "*"
       ]
     },
-    "semantica": {
-      "command": "${HOME}/.local/bin/semantica-mcp",
-      "env": {
-        "SEMANTICA_DISABLE_PROGRESS": "1"
-      },
-      "tools": [
-        "*"
-      ]
-    },
     "rider": {
       "url": "http://127.0.0.1:64482/stream",
       "type": "http"

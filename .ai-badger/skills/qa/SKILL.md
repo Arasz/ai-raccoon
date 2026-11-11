@@ -14,7 +14,7 @@ scope: default
 metadata:
   hermes:
     tags: [questions, answers, grounding, sessions]
-    related_skills: [evidence-first-research, explore-codebase, semantica-knowledge-graph, task]
+    related_skills: [evidence-first-research, explore-codebase, task]
 ---
 
 # QA session
