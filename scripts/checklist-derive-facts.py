@@ -6,10 +6,13 @@ Prints `version`, `mcp-tool-count` and `mcp-prompt-count` on stdout, one per lin
 non-zero when any of them cannot be derived — a missing path fails loudly instead of yielding a
 confident zero.
 
-Usage: checklist-derive-facts.py [<repo-root>]   (default: the current directory)
+Usage: checklist-derive-facts.py [<repo-root>] [--fact NAME]   (default root: the current directory)
+
+`--fact NAME` prints only that fact's value; an unknown NAME exits 2.
 """
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -46,6 +49,11 @@ class Facts(NamedTuple):
     version: str
     tools: int
     prompts: int
+
+    def as_dict(self) -> dict[str, str]:
+        """Fact name to printed value, in output order."""
+        return {"version": self.version, "mcp-tool-count": str(self.tools),
+                "mcp-prompt-count": str(self.prompts)}
 
     def render(self) -> str:
         """The stdout contract, read by the fact commands in docs/checklist/checks.json."""
@@ -135,13 +143,26 @@ def derive(repo_root: Path) -> Facts:
 
 
 def main(argv) -> int:
-    """Print the derived facts, or the reason there are none. 0 on success, 1 on any failure."""
+    """Print the derived facts, or the reason there are none. 0 on success, 1 on a failed
+    derivation, 2 on an unknown `--fact` name."""
+    parser = argparse.ArgumentParser(prog=PREFIX, description="Derive the checklist facts.")
+    parser.add_argument("repo_root", nargs="?", default=".")
+    parser.add_argument("--fact", metavar="NAME", help="print only this fact's value")
+    args = parser.parse_args(argv)
     try:
-        facts = derive(Path(argv[0] if argv else "."))
+        facts = derive(Path(args.repo_root))
     except DerivationFailed as failure:
         print(f"{PREFIX}: {failure}", file=sys.stderr)
         print(LAYOUT_HINT, file=sys.stderr)
         return 1
+    if args.fact is not None:
+        values = facts.as_dict()
+        if args.fact not in values:
+            print(f"{PREFIX}: unknown fact {args.fact!r}; known: {', '.join(values)}",
+                  file=sys.stderr)
+            return 2
+        print(values[args.fact])
+        return 0
     print(facts.render(), end="")
     print(COPY_HINT, file=sys.stderr)
     return 0

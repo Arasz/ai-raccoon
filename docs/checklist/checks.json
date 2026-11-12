@@ -14,14 +14,14 @@
  ],
  "facts": {
   "version": {
-   "command": "python3 scripts/checklist-derive-facts.py . | sed -n 's/^version=//p'"
+   "command": "python3 scripts/checklist-derive-facts.py . --fact version"
   },
   "mcp-tool-count": {
-   "command": "python3 scripts/checklist-derive-facts.py . | sed -n 's/^mcp-tool-count=//p'",
+   "command": "python3 scripts/checklist-derive-facts.py . --fact mcp-tool-count",
    "nonzero": true
   },
   "mcp-prompt-count": {
-   "command": "python3 scripts/checklist-derive-facts.py . | sed -n 's/^mcp-prompt-count=//p'",
+   "command": "python3 scripts/checklist-derive-facts.py . --fact mcp-prompt-count",
    "nonzero": true
   }
  },
@@ -143,13 +143,13 @@
   },
   {
    "item": "typed-memory-only-ttl",
-   "expected-result": "In full access mode set/clear Memory TTL; refuse setting and clearing File and Code-only hashes, and retain negative controls. (2.1.0 changelog, ADR-0030)",
-   "anchor": "docs/adr/0030-realtime-heuristic-ttl.md"
+   "expected-result": "In full access mode set/clear Memory TTL; refuse setting and clearing File and Code-only hashes, and retain negative controls. (2.1.0 changelog, ADR-0148)",
+   "anchor": "docs/adr/0148-bank-guards-memory-only-ttl-and-the-kind-domain.md"
   },
   {
    "item": "typed-historical-ttl-cleanup",
-   "expected-result": "Seed age/rating and explicit historical File TTL in scratch. Cleanup honors historical explicit TTL; TTL-free Memory/File and all Code survive. (2.1.0 changelog, ADR-0030)",
-   "anchor": "docs/adr/0030-realtime-heuristic-ttl.md"
+   "expected-result": "Seed age/rating and explicit historical File TTL in scratch. Cleanup honors historical explicit TTL; TTL-free Memory/File and all Code survive. (2.1.0 changelog, ADR-0148)",
+   "anchor": "docs/adr/0148-bank-guards-memory-only-ttl-and-the-kind-domain.md"
   },
   {
    "item": "typed-transcript-sync-memory",
