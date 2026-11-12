@@ -148,7 +148,7 @@
   },
   {
    "item": "typed-historical-ttl-cleanup",
-   "expected-result": "Seed age/rating and existing non-Memory TTLs, including an explicit historical File TTL, in a pre-v24 scratch bank. Verify migration to schema v24 clears all non-Memory TTLs and preserves Memory TTLs; subsequent File TTL writes are rejected. Cleanup preserves TTL-free Memory/File and all Code. (2.1.0 changelog, ADR-0148)",
+   "expected-result": "Seed age/rating and existing non-Memory TTLs, including an explicit historical File TTL, in a pre-v24 scratch bank. Include a project-scoped Memory row with age greater than its TTL and rating below the cleanup threshold, TTL-free Memory/File controls with age greater than that TTL and rating below the same threshold, and Code rows; use distinct hashes without shared counterparts. Verify migration to schema v24 clears all non-Memory TTLs and preserves Memory TTLs; subsequent File TTL writes are rejected. Run cleanup without dry run and verify it deletes the expired Memory row while preserving TTL-free Memory/File and all Code. (2.1.0 changelog, ADR-0148)",
    "anchor": "docs/adr/0148-bank-guards-memory-only-ttl-and-the-kind-domain.md"
   },
   {
