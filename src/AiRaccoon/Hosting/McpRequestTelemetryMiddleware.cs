@@ -2,7 +2,6 @@ using System.Diagnostics;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Observability;
-using DotNext.Threading;
 
 namespace AiRaccoon.Hosting;
 
@@ -18,14 +17,22 @@ public sealed class McpRequestTelemetryMiddleware(RequestDelegate next)
         }
 
         var startedAt = timeProvider.GetTimestamp();
-        var requestActivity = Activity.Current ?? new Activity("POST /mcp").Start();
+        var ownedActivity = Activity.Current is null ? new Activity("POST /mcp").Start() : null;
         context.Items[OtlpNames.McpRequestStartTimestampKey] = startedAt;
 
-        var durationRecordingStatus = new Atomic<bool>();
+        var recorded = 0;
+
+        void RecordOnce()
+        {
+            if (Interlocked.Exchange(ref recorded, 1) == 0)
+            {
+                RecordDuration(recorder, ownedActivity, timeProvider, metrics, startedAt);
+            }
+        }
 
         context.Response.OnCompleted(() =>
         {
-            RecordDuration(ref durationRecordingStatus, recorder, requestActivity, timeProvider, metrics, startedAt);
+            RecordOnce();
             return Task.CompletedTask;
         });
 
@@ -37,18 +44,13 @@ public sealed class McpRequestTelemetryMiddleware(RequestDelegate next)
         {
             if (context.RequestAborted.IsCancellationRequested)
             {
-                RecordDuration(ref durationRecordingStatus, recorder, requestActivity, timeProvider, metrics, startedAt);
+                RecordOnce();
             }
         }
     }
 
-    private static void RecordDuration(ref Atomic<bool> recordingStatus, IMeasurementRecorder recorder, Activity requestActivity, TimeProvider timeProvider, ToolCallMetrics metrics, long startedAt)
+    private static void RecordDuration(IMeasurementRecorder recorder, Activity? ownedActivity, TimeProvider timeProvider, ToolCallMetrics metrics, long startedAt)
     {
-        if (!recordingStatus.CompareExchange(true, false, out _))
-        {
-            return;
-        }
-
         var duration = timeProvider.GetElapsedTime(startedAt);
 
         metrics.RecordRequestDuration(duration);
@@ -59,6 +61,6 @@ public sealed class McpRequestTelemetryMiddleware(RequestDelegate next)
 
         recorder.Record(measurement);
 
-        requestActivity.Stop();
+        ownedActivity?.Dispose();
     }
 }

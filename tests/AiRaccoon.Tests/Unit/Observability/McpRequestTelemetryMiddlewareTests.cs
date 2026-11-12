@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Hosting;
 using AiRaccoon.Observability;
@@ -24,11 +25,11 @@ public sealed class McpRequestTelemetryMiddlewareTests
         using var dispatchCollector = new MetricCollector<double>(metrics.Meter, "ai_raccoon.mcp.dispatch.delay");
         using var requestCollector = new MetricCollector<double>(metrics.Meter, "ai_raccoon.mcp.request.duration");
         var responseFeature = new RecordingResponseFeature();
-        var middleware = new McpRequestTelemetryMiddleware(async _ =>
+        var middleware = new McpRequestTelemetryMiddleware(async requestContext =>
         {
             timeProvider.Advance(TimeSpan.FromMilliseconds(50));
             using var call = new ToolExecutionActivity(metrics, "query", "acme", recorder: recorder,
-                timeProvider: timeProvider);
+                timeProvider: timeProvider, requestContext: requestContext);
             call.RecordInvocation();
             timeProvider.Advance(TimeSpan.FromMilliseconds(75));
             await Task.CompletedTask;
@@ -78,6 +79,54 @@ public sealed class McpRequestTelemetryMiddlewareTests
         requestCollector.GetMeasurementSnapshot().ShouldHaveSingleItem().Value.ShouldBe(0.05, 0.001);
         recorder.Recorded.ShouldContain(m => m.Name == "mcp.request.duration_ms" &&
             m.ProjectId == "__self_metrics__" && m.Value == 50);
+    }
+
+    [Fact]
+    public async Task PostMcp_AbortedAndCompleted_RecordsDurationOnce()
+    {
+        var timeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var metrics = new ToolCallMetrics();
+        var recorder = new RecordingRecorder();
+        using var requestCollector = new MetricCollector<double>(metrics.Meter, "ai_raccoon.mcp.request.duration");
+        using var aborted = new CancellationTokenSource();
+        var responseFeature = new RecordingResponseFeature();
+        var middleware = new McpRequestTelemetryMiddleware(_ =>
+        {
+            timeProvider.Advance(TimeSpan.FromMilliseconds(50));
+            aborted.Cancel();
+            return Task.CompletedTask;
+        });
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/mcp";
+        context.Request.Method = HttpMethods.Post;
+        context.RequestAborted = aborted.Token;
+        context.Features.Set<IHttpResponseFeature>(responseFeature);
+
+        await middleware.InvokeAsync(context, timeProvider, metrics, recorder);
+        timeProvider.Advance(TimeSpan.FromMilliseconds(100));
+        await responseFeature.CompleteResponseAsync();
+
+        requestCollector.GetMeasurementSnapshot().ShouldHaveSingleItem().Value.ShouldBe(0.05, 0.001);
+        recorder.Recorded.Count(m => m.Name == "mcp.request.duration_ms").ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task PostMcp_LeavesTheCallersActivityRunning()
+    {
+        var timeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var metrics = new ToolCallMetrics();
+        var responseFeature = new RecordingResponseFeature();
+        var middleware = new McpRequestTelemetryMiddleware(_ => Task.CompletedTask);
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/mcp";
+        context.Request.Method = HttpMethods.Post;
+        context.Features.Set<IHttpResponseFeature>(responseFeature);
+        using var hostingActivity = new Activity("hosting").Start();
+
+        await middleware.InvokeAsync(context, timeProvider, metrics, new RecordingRecorder());
+        await responseFeature.CompleteResponseAsync();
+
+        hostingActivity.IsStopped.ShouldBeFalse();
     }
 
     private sealed class RecordingRecorder : IMeasurementRecorder
