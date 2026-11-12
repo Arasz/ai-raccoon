@@ -17,4 +17,14 @@ public static class SearchQualityKinds
             SearchKindWireNames.Both => EntryType.Memory | EntryType.File | EntryType.Code,
             _ => null
         };
+
+    /// <summary>
+    ///     The legacy kind label a selection records: code alone is <c>code</c>, any set that also
+    ///     names Code is <c>both</c>, anything else is <c>memory</c>. The inverse of
+    ///     <see cref="MaskOf" /> up to the corpus the label can express.
+    /// </summary>
+    public static string KindOf(EntryType types) =>
+        types == EntryType.Code ? SearchKindWireNames.Code
+        : types.HasFlag(EntryType.Code) ? SearchKindWireNames.Both
+        : SearchKindWireNames.Memory;
 }
