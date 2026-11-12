@@ -149,18 +149,18 @@ def test_verify_nupkg_reports_sha_mismatch_against_bundle_pin(tmp_path, capsys):
 
 
 # --- suffix-based matching: a required entry is satisfied by ANY path ending in it (package root
-# or tools/net10.0/<rid>/…), and it is a failure for it to be packed more than once anywhere. ---
+# or tools/net11.0/<rid>/…), and it is a failure for it to be packed more than once anywhere. ---
 
 
 def test_entries_matching_finds_every_path_ending_in_the_suffix():
     suffix = "Models/x/model.bin"
-    z = _zip_bytes([(suffix, b"data"), ("tools/net10.0/osx-arm64/" + suffix, b"data"), ("Models/other.txt", b"nope")])
-    assert package_verify.entries_matching(z, suffix) == [suffix, "tools/net10.0/osx-arm64/" + suffix]
+    z = _zip_bytes([(suffix, b"data"), ("tools/net11.0/osx-arm64/" + suffix, b"data"), ("Models/other.txt", b"nope")])
+    assert package_verify.entries_matching(z, suffix) == [suffix, "tools/net11.0/osx-arm64/" + suffix]
 
 
 def test_missing_entries_satisfied_by_a_rid_scoped_copy_alone(monkeypatch):
     monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
-    z = _zip_bytes([("tools/net10.0/osx-arm64/Models/x/model.bin", b"data")])
+    z = _zip_bytes([("tools/net11.0/osx-arm64/Models/x/model.bin", b"data")])
     assert package_verify.missing_entries(z) == []
 
 
@@ -172,25 +172,25 @@ def test_missing_entries_still_reports_absent_suffix(monkeypatch):
 
 def test_duplicate_entries_empty_when_packed_exactly_once(monkeypatch):
     monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
-    z = _zip_bytes([("tools/net10.0/osx-arm64/Models/x/model.bin", b"data")])
+    z = _zip_bytes([("tools/net11.0/osx-arm64/Models/x/model.bin", b"data")])
     assert package_verify.duplicate_entries(z) == []
 
 
 def test_duplicate_entries_flags_a_suffix_packed_at_root_and_under_tools(monkeypatch):
     monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
-    z = _zip_bytes([("Models/x/model.bin", b"data"), ("tools/net10.0/osx-arm64/Models/x/model.bin", b"data")])
+    z = _zip_bytes([("Models/x/model.bin", b"data"), ("tools/net11.0/osx-arm64/Models/x/model.bin", b"data")])
     duplicates = package_verify.duplicate_entries(z)
     assert len(duplicates) == 1
     entry, matches = duplicates[0]
     assert entry == "Models/x/model.bin"
-    assert sorted(matches) == ["Models/x/model.bin", "tools/net10.0/osx-arm64/Models/x/model.bin"]
+    assert sorted(matches) == ["Models/x/model.bin", "tools/net11.0/osx-arm64/Models/x/model.bin"]
 
 
 def test_verify_nupkg_fails_when_the_bundled_weights_are_packed_twice(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
     monkeypatch.setattr(package_verify, "_BUNDLED_PINS", (("Models/x/model.bin", hashlib.sha256(b"data").hexdigest()),))
     nupkg = tmp_path / "ai-raccoon.osx-arm64.1.0.10.nupkg"
-    _write_zip(nupkg, [("Models/x/model.bin", b"data"), ("tools/net10.0/osx-arm64/Models/x/model.bin", b"data")])
+    _write_zip(nupkg, [("Models/x/model.bin", b"data"), ("tools/net11.0/osx-arm64/Models/x/model.bin", b"data")])
     assert package_verify.verify_nupkg(nupkg, "1.0.10") == 1
     err = capsys.readouterr().err
     assert "Models/x/model.bin" in err
@@ -201,14 +201,14 @@ def test_verify_nupkg_passes_when_the_bundled_weights_are_packed_exactly_once(tm
     monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
     monkeypatch.setattr(package_verify, "_BUNDLED_PINS", (("Models/x/model.bin", hashlib.sha256(b"data").hexdigest()),))
     nupkg = tmp_path / "ai-raccoon.osx-arm64.1.0.10.nupkg"
-    _write_zip(nupkg, [("tools/net10.0/osx-arm64/Models/x/model.bin", b"data")])
+    _write_zip(nupkg, [("tools/net11.0/osx-arm64/Models/x/model.bin", b"data")])
     assert package_verify.verify_nupkg(nupkg, "1.0.10") == 0
 
 
 def test_verify_no_bundled_weights_passes_for_a_clean_top_level_shim(tmp_path, monkeypatch):
     monkeypatch.setattr(package_verify, "REQUIRED_ENTRIES", ("Models/x/model.bin",))
     nupkg = tmp_path / "ai-raccoon.1.0.10.nupkg"
-    _write_zip(nupkg, [("tools/net10.0/any/ai-raccoon.dll", b"shim")])
+    _write_zip(nupkg, [("tools/net11.0/any/ai-raccoon.dll", b"shim")])
     assert package_verify.verify_no_bundled_weights(nupkg) == 0
 
 

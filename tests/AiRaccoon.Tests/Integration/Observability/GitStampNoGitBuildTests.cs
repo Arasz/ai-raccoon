@@ -44,7 +44,7 @@ public class GitStampNoGitBuildTests
 
             run.ExitCode.ShouldBe(0, $"a build with no git available at build time must never fail. stderr: {run.Stderr}");
 
-            var dllPath = Path.Combine(sampleDir, "bin", "Debug", "net10.0", $"Sample_{runId}.dll");
+            var dllPath = Path.Combine(sampleDir, "bin", "Debug", "net11.0", $"Sample_{runId}.dll");
             var assembly = Assembly.LoadFrom(dllPath);
             var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
             var commitTimestampAttribute = assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
@@ -74,7 +74,7 @@ public class GitStampNoGitBuildTests
     private static string SampleCsproj(string runId) => $"""
         <Project Sdk="Microsoft.NET.Sdk">
             <PropertyGroup>
-                <TargetFramework>net10.0</TargetFramework>
+                <TargetFramework>net11.0</TargetFramework>
                 <OutputType>Exe</OutputType>
                 <AssemblyName>Sample_{runId}</AssemblyName>
             </PropertyGroup>

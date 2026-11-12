@@ -74,30 +74,11 @@ public sealed class BackgroundInstrumentationCoverageTests
 
     private static bool InvokesNoteWork(Type hostedServiceType) => MethodsToScan(hostedServiceType).Any(m => CallsNoteWork(m));
 
-    /// <summary>Every method declared directly on the type, plus (for an async method) the
-    /// compiler-generated state machine's MoveNext — that is where an `await`-laced pass's real
-    /// IL body lives, not the stub the compiler leaves on the async method itself.</summary>
-    private static IEnumerable<MethodBase> MethodsToScan(Type type)
-    {
-        const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
-                                 | BindingFlags.Static | BindingFlags.DeclaredOnly;
-
-        foreach (var method in type.GetMethods(all))
-        {
-            yield return method;
-
-            var stateMachineAttribute = method.GetCustomAttribute<AsyncStateMachineAttribute>();
-            if (stateMachineAttribute?.StateMachineType is { } stateMachineType)
-            {
-                var moveNext = stateMachineType.GetMethod("MoveNext",
-                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
-                if (moveNext is not null)
-                {
-                    yield return moveNext;
-                }
-            }
-        }
-    }
+    /// <summary>Every method declared directly on the type. Async methods compile as runtime-async
+    /// (ADR-0145, guarded by RuntimeAsyncTests), so their IL is in the method body itself.</summary>
+    private static IEnumerable<MethodBase> MethodsToScan(Type type) =>
+        type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                        | BindingFlags.Static | BindingFlags.DeclaredOnly);
 
     /// <summary>Scans a method body's IL for a callvirt against IOperationScope.NoteWork.
     /// Structural, not behavioral: it proves the call site exists, not that it is reached.</summary>

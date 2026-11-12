@@ -124,7 +124,7 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         if: needs.changes.outputs.code == 'true'
         with:
-          # Pinned via global.json, not a floating 10.0.x. An unpinned SDK is a mutable
+          # Pinned via global.json, not a floating 11.0.x. An unpinned SDK is a mutable
           # dependency re-resolved on every run — the same hazard this workflow already
           # avoids by pinning every action to a commit SHA.
           global-json-file: global.json
@@ -173,7 +173,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-fast-test-stderr
-          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          path: tests/AiRaccoon.Tests/bin/Debug/net11.0/test-stderr.log
           if-no-files-found: ignore
 
   build-bdd:
@@ -195,7 +195,7 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         if: needs.changes.outputs.code == 'true'
         with:
-          # Pinned via global.json, not a floating 10.0.x. An unpinned SDK is a mutable
+          # Pinned via global.json, not a floating 11.0.x. An unpinned SDK is a mutable
           # dependency re-resolved on every run — the same hazard this workflow already
           # avoids by pinning every action to a commit SHA.
           global-json-file: global.json
@@ -235,7 +235,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-bdd-test-stderr
-          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          path: tests/AiRaccoon.Tests/bin/Debug/net11.0/test-stderr.log
           if-no-files-found: ignore
 
   build-slow:
@@ -274,7 +274,7 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         if: needs.changes.outputs.code == 'true'
         with:
-          # Pinned via global.json, not a floating 10.0.x. An unpinned SDK is a mutable
+          # Pinned via global.json, not a floating 11.0.x. An unpinned SDK is a mutable
           # dependency re-resolved on every run — the same hazard this workflow already
           # avoids by pinning every action to a commit SHA.
           global-json-file: global.json
@@ -328,7 +328,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-slow-test-stderr
-          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          path: tests/AiRaccoon.Tests/bin/Debug/net11.0/test-stderr.log
           if-no-files-found: ignore
       - name: Triage crash dumps
         if: failure()
@@ -403,7 +403,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
-          # Pinned via global.json, not a floating 10.0.x. An unpinned SDK is a mutable
+          # Pinned via global.json, not a floating 11.0.x. An unpinned SDK is a mutable
           # dependency re-resolved on every run — the same hazard this workflow already
           # avoids by pinning every action to a commit SHA.
           global-json-file: global.json
