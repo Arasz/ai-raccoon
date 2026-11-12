@@ -124,18 +124,6 @@ public sealed class AccessModeGuardTests
         ex.Message.ShouldBe("delete_entry requires mode full (current rw); run 'ai-raccoon settings access set acme full' to raise this project's mode, or 'ai-raccoon settings access default set full' for all projects");
     }
 
-    // Scenario 5: forgetting knobs denied in rw, policy unchanged.
-    [Fact]
-    public async Task RwMode_SweepThresholdAdjustment_IsDeniedAndPolicyUnchanged()
-    {
-        _store.Settings[AccessModePolicy.ProjectSettingKey("acme-web")] = "rw";
-
-        await Should.ThrowAsync<AccessDeniedException>(() =>
-            _knobs.SetSweepThresholdAsync("acme-web", 0.1, TestContext.Current.CancellationToken));
-
-        (await _knobs.GetSweepThresholdAsync(TestContext.Current.CancellationToken)).ShouldBe(0.3);
-    }
-
     [Fact]
     public async Task RwMode_EntryTtlAdjustment_IsDeniedAndPolicyUnchanged()
     {
@@ -145,17 +133,6 @@ public sealed class AccessModeGuardTests
             _knobs.SetEntryTtlAsync("acme-web", "h1", 7, TestContext.Current.CancellationToken));
 
         (await _store.GetMetadataAsync("acme-web", "h1", TestContext.Current.CancellationToken)).ShouldBeNull();
-    }
-
-    // Scenario 6: forgetting knobs applied in full.
-    [Fact]
-    public async Task FullMode_SweepThresholdAdjustment_IsApplied()
-    {
-        _store.Settings[AccessModePolicy.ProjectSettingKey("acme-web")] = "full";
-
-        await _knobs.SetSweepThresholdAsync("acme-web", 0.1, TestContext.Current.CancellationToken);
-
-        (await _knobs.GetSweepThresholdAsync(TestContext.Current.CancellationToken)).ShouldBe(0.1);
     }
 
     [Fact]

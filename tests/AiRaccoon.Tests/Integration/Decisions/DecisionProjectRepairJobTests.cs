@@ -91,7 +91,7 @@ public sealed class DecisionProjectRepairJobTests : IDisposable
         (await DecisionGraphFixture.DumpGraphAsync(connection, "graph-loser")).ShouldBe(graph);
         ProjectIdAliasMap.Default.Apply("loser").ShouldBe(new FoldedProjectId("winner", false), "the applied alias reaches the gate");
         ProjectIdAliasMap.Default.Apply("graph-loser").ShouldBe(new FoldedProjectId("graph-loser", false), "a held-back alias must not reach the gate");
-        (await Gate().RequireAsync("graph-loser", AccessRequirement.Read, DecisionTools.TnGetDecision, ct)).ShouldBe("graph-loser");
+        (await Gate().RequireAsync("graph-loser", AccessRequirement.Read, ToolNames.GetDecision, ct)).ShouldBe("graph-loser");
         (await ProjectIdAliases.LoadAsync(connection, ct)).Aliases.Select(a => a.Alias).ShouldBe(["loser"]);
         (await job.HasWorkAsync(connection, ct)).ShouldBeFalse("the request is stamped finished");
         (await job.RunAsync(connection, ct)).ShouldBeFalse("the next pass finds no open request and does not throw");
@@ -126,7 +126,7 @@ public sealed class DecisionProjectRepairJobTests : IDisposable
         (await connection.ExecuteScalarAsync<string>("SELECT project_id FROM entries WHERE hash='held-1'")).ShouldBe("graph-dropped");
         (await DecisionGraphFixture.DumpGraphAsync(connection, "graph-dropped")).ShouldBe(graph);
         ProjectIdAliasMap.Default.Apply("graph-dropped").ShouldBe(new FoldedProjectId("graph-dropped", false), "a held-back drop must not retire the id");
-        (await Gate().RequireAsync("graph-dropped", AccessRequirement.Read, DecisionTools.TnGetDecision, ct)).ShouldBe("graph-dropped");
+        (await Gate().RequireAsync("graph-dropped", AccessRequirement.Read, ToolNames.GetDecision, ct)).ShouldBe("graph-dropped");
         (await ProjectIdAliases.LoadAsync(connection, ct)).Dropped.ShouldBeEmpty();
         (await job.HasWorkAsync(connection, ct)).ShouldBeFalse("the request is stamped finished");
     }

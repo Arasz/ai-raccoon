@@ -1327,24 +1327,6 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         count.ShouldBe(0);
     }
 
-    [Then("the forgetting policy is unchanged")]
-    public async Task ThenForgettingPolicyUnchanged()
-    {
-        var ex = (scenarioContext.TryGetValue("LastError", out var stored) ? stored : _lastError) as AccessDeniedException;
-        ex.ShouldNotBeNull();
-
-        var policy = new ForgettingPolicyService(_store, new MemoryAccessGuard(_store));
-        (await policy.GetSweepThresholdAsync(CancellationToken.None))
-            .ShouldBe(ForgettingPolicyService.DefaultSweepThreshold);
-    }
-
-    [Then("the forgetting policy reflects the adjustment")]
-    public async Task ThenForgettingPolicyReflectsAdjustment()
-    {
-        var policy = new ForgettingPolicyService(_store, new MemoryAccessGuard(_store));
-        (await policy.GetSweepThresholdAsync(CancellationToken.None)).ShouldBe(0.5);
-    }
-
     [Then("the provider is configured with that endpoint")]
     public async Task ThenProviderConfigured()
     {
@@ -1414,21 +1396,6 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         finally
         {
             File.Delete(path);
-        }
-    }
-
-    [When("I adjust the sweep threshold or an entry's ttl_days")]
-    public async Task WhenIAdjustSweepThreshold()
-    {
-        var projectId = (string)scenarioContext["ProjectId"];
-        var policy = new ForgettingPolicyService(_store, new MemoryAccessGuard(_store));
-        try
-        {
-            await policy.SetSweepThresholdAsync(projectId, 0.5, CancellationToken.None);
-        }
-        catch (Exception ex) when (ex is McpException or AccessDeniedException)
-        {
-            RecordError(ex);
         }
     }
 

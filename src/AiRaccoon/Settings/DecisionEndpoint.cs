@@ -31,32 +31,32 @@ internal static class DecisionEndpoint
             // Bodies are read by Run under BodyOptions, so an unknown or unreadable field is refused by name.
             app.UseWhen(context => context.Request.Path.StartsWithSegments("/decisions"), branch => branch.UseStatusCodePages());
             app.MapPost($"{Root}/tasks", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
-                Run(projectId, body, DecisionTools.TnRegisterDecisionTask, AccessRequirement.Write, gate, ct, (RegisterTaskRequest r, string p) => r.SendAsync(service, p, ct)));
+                Run(projectId, body, ToolNames.RegisterDecisionTask, AccessRequirement.Write, gate, ct, (RegisterTaskRequest r, string p) => r.SendAsync(service, p, ct)));
             app.MapPost($"{Root}/records", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
-                Run(projectId, body, DecisionTools.TnRecordDecision, AccessRequirement.Write, gate, ct, (RecordRequest r, string p) => r.SendAsync(service, p, ct)));
+                Run(projectId, body, ToolNames.RecordDecision, AccessRequirement.Write, gate, ct, (RecordRequest r, string p) => r.SendAsync(service, p, ct)));
             app.MapPost($"{Root}/records/{{decisionId}}/amend", (string projectId, string decisionId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
-                Run(projectId, body, DecisionTools.TnAmendDecision, AccessRequirement.Write, gate, ct, (AmendRequest r, string p) => r.SendAsync(service, p, decisionId, ct)));
+                Run(projectId, body, ToolNames.AmendDecision, AccessRequirement.Write, gate, ct, (AmendRequest r, string p) => r.SendAsync(service, p, decisionId, ct)));
             app.MapPost($"{Root}/records/{{decisionId}}/transition", (string projectId, string decisionId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
-                Run(projectId, body, DecisionTools.TnTransitionDecision, AccessRequirement.Write, gate, ct, (TransitionRequest r, string p) => r.SendAsync(service, p, decisionId, ct)));
+                Run(projectId, body, ToolNames.TransitionDecision, AccessRequirement.Write, gate, ct, (TransitionRequest r, string p) => r.SendAsync(service, p, decisionId, ct)));
             app.MapPost($"{Root}/supersessions", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
-                Run(projectId, body, DecisionTools.TnSupersedeDecision, AccessRequirement.Write, gate, ct, (SupersedeRequest r, string p) => r.SendAsync(service, p, ct)));
+                Run(projectId, body, ToolNames.SupersedeDecision, AccessRequirement.Write, gate, ct, (SupersedeRequest r, string p) => r.SendAsync(service, p, ct)));
             app.MapPost($"{Root}/edges", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
-                Run(projectId, body, DecisionTools.TnLinkDecisions, AccessRequirement.Write, gate, ct, (LinkRequest r, string p) => r.SendAsync(service, p, ct)));
+                Run(projectId, body, ToolNames.LinkDecisions, AccessRequirement.Write, gate, ct, (LinkRequest r, string p) => r.SendAsync(service, p, ct)));
             app.MapPost($"{Root}/edges/{{edgeId}}/remove", (string projectId, string edgeId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
-                Run(projectId, body, DecisionTools.TnUnlinkDecisions, AccessRequirement.Write, gate, ct, (UnlinkRequest r, string p) => r.SendAsync(service, p, edgeId, ct)));
+                Run(projectId, body, ToolNames.UnlinkDecisions, AccessRequirement.Write, gate, ct, (UnlinkRequest r, string p) => r.SendAsync(service, p, edgeId, ct)));
             app.MapGet($"{Root}/records/{{decisionId}}",
                 (string projectId, string decisionId, [FromQuery] int? version, [FromQuery] bool? includeHistory, IToolGate gate, IDecisionService service, CancellationToken ct) =>
-                    Run(projectId, DecisionTools.TnGetDecision, AccessRequirement.Read, gate, ct, p => service.GetAsync(p, decisionId, version, includeHistory ?? false, ct)));
+                    Run(projectId, ToolNames.GetDecision, AccessRequirement.Read, gate, ct, p => service.GetAsync(p, decisionId, version, includeHistory ?? false, ct)));
             app.MapPost($"{Root}/query", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
-                Run(projectId, body, DecisionTools.TnQueryDecisions, AccessRequirement.Read, gate, ct, (DecisionQuery r, string p) => service.QueryAsync(p, r, ct)));
+                Run(projectId, body, ToolNames.QueryDecisions, AccessRequirement.Read, gate, ct, (DecisionQuery r, string p) => service.QueryAsync(p, r, ct)));
             app.MapPost($"{Root}/precedents", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
-                Run(projectId, body, DecisionTools.TnFindDecisionPrecedents, AccessRequirement.Read, gate, ct, (PrecedentsRequest r, string p) => r.SendAsync(service, p, ct)));
+                Run(projectId, body, ToolNames.FindDecisionPrecedents, AccessRequirement.Read, gate, ct, (PrecedentsRequest r, string p) => r.SendAsync(service, p, ct)));
             app.MapPost($"{Root}/graph", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
-                Run(projectId, body, DecisionTools.TnGetDecisionGraph, AccessRequirement.Read, gate, ct, (DecisionGraphRequest r, string p) => service.GraphAsync(p, r, ct)));
+                Run(projectId, body, ToolNames.GetDecisionGraph, AccessRequirement.Read, gate, ct, (DecisionGraphRequest r, string p) => service.GraphAsync(p, r, ct)));
             app.MapPost($"{Root}/export", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
-                Run(projectId, body, DecisionTools.TnExportDecisions, AccessRequirement.Read, gate, ct, (SelectionRequest r, string p) => r.SendAsync(service, p, ct)));
+                Run(projectId, body, ToolNames.ExportDecisions, AccessRequirement.Read, gate, ct, (SelectionRequest r, string p) => r.SendAsync(service, p, ct)));
             app.MapPost($"{Root}/preview", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
-                Run(projectId, body, DecisionTools.TnPreviewDecisions, AccessRequirement.Read, gate, ct, (DecisionPreviewOptions r, string p) => service.PreviewAsync(p, r, ct)));
+                Run(projectId, body, ToolNames.PreviewDecisions, AccessRequirement.Read, gate, ct, (DecisionPreviewOptions r, string p) => service.PreviewAsync(p, r, ct)));
             app.MapPost($"{Root}/imports/semantica/preview", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>
                 Run(projectId, body, ImportSemantica, AccessRequirement.Read, gate, ct, (ImportPreviewRequest r, string p) => r.SendAsync(service, p, ct)));
             app.MapPost($"{Root}/imports/semantica/apply", (string projectId, HttpRequest body, IToolGate gate, IDecisionService service, CancellationToken ct) =>

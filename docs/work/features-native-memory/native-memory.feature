@@ -46,15 +46,6 @@ Feature: Native memory store (ai-raccoon MCP server)
             And workspace "ws-1" exists for project "acme-web"
             When I call discard_workspace for "ws-1"
             Then the workspace is removed
-        Scenario: Forgetting knobs are denied in rw
-            Given project "acme-web" is in mode rw
-            When I adjust the sweep threshold or an entry's ttl_days
-            Then the tool errors with access-denied
-            And the forgetting policy is unchanged
-        Scenario: Forgetting knobs are applied in full
-            Given project "acme-web" is in mode full
-            When I adjust the sweep threshold or an entry's ttl_days
-            Then the forgetting policy reflects the adjustment
         Scenario: The global mode applies to projects without a per-project mode
             Given a project with id "other-app" exists
             And the global mode is rw

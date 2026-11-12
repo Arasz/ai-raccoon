@@ -14,20 +14,6 @@ namespace AiRaccoon.Tools;
 /// <summary>Thin MCP tools over IDecisionService, one per decision HTTP route, sharing its requests and refusals.</summary>
 public sealed class DecisionTools(IDecisionService service, IToolGate gate)
 {
-    internal const string TnRegisterDecisionTask = "register_decision_task";
-    internal const string TnRecordDecision = "record_decision";
-    internal const string TnAmendDecision = "amend_decision";
-    internal const string TnTransitionDecision = "transition_decision";
-    internal const string TnSupersedeDecision = "supersede_decision";
-    internal const string TnLinkDecisions = "link_decisions";
-    internal const string TnUnlinkDecisions = "unlink_decisions";
-    internal const string TnGetDecision = "get_decision";
-    internal const string TnQueryDecisions = "query_decisions";
-    internal const string TnFindDecisionPrecedents = "find_decision_precedents";
-    internal const string TnGetDecisionGraph = "get_decision_graph";
-    internal const string TnExportDecisions = "export_decisions";
-    internal const string TnPreviewDecisions = "preview_decisions";
-
     private const string ProjectIdText = "The registered project id. Required: decision tools never infer it from the working directory.";
     private const string TaskIdText = "The registered task this change belongs to.";
     private const string SessionIdText = "Your actual session id.";
@@ -90,7 +76,7 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
             return next(request, cancellationToken);
         };
 
-    [McpServerTool(Name = TnRegisterDecisionTask, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpServerTool(Name = ToolNames.RegisterDecisionTask, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]
     [Description("Registers a task before its first decision. Task metadata is immutable; the server assigns its order.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionTask>>> RegisterTask(
@@ -104,12 +90,12 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, TnRegisterDecisionTask, cancellationToken);
+        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, ToolNames.RegisterDecisionTask, cancellationToken);
         var result = await new RegisterTaskRequest(taskId, sessionId, requestId, title, sourceRef, actor).SendAsync(service, canonical, cancellationToken);
         return await gate.WrapAsync(canonical, result, cancellationToken);
     }
 
-    [McpServerTool(Name = TnRecordDecision, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpServerTool(Name = ToolNames.RecordDecision, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]
     [Description("Records a new decision under a registered task and returns its id and version 1.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionVersion>>> Record(
@@ -143,13 +129,13 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, TnRecordDecision, cancellationToken);
+        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, ToolNames.RecordDecision, cancellationToken);
         var result = await new RecordRequest(taskId, sessionId, requestId, title, category, scenario, outcome, reasoning, status, confidence, maker,
             alternatives, consequences, sources, validFrom, validUntil, actor).SendAsync(service, canonical, cancellationToken);
         return await gate.WrapAsync(canonical, result, cancellationToken);
     }
 
-    [McpServerTool(Name = TnAmendDecision, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpServerTool(Name = ToolNames.AmendDecision, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]
     [Description("Replaces a decision's content with a new version; identity and status stay. Refuses a stale expectedVersion.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionVersion>>> Amend(
@@ -168,13 +154,13 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, TnAmendDecision, cancellationToken);
+        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, ToolNames.AmendDecision, cancellationToken);
         var result = await new AmendRequest(taskId, sessionId, requestId, expectedVersion, changeReason, content, actor)
             .SendAsync(service, canonical, decisionId, cancellationToken);
         return await gate.WrapAsync(canonical, result, cancellationToken);
     }
 
-    [McpServerTool(Name = TnTransitionDecision, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpServerTool(Name = ToolNames.TransitionDecision, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]
     [Description("Moves a decision to accepted, rejected or deprecated when the transition is legal. Use supersede_decision to replace one.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionVersion>>> Transition(
@@ -193,13 +179,13 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, TnTransitionDecision, cancellationToken);
+        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, ToolNames.TransitionDecision, cancellationToken);
         var result = await new TransitionRequest(taskId, sessionId, requestId, expectedVersion, targetStatus, changeReason, actor)
             .SendAsync(service, canonical, decisionId, cancellationToken);
         return await gate.WrapAsync(canonical, result, cancellationToken);
     }
 
-    [McpServerTool(Name = TnSupersedeDecision, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpServerTool(Name = ToolNames.SupersedeDecision, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]
     [Description("Replaces one accepted decision with another in one commit: the replaced one becomes superseded and a permanent edge links them.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionSupersession>>> Supersede(
@@ -219,13 +205,13 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, TnSupersedeDecision, cancellationToken);
+        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, ToolNames.SupersedeDecision, cancellationToken);
         var result = await new SupersedeRequest(taskId, sessionId, requestId, replacementId, replacedId, expectedReplacementVersion,
             expectedReplacedVersion, reason, actor).SendAsync(service, canonical, cancellationToken);
         return await gate.WrapAsync(canonical, result, cancellationToken);
     }
 
-    [McpServerTool(Name = TnLinkDecisions, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpServerTool(Name = ToolNames.LinkDecisions, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]
     [Description("Adds a typed edge between two decisions and returns the edge identity. Refuses a stale expectedProjectRevision.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionEdge>>> Link(
@@ -246,13 +232,13 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, TnLinkDecisions, cancellationToken);
+        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, ToolNames.LinkDecisions, cancellationToken);
         var result = await new LinkRequest(taskId, sessionId, requestId, sourceId, targetId, kind, reason, expectedProjectRevision, actor)
             .SendAsync(service, canonical, cancellationToken);
         return await gate.WrapAsync(canonical, result, cancellationToken);
     }
 
-    [McpServerTool(Name = TnUnlinkDecisions, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpServerTool(Name = ToolNames.UnlinkDecisions, ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]
     [Description("Removes an edge while keeping it in history. Supersession edges are permanent and refused.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionEdge>>> Unlink(
@@ -268,13 +254,13 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         [Description(ActorText)] string? actor = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, TnUnlinkDecisions, cancellationToken);
+        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Write, ToolNames.UnlinkDecisions, cancellationToken);
         var result = await new UnlinkRequest(taskId, sessionId, requestId, reason, expectedProjectRevision, actor)
             .SendAsync(service, canonical, edgeId, cancellationToken);
         return await gate.WrapAsync(canonical, result, cancellationToken);
     }
 
-    [McpServerTool(Name = TnGetDecision, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpServerTool(Name = ToolNames.GetDecision, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]
     [Description("Returns one decision at its current or a requested version, optionally with its version history.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionDetails>>> Get(
@@ -286,12 +272,12 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         bool includeHistory = false,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, TnGetDecision, cancellationToken);
+        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, ToolNames.GetDecision, cancellationToken);
         var result = await service.GetAsync(canonical, decisionId, version, includeHistory, cancellationToken);
         return await gate.WrapAsync(canonical, result, cancellationToken);
     }
 
-    [McpServerTool(Name = TnQueryDecisions, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpServerTool(Name = ToolNames.QueryDecisions, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]
     [Description("Searches current decisions by literal text, category, status and task selector, a page at a time ordered by id.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionQueryResult>>> Query(
@@ -308,12 +294,12 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         string? afterId = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, TnQueryDecisions, cancellationToken);
+        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, ToolNames.QueryDecisions, cancellationToken);
         var result = await service.QueryAsync(canonical, new DecisionQuery(query, category, statuses, selector, limit, afterId), cancellationToken);
         return await gate.WrapAsync(canonical, result, cancellationToken);
     }
 
-    [McpServerTool(Name = TnFindDecisionPrecedents, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpServerTool(Name = ToolNames.FindDecisionPrecedents, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]
     [Description("Finds accepted, currently valid decisions ranked by text match to a scenario. You judge whether each applies.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionQueryResult>>> Precedents(
@@ -326,12 +312,12 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         bool includeInactive = false,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, TnFindDecisionPrecedents, cancellationToken);
+        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, ToolNames.FindDecisionPrecedents, cancellationToken);
         var result = await new PrecedentsRequest(scenario, category, limit, includeInactive).SendAsync(service, canonical, cancellationToken);
         return await gate.WrapAsync(canonical, result, cancellationToken);
     }
 
-    [McpServerTool(Name = TnGetDecisionGraph, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpServerTool(Name = ToolNames.GetDecisionGraph, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]
     [Description("Walks the edges around one decision and returns nodes, typed edges and what was truncated.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionGraph>>> Graph(
@@ -347,12 +333,12 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         bool includeContext = false,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, TnGetDecisionGraph, cancellationToken);
+        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, ToolNames.GetDecisionGraph, cancellationToken);
         var result = await service.GraphAsync(canonical, new DecisionGraphRequest(decisionId, direction, depth, maxNodes, includeContext), cancellationToken);
         return await gate.WrapAsync(canonical, result, cancellationToken);
     }
 
-    [McpServerTool(Name = TnExportDecisions, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpServerTool(Name = ToolNames.ExportDecisions, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]
     [Description("Returns the complete selected snapshot as JSON. An export over 1 MiB is refused with decision-export-too-large; use the 'ai-raccoon decisions export' command for it.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionExport>>> Export(
@@ -361,14 +347,14 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         DecisionTaskSelector? selector = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, TnExportDecisions, cancellationToken);
+        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, ToolNames.ExportDecisions, cancellationToken);
         var result = await new SelectionRequest(selector).SendAsync(service, canonical, cancellationToken);
         var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
         DecisionRefusals.EnsureWithinMcpLimit(envelope, canonical, SerializerOptions);
         return envelope;
     }
 
-    [McpServerTool(Name = TnPreviewDecisions, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [McpServerTool(Name = ToolNames.PreviewDecisions, ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [McpToolScope(ToolScope.Project)]
     [Description("Returns a compact text summary of the selected decisions and their direct links, with explicit omission counts.")]
     public async Task<ApiEnvelope<DecisionResult<DecisionPreview>>> Preview(
@@ -383,7 +369,7 @@ public sealed class DecisionTools(IDecisionService service, IToolGate gate)
         int maxChars = 12000,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, TnPreviewDecisions, cancellationToken);
+        var canonical = await gate.RequireAsync(DecisionRequests.Explicit(projectId), AccessRequirement.Read, ToolNames.PreviewDecisions, cancellationToken);
         var result = await service.PreviewAsync(canonical, new DecisionPreviewOptions(selector, maxDecisions, maxEdges, maxChars), cancellationToken);
         return await gate.WrapAsync(canonical, result, cancellationToken);
     }
