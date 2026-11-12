@@ -29,7 +29,7 @@ public sealed class ProjectIdAliasMap
     /// <summary>The empty map: no aliases, no canonicals, no drops. <see cref="Fold" /> degrades to guid D-form normalization only.</summary>
     public static ProjectIdAliasMap Empty { get; } = new([], [], []);
 
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false, RespectNullableAnnotations = true};
 
     private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
 

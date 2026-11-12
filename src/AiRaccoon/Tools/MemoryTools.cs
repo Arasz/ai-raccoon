@@ -145,7 +145,7 @@ public sealed partial class MemoryTools(
         double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnQuery, cancellationToken);
+        var canonicalProjectId = await gate.RequireAsync(projectId, AccessRequirement.Read, TnQuery, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
         var parsedScope = scope.ToLowerInvariant() switch
@@ -155,29 +155,27 @@ public sealed partial class MemoryTools(
             "shared" => SearchScope.Shared,
             _ => throw new McpException($"invalid-params: Invalid scope '{scope}': expected all, project, or shared.")
         };
+
         var parsedTypes = ParseEntryTypes(entryType);
+
         ValidateCodeOverrides(codeLimit, codeMinRelativeScore);
 
-        // Enum wire names are validated here (not silently defaulted) so a typo fails fast,
-        // and provided tuning values are range-checked before any bank work.
-        var searchQuery = BuildValidatedSearchQuery(canonical, query, parsedScope, workspaceId, limit,
+
+        var searchQuery = BuildValidatedSearchQuery(canonicalProjectId, query, parsedScope, workspaceId, limit,
                 minRelativeScore, rrfK, ftsWeight, vectorWeight, contextLabel, sourceLambda,
                 consolidationThreshold, docScoreFormula, candidateWindow) with
             {
                 EntryTypes = parsedTypes
             };
 
-        var guard = await queryGuard.EvaluateAsync(canonical, query, cancellationToken);
-        if (guard.Shadowed is { } suppressed)
+        var guard = await queryGuard.EvaluateAsync(canonicalProjectId, query, cancellationToken);
+        if (guard.Shadowed is var (queryGuardTier, policyName, _))
         {
-            Log.QueryGuardShadowVerdict(logger, suppressed.Tier.ToString(), canonical,
-                suppressed.PolicyName ?? "", QueryFingerprint(query));
+            Log.QueryGuardShadowVerdict(logger, queryGuardTier.ToString(), canonicalProjectId, policyName ?? "", QueryFingerprint(query));
         }
 
         if (guard.Verdict.Tier == QueryGuardTier.Refuse)
         {
-            // The caller gets its own query text back in the error result; the server's own
-            // channels (log line, OTLP span) carry only the fingerprint below.
             throw new RefusedQueryException(
                 $"invalid-params: {guard.Verdict.Guidance} Refused query: {QuerySnippet(query)}",
                 $"invalid-params: {guard.Verdict.Guidance} Refused query fingerprint ({guard.Verdict.PolicyName}): {QueryFingerprint(query)}");
@@ -190,24 +188,13 @@ public sealed partial class MemoryTools(
 
         if (dispatch.MemorySearchResults is not null)
         {
-            // The metrics table never leaves the machine (stripped from every pushed snapshot per ADR-0098,
-            // like search_quality), so the query-content hash stays excluded for a code-adjacent kind
-            // as defense-in-depth -- only the hash, not the whole recording
-            // (integration review S6, unchanged by ADR-0094). search_quality itself now records
-            // every kind (ADR-0094), with code paths never stored.
             var queryHash = !parsedTypes.HasFlag(EntryType.Code) ? ContentHash.OfValue(query) : null;
-            RecordSearchMeasurements(dispatch.MemorySearchResults, queryHash, correlationId, canonical);
+            RecordSearchMeasurements(dispatch.MemorySearchResults, queryHash, correlationId, canonicalProjectId);
         }
 
-        var warning = await ComposeWarningAsync(guard.Verdict, query, parsedTypes, dispatch.CodeWarning,
-            cancellationToken);
+        var warning = await ComposeWarningAsync(guard.Verdict, query, parsedTypes, dispatch.CodeWarning, cancellationToken);
         var result = BuildSearchResultList(dispatch, warning, searchQuery);
-        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
-
-        // ADR-0094: SearchDispatcher records a search_quality row for every kind, so every
-        // envelope carries a backed correlation id -- a later set_query_result_grade /
-        // set_memory_usage_record call always has a row to key on. This supersedes the
-        // integration-review S6 withholding rule (which held only while code/both wrote no row).
+        var envelope = await gate.WrapAsync(canonicalProjectId, result, cancellationToken);
         return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
     }
 

@@ -22,14 +22,6 @@ public sealed class McpRequestTelemetryMiddleware(RequestDelegate next)
 
         var recorded = 0;
 
-        void RecordOnce()
-        {
-            if (Interlocked.Exchange(ref recorded, 1) == 0)
-            {
-                RecordDuration(recorder, ownedActivity, timeProvider, metrics, startedAt);
-            }
-        }
-
         context.Response.OnCompleted(() =>
         {
             RecordOnce();
@@ -45,6 +37,16 @@ public sealed class McpRequestTelemetryMiddleware(RequestDelegate next)
             if (context.RequestAborted.IsCancellationRequested)
             {
                 RecordOnce();
+            }
+        }
+
+        return;
+
+        void RecordOnce()
+        {
+            if (Interlocked.Exchange(ref recorded, 1) == 0)
+            {
+                RecordDuration(recorder, ownedActivity, timeProvider, metrics, startedAt);
             }
         }
     }

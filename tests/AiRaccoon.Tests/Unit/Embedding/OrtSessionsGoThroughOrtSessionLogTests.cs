@@ -19,12 +19,11 @@ public sealed class OrtSessionsGoThroughOrtSessionLogTests
     {
         var root = RepositoryRoot();
         var offenders = Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories)
-            .Where(p => !IsBuildOutput(p))
+            .Where(static p => !IsBuildOutput(p))
             .Select(p => (Path: Path.GetRelativePath(root, p).Replace(Path.DirectorySeparatorChar, '/'), Text: File.ReadAllText(p)))
-            .Where(f => f.Path != Owner)
-            .Where(f => f.Text.Contains("OrtEnv.Instance()", StringComparison.Ordinal)
-                        || f.Text.Contains("new InferenceSession(", StringComparison.Ordinal))
-            .Select(f => f.Path)
+            .Where(static f => f.Path != Owner)
+            .Where(static f => f.Text.Contains("OrtEnv.Instance()", StringComparison.Ordinal) || f.Text.Contains("new InferenceSession(", StringComparison.Ordinal))
+            .Select(static f => f.Path)
             .Order(StringComparer.Ordinal)
             .ToList();
 
