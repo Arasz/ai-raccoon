@@ -8,6 +8,7 @@ using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tools;
 using FluentValidation;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
@@ -181,6 +182,7 @@ public sealed class SetTtlToolTests : IDisposable
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await DropGuardTriggersAsync(connection);
         await connection.ExecuteAsync(new CommandDefinition(
             "UPDATE entries SET entry_type = 'file', ttl_days = 19 WHERE hash = @hash",
             new { hash = entry.Hash }, cancellationToken: TestContext.Current.CancellationToken));
@@ -219,6 +221,7 @@ public sealed class SetTtlToolTests : IDisposable
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await DropGuardTriggersAsync(connection);
         await connection.ExecuteAsync(new CommandDefinition(
             "UPDATE entries SET entry_type = 'file', rating = 0.1, ttl_days = CASE WHEN hash = @hash THEN 7 END",
             new { hash = historical.Hash }, cancellationToken: TestContext.Current.CancellationToken));
@@ -239,11 +242,18 @@ public sealed class SetTtlToolTests : IDisposable
         var options = TestData.CreateInfrastructureOptions(_dataRoot);
         var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
         await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        await DropGuardTriggersAsync(connection);
         await connection.ExecuteAsync(new CommandDefinition(
             "UPDATE entries SET entry_type = @entryType, ttl_days = @ttlDays, rating = COALESCE(@rating, rating) WHERE hash = @hash",
             new { hash = entry.Hash, entryType, ttlDays, rating }, cancellationToken: TestContext.Current.CancellationToken));
         return entry;
     }
+
+    /// <summary>A bank from before schema v24: the guard triggers would refuse the historical TTL seeded here.</summary>
+    private static Task DropGuardTriggersAsync(SqliteConnection connection) =>
+        connection.ExecuteAsync(new CommandDefinition(
+            "DROP TRIGGER IF EXISTS entries_guard_bi; DROP TRIGGER IF EXISTS entries_guard_bu;",
+            cancellationToken: TestContext.Current.CancellationToken));
 
     private Task FullAccessAsync() =>
         _store.SetSettingAsync(AccessModePolicy.ProjectSettingKey(ProjectId), "full",

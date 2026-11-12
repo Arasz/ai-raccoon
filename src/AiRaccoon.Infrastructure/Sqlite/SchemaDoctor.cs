@@ -25,7 +25,7 @@ internal static class SchemaDoctor
         if (storedVersion > MemorySchema.CurrentVersion)
         {
             return new SchemaDoctorReport(SchemaDoctorStatus.VersionAheadOfBinary, storedVersion,
-                MemorySchema.CurrentVersion, storedDigest, MemorySchema.SchemaDigest, [], new EntryKindCounts(0, 0));
+                MemorySchema.CurrentVersion, storedDigest, MemorySchema.SchemaDigest, [], new EntryKindCounts(0, 0, 0));
         }
 
         await using var expected = await BuildExpectedSchemaConnectionAsync(cancellationToken);
@@ -53,13 +53,14 @@ internal static class SchemaDoctor
             count.CommandText = $"""
                                  SELECT
                                      COALESCE(SUM(CASE WHEN entry_type IS NULL OR entry_type = '{EntryKindWireNames.None}' THEN 1 ELSE 0 END), 0),
-                                     COALESCE(SUM(CASE WHEN entry_type NOT IN ({MemorySchema.EntryKindList}) THEN 1 ELSE 0 END), 0)
+                                     COALESCE(SUM(CASE WHEN entry_type NOT IN ({MemorySchema.EntryKindList}) THEN 1 ELSE 0 END), 0),
+                                     COALESCE(SUM(CASE WHEN ttl_days IS NOT NULL AND entry_type <> '{EntryKindWireNames.Memory}' THEN 1 ELSE 0 END), 0)
                                  FROM entries
                                  """;
             await using var reader = await count.ExecuteReaderAsync(cancellationToken);
             if (await reader.ReadAsync(cancellationToken))
             {
-                return new EntryKindCounts(reader.GetInt64(0), reader.GetInt64(1));
+                return new EntryKindCounts(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2));
             }
         }
         catch (SqliteException)
@@ -68,7 +69,7 @@ internal static class SchemaDoctor
             // the shape comparison already reports it.
         }
 
-        return new EntryKindCounts(0, 0);
+        return new EntryKindCounts(0, 0, 0);
     }
 
     /// <summary>The expected shape: the real <c>Ddl</c> applied to a throwaway in-memory bank via <see cref="MemorySchema.EnsureAsync" />.</summary>
@@ -174,8 +175,8 @@ internal static class SchemaDoctor
     private readonly record struct SchemaObject(string Type, string Name);
 }
 
-/// <summary>How many rows carry no kind, and how many carry a kind this build does not know.</summary>
-internal readonly record struct EntryKindCounts(long Unclassified, long Unknown);
+/// <summary>How many rows carry no kind, how many carry a kind this build does not know, and how many carry a TTL without being memory.</summary>
+internal readonly record struct EntryKindCounts(long Unclassified, long Unknown, long TtlOutsideMemory);
 
 internal enum SchemaDoctorStatus
 {

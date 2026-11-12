@@ -179,6 +179,8 @@ public sealed class EntryTypeMigrationTests
             // The typed embed triggers name the column, and SQLite refuses to drop a column a
             // trigger refers to. A legacy bank has neither the column nor those triggers, so both
             // go together; the ladder restores the triggers with the typed tables.
+            await connection.ExecuteAsync("DROP TRIGGER IF EXISTS entries_guard_bi");
+            await connection.ExecuteAsync("DROP TRIGGER IF EXISTS entries_guard_bu");
             await connection.ExecuteAsync("DROP TRIGGER IF EXISTS vec_entries_au");
             await connection.ExecuteAsync("DROP TRIGGER IF EXISTS vec_structure_au");
             await connection.ExecuteAsync("ALTER TABLE entries DROP COLUMN entry_type");

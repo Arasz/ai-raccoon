@@ -70,6 +70,9 @@ public sealed class SchemaDoctorTests
         // A nullable column, the way the first v20 build left it. The typed embed triggers name the
         // column, and SQLite refuses to drop a column a trigger refers to.
         await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TRIGGER IF EXISTS entries_guard_bi; DROP TRIGGER IF EXISTS entries_guard_bu;",
+            cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
             "DROP TRIGGER IF EXISTS vec_entries_au", cancellationToken: TestContext.Current.CancellationToken));
         await connection.ExecuteAsync(new CommandDefinition(
             "DROP TRIGGER IF EXISTS vec_structure_au", cancellationToken: TestContext.Current.CancellationToken));
@@ -98,6 +101,7 @@ public sealed class SchemaDoctorTests
         await using var connection = await OpenAsync();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
         await connection.ExecuteAsync("PRAGMA ignore_check_constraints = ON");
+        await connection.ExecuteAsync("DROP TRIGGER entries_guard_bi; DROP TRIGGER entries_guard_bu;");
         await connection.ExecuteAsync(new CommandDefinition(
             "INSERT INTO entries (hash, path, value, scope, project_id, created_at, updated_at, entry_type) "
             + "VALUES ('h1', 'p1', 'v', 'project', 'proj', 1, 1, 'transcript')",

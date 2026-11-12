@@ -286,6 +286,11 @@ public sealed class TypedSearchTests
         connection.LoadVector();
         await MemorySchema.EnsureAsync(connection, TestContext.Current.CancellationToken);
         await connection.ExecuteAsync("PRAGMA ignore_check_constraints=ON");
+        foreach (var trigger in MemorySchema.EntryGuardTriggerNames)
+        {
+            await connection.ExecuteAsync($"DROP TRIGGER {trigger}");
+        }
+
         return connection;
     }
 

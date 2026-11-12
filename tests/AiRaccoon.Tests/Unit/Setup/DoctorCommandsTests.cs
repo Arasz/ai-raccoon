@@ -118,13 +118,18 @@ public sealed class DoctorCommandsTests : IDisposable
         {
             await connection.ExecuteAsync(new CommandDefinition("PRAGMA ignore_check_constraints=ON",
                 cancellationToken: TestContext.Current.CancellationToken));
+            // A bank from before the guard triggers: they would refuse the rows seeded below.
+            await connection.ExecuteAsync(new CommandDefinition(
+                "DROP TRIGGER entries_guard_bi; DROP TRIGGER entries_guard_bu;",
+                cancellationToken: TestContext.Current.CancellationToken));
             await connection.ExecuteAsync(new CommandDefinition(
                 """
-                INSERT INTO entries (hash, value, project_id, scope, created_at, updated_at, entry_type)
-                VALUES ('k1', 'one', 'acme', 'project', 0, 0, 'none'),
-                       ('k2', 'two', 'acme', 'project', 0, 0, 'none'),
-                       ('k3', 'three', 'acme', 'project', 0, 0, 'future'),
-                       ('k4', 'four', 'acme', 'project', 0, 0, 'memory')
+                INSERT INTO entries (hash, value, project_id, scope, created_at, updated_at, entry_type, ttl_days)
+                VALUES ('k1', 'one', 'acme', 'project', 0, 0, 'none', NULL),
+                       ('k2', 'two', 'acme', 'project', 0, 0, 'none', NULL),
+                       ('k3', 'three', 'acme', 'project', 0, 0, 'future', NULL),
+                       ('k4', 'four', 'acme', 'project', 0, 0, 'memory', 5),
+                       ('k5', 'five', 'acme', 'project', 0, 0, 'file', 9)
                 """, cancellationToken: TestContext.Current.CancellationToken));
         }
 
@@ -133,6 +138,7 @@ public sealed class DoctorCommandsTests : IDisposable
         var lines = Lines(outp);
         lines.ShouldContain("entries without a kind: 2");
         lines.ShouldContain("entries with an unknown kind: 1");
+        lines.ShouldContain("entries with a TTL that are not memory: 1");
     }
 
     [RetryFact]

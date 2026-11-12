@@ -60,8 +60,8 @@ public sealed class NativeMemoryFeatureTests : IDisposable
         await using var insert = connection.CreateCommand();
         insert.CommandText =
             "INSERT INTO entries (hash, path, value, scope, project_id, context_label, agent_id, created_at, updated_at, " +
-            "access_count, last_accessed_at, rating, ttl_days, embed_state) " +
-            "VALUES ('h1', 'note.md', 'a fact', 'custom', 'acme', 'docs:api', 'agent-1', 10, 20, 3, 30, 0.9, 15, 'pending')";
+            "access_count, last_accessed_at, rating, ttl_days, embed_state, entry_type) " +
+            "VALUES ('h1', 'note.md', 'a fact', 'custom', 'acme', 'docs:api', 'agent-1', 10, 20, 3, 30, 0.9, 15, 'pending', 'memory')";
         await insert.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
 
         var row = await connection.QueryFirstOrDefaultAsync<EntryRow>(

@@ -137,6 +137,9 @@ public sealed class TypedEntryLifecycleTests : IAsyncLifetime
         await SeedFileAsync("file-ttl-hash", "mirrored document");
         await using (var connection = await _factory.OpenBankAsync(ct))
         {
+            // A bank from before schema v24: the guard would refuse the historical TTL.
+            await connection.ExecuteAsync(new CommandDefinition(
+                "DROP TRIGGER IF EXISTS entries_guard_bi; DROP TRIGGER IF EXISTS entries_guard_bu;", cancellationToken: ct));
             await connection.ExecuteAsync(new CommandDefinition(
                 "UPDATE entries SET ttl_days=19 WHERE hash='file-ttl-hash'", cancellationToken: ct));
         }
