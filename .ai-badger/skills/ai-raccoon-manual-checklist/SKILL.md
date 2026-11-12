@@ -170,7 +170,12 @@ registered in the build in front of you.
   twice; stale versions, illegal transitions and read-only mode are refused; an unlinked edge stays
   in history; graph bounds truncate with a reason; an MCP export over 1 MiB is refused while the
   CLI streams it; a Semantica export imports through a blocking preview and replays as a no-op.
-- **Full MCP surface** — every derived tool and prompt is reachable.
+  Every decision tool reply matches its declared output schema.
+- **Reserved shared target** — a shared watch publishes its documents to the right scopes, the
+  reserved `shared` name cannot be registered as an ordinary project, and every tool declared
+  ordinary-project-only refuses the shared target before any side effect.
+- **Full MCP surface** — every derived tool and prompt is reachable, and every pre-2.0 tool name
+  refuses with `unknown-tool` and names its replacement.
 - **Observability** — emitted event ids resolve against the logging event-id reference.
 
 Anchor each item to the decision record that defines the behaviour, so a step whose ADR was

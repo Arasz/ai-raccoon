@@ -1,3 +1,5 @@
+# the retired-entry prune (ADR-0049) pushed this module past 1000 lines
+# pylint: disable=too-many-lines
 """MCP servers, one of the scaffold's collaborators.
 
 Collects the servers the mcp catalog declares — `stack-mcp.json` and nothing else since
@@ -181,6 +183,10 @@ class McpTools:
         self._pi_trust_noted = False
         # The unknown-``config.mcp.scope``-name note, once per run for the same reason.
         self._scope_overrides_noted = False
+        # Retired servers already named in the Hermes note this run.
+        self._hermes_retired_noted = set()  # type: set
+        # The catalog's retired set, read once per run so its notes are said once.
+        self._retired = None  # type: Optional[Dict[str, List[Dict[str, Any]]]]
 
     # -- the mcp catalog ---------------------------------------------------------------
 
@@ -207,6 +213,38 @@ class McpTools:
                 result = [s for s in result if s.get("name") != srv.get("name")]
                 result.append(srv)
         return result
+
+    def collect_retired_mcp_servers(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Every catalog file's ``retired`` declarations by name, whatever the active stacks.
+
+        A name that any catalog file still declares in ``servers`` is current, not retired.
+        Read once per run. One unreadable catalog file empties the set: never prune on part.
+        """
+        if self._retired is None:
+            self._retired = self._read_retired()
+        return self._retired
+
+    def _read_retired(self) -> Dict[str, List[Dict[str, Any]]]:
+        """The retired set from every catalog file, or {} plus a note if one is unreadable."""
+        retired = {}  # type: Dict[str, List[Dict[str, Any]]]
+        current = set()
+        for path in sorted((self.ctx.root / "features").glob("*/stack-mcp.json")):
+            rel = path.relative_to(self.ctx.root).as_posix()
+            try:
+                data = _json.loads(path.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                data = None
+            if not isinstance(data, dict):
+                self.ctx.notes.append(f"{rel} is unreadable — retired prune skipped")
+                return {}
+            current.update(srv.get("name") for srv in data.get("servers", [])
+                           if isinstance(srv, dict))
+            for srv in data.get("retired", []):
+                if not isinstance(srv, dict) or not srv.get("name"):
+                    self.ctx.notes.append(f"{rel}: skipped a retired entry with no name")
+                    continue
+                retired.setdefault(srv["name"], []).append(srv)
+        return {name: decls for name, decls in retired.items() if name not in current}
 
     def _server_instructions(self, name: str) -> str:
         """`server.md` for a catalog server, found through the index, or '' when there is none."""
@@ -623,11 +661,8 @@ class McpTools:
         """
         if not entries and not path.exists():
             return False
-        existing, note = cg.read_json_mapping(path)
-        section = cg.mapping_section(existing, "mcpServers") if existing is not None else None
+        existing, section = self._read_section(path, dest)
         if section is None:
-            note = note or cg.refusal(path, "mcpServers is not a mapping")
-            self.ctx.notes.append(f"{note} ({dest.consequence})")
             return False
         if dest.pin_cwd:
             self._carry_live_cwd(section, entries)
@@ -639,9 +674,41 @@ class McpTools:
         self._drop_declared_elsewhere(section, elsewhere, dest)
         self._drop_unavailable(section, unavailable, dest)
         self._drop_user_scoped(section, user_scoped, dest)
+        self._drop_retired(section, dest)
         cg.write_json_with_backup(path, existing)
         self.ctx.record_generated_config(path, dest.label)
         return True
+
+    def _read_section(
+        self, path: Path, dest: McpDestination
+    ) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        """``(file, mcpServers)`` of the JSON file at *path*; ``(None, None)`` plus a refusal note."""
+        existing, note = cg.read_json_mapping(path)
+        section = cg.mapping_section(existing, "mcpServers") if existing is not None else None
+        if section is None:
+            note = note or cg.refusal(path, "mcpServers is not a mapping")
+            self.ctx.notes.append(f"{note} ({dest.consequence})")
+            return None, None
+        return existing, section
+
+    def _holds_retired(self, path: Path) -> bool:
+        """Whether the file at *path* may name a retired server.
+
+        True for a file that is not a readable mapping, so :meth:`_read_section` names the refusal.
+        """
+        retired = self.collect_retired_mcp_servers()
+        if not retired or not path.exists():
+            return False
+        existing, _ = cg.read_json_mapping(path)
+        section = cg.mapping_section(existing, "mcpServers") if existing is not None else None
+        return section is None or any(name in section for name in retired)
+
+    def _prune_retired_only(self, path: Path, dest: McpDestination) -> None:
+        """Drop retired entries from a file no configured agent reads, and add nothing."""
+        existing, section = self._read_section(path, dest)
+        if section is not None and self._drop_retired(section, dest):
+            cg.write_json_with_backup(path, existing)
+            self.ctx.record_generated_config(path, dest.label)
 
     def _merge_pi_mcp_json(
         self,
@@ -664,11 +731,8 @@ class McpTools:
         """
         if not entries and not path.exists():
             return False
-        existing, note = cg.read_json_mapping(path)
-        section = cg.mapping_section(existing, "mcpServers") if existing is not None else None
+        existing, section = self._read_section(path, dest)
         if section is None:
-            note = note or cg.refusal(path, "mcpServers is not a mapping")
-            self.ctx.notes.append(f"{note} ({dest.consequence})")
             return False
         for name, entry in entries.items():
             recorded = section.get(name)
@@ -683,6 +747,7 @@ class McpTools:
         self._drop_declined(section, declined, dest)
         self._drop_pi_unavailable(section, unavailable, entries, dest)
         self._drop_user_scoped(section, user_scoped, dest)
+        self._drop_retired(section, dest)
         cg.write_json_with_backup(path, existing)
         self.ctx.record_generated_config(path, dest.label)
         return True
@@ -799,7 +864,6 @@ class McpTools:
         templates = dict(entries)
         if pending:
             templates.update(self._render_without_notes(pending, dest))
-        reader = self._configured_reader(dest)
         removed, kept = [], []
         for name in names:
             server = project_catalog.get(name)
@@ -807,9 +871,7 @@ class McpTools:
             recorded = section.get(name)
             if server is None or template is None or not isinstance(recorded, dict):
                 continue
-            resolved = self._resolve_server_for_agent(server, reader) if reader else dict(server)
-            candidates = self._template_candidates(template, resolved, dest)
-            if any(_launch_of(recorded) == _launch_of(candidate) for candidate in candidates):
+            if self._is_template(recorded, template, server, dest):
                 section.pop(name)
                 removed.append(name)
             else:
@@ -823,6 +885,49 @@ class McpTools:
                 f"{dest.label}: kept unavailable MCP server '{name}' — its launch is a hand "
                 f"edit, not today's template (F11), and ai-badger never destroys a user's "
                 f"entry. Delete the entry to adopt the template")
+
+    def _is_template(
+        self, recorded: Dict[str, Any], template: Dict[str, Any], server: Dict[str, Any],
+        dest: McpDestination,
+    ) -> bool:
+        """Whether *recorded*'s launch equals *template*'s in any home spelling (F11a)."""
+        reader = self._configured_reader(dest)
+        resolved = self._resolve_server_for_agent(server, reader) if reader else dict(server)
+        return any(_launch_of(recorded) == _launch_of(candidate)
+                   for candidate in self._template_candidates(template, resolved, dest))
+
+    def _drop_retired(self, section: Dict[str, Any], dest: McpDestination) -> List[str]:
+        """Remove each entry that is an exact copy of a retired launch; return their names.
+
+        A retired entry with any other launch is a hand edit: kept, with a note (ADR-0049).
+        """
+        removed = []
+        for name, declarations in self.collect_retired_mcp_servers().items():
+            recorded = section.get(name)
+            if not isinstance(recorded, dict):
+                continue
+            if any(self._is_template(
+                    recorded, self._render_without_notes({name: decl}, dest)[name], decl, dest)
+                   for decl in declarations):
+                section.pop(name)
+                removed.append(name)
+                self.ctx.notes.append(
+                    f"{dest.label}: removed retired MCP server '{name}' — the entry was an exact "
+                    f"copy of a launch ai-badger retired. To keep a server under that name, "
+                    f"change any launch field (command, args, env, cwd)")
+            else:
+                self.ctx.notes.append(
+                    f"{dest.label}: kept retired MCP server '{name}' — ai-badger no longer "
+                    f"declares it, and its launch is a hand edit. Delete the entry if you no "
+                    f"longer use it")
+        fresh = [name for name in removed if name not in self._hermes_retired_noted]
+        if fresh and "hermes" in self.ctx.config.get("agents", []):
+            self._hermes_retired_noted.update(fresh)
+            self.ctx.notes.append(
+                f"Hermes: delete {', '.join(f'mcp_servers.{name}' for name in fresh)} from "
+                f"~/.hermes/config.yaml yourself — ai-badger retired the server(s) and never "
+                f"writes user-global configuration")
+        return removed
 
     def propose_claude_mcp_user(
         self, user_servers: Dict[str, Dict[str, Any]]
@@ -858,8 +963,11 @@ class McpTools:
         _, user_servers = self.split_servers_by_scope(self.declared_servers())
         user_scoped = sorted(user_servers)
         wanted = {name: srv for name, srv in servers.items() if name not in declined}
+        path = self.ctx.target / ".github" / "mcp.json"
         if not self._destination_applies(COPILOT_MCP_JSON, wanted,
                                         declined + unavailable + user_scoped):
+            if self._holds_retired(path):
+                self._prune_retired_only(path, COPILOT_MCP_JSON)
             return
 
         entries = self._render_entries(wanted, COPILOT_MCP_JSON)
@@ -867,7 +975,7 @@ class McpTools:
         for name in elsewhere:
             entries.pop(name)
         self._merge_mcp_servers_json(
-            self.ctx.target / ".github" / "mcp.json",
+            path,
             entries,
             COPILOT_MCP_JSON,
             declined,
@@ -940,13 +1048,16 @@ class McpTools:
         unavailable = self._unavailable_servers()
         user_scoped = sorted(user_servers)
 
+        path = self.ctx.target / ".mcp.json"
         if not self._destination_applies(MCP_JSON, project_servers,
                                         declined + unavailable + user_scoped):
+            if self._holds_retired(path):
+                self._prune_retired_only(path, MCP_JSON)
             return
 
         mcp_servers = self._render_entries(project_servers, MCP_JSON)
         written = self._merge_mcp_servers_json(
-            self.ctx.target / ".mcp.json", mcp_servers, MCP_JSON, declined,
+            path, mcp_servers, MCP_JSON, declined,
             unavailable=unavailable, user_scoped=user_scoped,
         )
         if written:
@@ -967,13 +1078,16 @@ class McpTools:
         unavailable = self._unavailable_servers()
         user_scoped = sorted(user_servers)
 
+        path = self.ctx.target / ".pi" / "mcp.json"
         if not self._destination_applies(PI_MCP_JSON, project_servers,
                                         declined + unavailable + user_scoped):
+            if self._holds_retired(path):
+                self._prune_retired_only(path, PI_MCP_JSON)
             return
 
         entries = self._render_entries(project_servers, PI_MCP_JSON)
         written = self._merge_pi_mcp_json(
-            self.ctx.target / ".pi" / "mcp.json", entries, PI_MCP_JSON, declined, unavailable,
+            path, entries, PI_MCP_JSON, declined, unavailable,
             user_scoped=user_scoped,
         )
         if written and not self._pi_trust_noted:

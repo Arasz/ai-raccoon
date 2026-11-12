@@ -13,6 +13,10 @@ from typing import Any, Dict, List, Optional
 from _shared import _within
 from scaffold_context import ScaffoldContext
 
+# Flat `.ai-badger/hooks/` copies of scripts the framework retired or moved into a skill's
+# scripts/. No manifest entry records them, so `prune` cannot see them; nothing runs them.
+RETIRED_HOOK_COPIES = ("memory_grade.py", "memory_grade_hook.py")
+
 
 class SupersededPrune:
     """Removes a previous run's copies this config no longer asks for, naming each one."""
@@ -23,6 +27,7 @@ class SupersededPrune:
 
     def prune(self, entries: List[Dict[str, Any]]) -> None:
         """Prune every superseded entry of the manifest a previous run left."""
+        self._prune_retired_hook_copies()
         handled: List[str] = []
         for entry in entries:
             reason = self._reason(entry)
@@ -58,6 +63,15 @@ class SupersededPrune:
             else:
                 path.unlink()
             self.ctx.notes.append(f"removed {rel} — {reason}")
+
+    def _prune_retired_hook_copies(self) -> None:
+        """Delete each :data:`RETIRED_HOOK_COPIES` file from `.ai-badger/hooks/`, naming it."""
+        for name in RETIRED_HOOK_COPIES:
+            path = self.ctx.target / ".ai-badger" / "hooks" / name
+            if path.is_file() and not path.is_symlink():
+                path.unlink()
+                self.ctx.notes.append(f"removed .ai-badger/hooks/{name} — a retired flat "
+                                      "hook copy that nothing runs")
 
     def _declined(self, entry: Dict[str, Any]) -> bool:
         """True when `config.exclude` names the item this entry delivered."""

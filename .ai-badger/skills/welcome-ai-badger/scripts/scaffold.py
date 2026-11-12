@@ -641,6 +641,7 @@ class Scaffolder:
                         self.prune_discovery, personas, self.index, declared_mcp,
                         self.mcp.declarations_for_agent(agent_name),
                         self.mcp.declined_servers(), adjustment_tools,
+                        sorted(self.mcp.collect_retired_mcp_servers()),
                     )
                     result = mod.adjust(context)
                     if result.get("applied"):

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 import tool_hooks
@@ -43,16 +44,21 @@ def skill_script_id(command: str) -> Optional[str]:
     return None
 
 
-def project_script(command: str) -> Optional[str]:
-    """The project-relative script a rewritten command runs, or None if it names none."""
+def _project_path(command: str, last: bool) -> Optional[str]:
+    """The first (or *last*) project-relative path in a command, cut at the first closer."""
     marker = PROJECT_DIR_VAR + "/"
-    idx = command.rfind(marker)
+    idx = command.rfind(marker) if last else command.find(marker)
     if idx == -1:
         return None
     rest = command[idx + len(marker):]
     for closer in ('"', "'", " "):
         rest = rest.split(closer, 1)[0]
     return rest or None
+
+
+def project_script(command: str) -> Optional[str]:
+    """The project-relative script a rewritten command runs, or None if it names none."""
+    return _project_path(command, last=True)
 
 
 # The only characters a scaffolded script path may carry into a shell string (F4).
@@ -109,6 +115,56 @@ def drop_declined(existing_hooks: Dict[str, Any], declined: Set[str]) -> List[st
             pruned["hooks"] = kept
             kept_entries.append(pruned)
         existing_hooks[event] = kept_entries
+    return dropped
+
+
+def _retired(command: Any, root: Path, target: Path) -> Optional[str]:
+    """The script id of an owned hook whose skill has no catalog source and whose script is gone.
+
+    The script is the command's first project-relative path — what it runs, not a later argument.
+    """
+    script_id = skill_script_id(command) if isinstance(command, str) else None
+    script = _project_path(command, last=False) if script_id else None
+    if script is None or not script.endswith(f"skills/{script_id}") or (target / script).exists():
+        return None
+    skill = script_id.split("/")[0]
+    if any((d / "skills" / skill).is_dir() for d in (root / "features").iterdir()):
+        return None
+    return script_id
+
+
+def drop_retired(existing_hooks: Any, root: Path, target: Path) -> List[str]:
+    """Remove retired hooks in every event; drop only entries and events this emptied.
+
+    Returns each removed script id once.
+    """
+    dropped: List[str] = []
+    if not isinstance(existing_hooks, dict):
+        return dropped
+    for event, entries in list(existing_hooks.items()):
+        if not isinstance(entries, list):
+            continue
+        kept_entries = []
+        for entry in entries:
+            handlers = entry.get("hooks") if isinstance(entry, dict) else None
+            if not isinstance(handlers, list):
+                kept_entries.append(entry)
+                continue
+            kept = []
+            for handler in handlers:
+                script_id = _retired(handler.get("command") if isinstance(handler, dict)
+                                     else None, root, target)
+                if script_id is None:
+                    kept.append(handler)
+                elif script_id not in dropped:
+                    dropped.append(script_id)
+            if kept or not handlers:
+                kept_entries.append(entry if len(kept) == len(handlers)
+                                    else dict(entry, hooks=kept))
+        if kept_entries or not entries:
+            existing_hooks[event] = kept_entries
+        else:
+            del existing_hooks[event]
     return dropped
 
 
@@ -353,9 +409,8 @@ class HookWiring:
             settings_hooks.setdefault(event, []).extend(rewritten)
 
         settings_path = self.ctx.target / ".claude" / "settings.json"
-        # Nothing to wire and nothing a previous run could have wired for a declined skill.
-        if not target_hooks["hooks"] and not (
-                self.ctx.excluded["skills"] and settings_path.exists()):
+        has_work = bool(target_hooks["hooks"] or self.ctx.excluded["skills"])
+        if not target_hooks["hooks"] and not settings_path.exists():
             return
 
         if target_hooks["hooks"]:
@@ -366,11 +421,17 @@ class HookWiring:
         # Merge into .claude/settings.json — never over an unreadable file
         settings, note = cg.read_json_mapping(settings_path)
         if settings is None:
-            self.ctx.notes.append(f"{note} (hooks not wired)")
+            consequence = "hooks not wired" if has_work else "retired-hook check skipped"
+            self.ctx.notes.append(f"{note} ({consequence})")
             return
 
         existing_hooks = settings.get("hooks", {})
-        unwired = drop_declined(existing_hooks, self.ctx.excluded["skills"])
+        retired = drop_retired(existing_hooks, self.ctx.root, self.ctx.target)
+        # Nothing to wire, nothing declined and nothing retired: leave the file alone.
+        if not (has_work or retired):
+            return
+        declined = self.ctx.excluded["skills"]
+        unwired = drop_declined(existing_hooks, declined) if declined else []
         merge_hooks(existing_hooks, settings_hooks)
 
         settings["hooks"] = existing_hooks
@@ -379,6 +440,10 @@ class HookWiring:
         for script_id in unwired:
             self.ctx.notes.append(
                 f"unwired {script_id} from .claude/settings.json — declined in config.exclude"
+            )
+        for script_id in retired:
+            self.ctx.notes.append(
+                f"unwired {script_id} from .claude/settings.json — its skill and script are gone"
             )
         if settings_hooks:
             self.ctx.notes.append(f"wired {len(settings_hooks)} hook(s) into .claude/settings.json")

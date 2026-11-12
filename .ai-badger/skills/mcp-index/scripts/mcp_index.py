@@ -458,22 +458,32 @@ def _index_source(server: dict[str, Any],
 
 def _seed_from_catalog(source: dict[str, Any], server: Optional[dict[str, Any]],
                        catalog: dict[str, dict[str, dict[str, Any]]]) -> list[str]:
-    """Fill a server the host declined to enumerate from the catalog; return the seeded names.
+    """Fill a server the host declined to enumerate from the catalog; return the changed names.
 
     Only when `tools_known` is False. A listing that carries tool detail is authoritative —
     including when it reports none — so the catalog never contradicts one, only stands in for
     a listing that has nothing to say (issue #188).
+
+    A `catalog` entry the catalog no longer lists, and the listing does not name, is marked
+    removed: the catalog was its only evidence. Manual entries are left for a live listing.
     """
     if server is None or (server.get("tools_known", True) and not server.get("tools_partial")):
         return []
     name = source["name"]
     tools = source.setdefault("tools", {})
+    curated_tools = td.catalog_tools(catalog, name)
     seeded = []
-    for tool, curated in td.catalog_tools(catalog, name).items():
+    for tool, curated in curated_tools.items():
         if tool in tools:  # an existing entry — manual, catalog or removed — outranks the seed
             continue
         tools[tool] = describe_tool(name, tool, curated.get("intent", ""), catalog)
         seeded.append(f"{name}:{tool}")
+    if not curated_tools:
+        return seeded
+    listed = {t.get("name") for t in server.get("tools", [])}
+    for tool in sorted(set(tools) - set(curated_tools) - listed):
+        if tools[tool].get("origin") == td.CATALOG and _mark_removed(tools, [tool]):
+            seeded.append(f"{name}:{tool}")
     return seeded
 
 

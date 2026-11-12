@@ -1,7 +1,7 @@
 """Resolve the limited-environment policy passed to agent adjustments."""
 from __future__ import annotations
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Sequence, Tuple
 
 
 def instruction_only_adjustment_context(
@@ -23,7 +23,7 @@ def build_adjustment_context(
     root: Any, config: Dict[str, Any], feature_dir: Any, target_dir: Any,
     target: Any, install: bool, skills: list, prune: bool, personas: list,
     index: Dict[str, Any], mcp_servers: list, mcp_declarations: Any,
-    mcp_declined: Any, tools: Dict[str, Any],
+    mcp_declined: Any, tools: Dict[str, Any], retired_servers: Sequence[str] = (),
 ) -> Dict[str, Any]:
     """Assemble the stable context contract passed to one agent adjustment."""
     return {
@@ -32,4 +32,5 @@ def build_adjustment_context(
         "skills": skills, "prune": prune, "personas": personas, "index": index,
         "mcp_servers": mcp_servers, "mcp_declarations": mcp_declarations,
         "mcp_declined": mcp_declined, "tools": tools,
+        "retired_servers": sorted(retired_servers),
     }
