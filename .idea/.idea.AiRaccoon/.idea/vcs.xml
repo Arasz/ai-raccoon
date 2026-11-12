@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="AgentCommitMessageProject"><![CDATA[{
+  "mode": "CUSTOM",
+  "instruction": "- short sumamry\n- use Conventional Commits format\n- single point per change"
+}]]></component>
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
   </component>
