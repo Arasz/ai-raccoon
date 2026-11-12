@@ -17,7 +17,7 @@ public class WorkspaceServiceTests
     private static WorkspaceService Service(IMemoryStore store, out FakeWorkspaceStore workspaceStore)
     {
         workspaceStore = new FakeWorkspaceStore();
-        return new WorkspaceService(store, workspaceStore, new FakeTimeProvider(FixedNow), TestData.SharedScope);
+        return new WorkspaceService(store, workspaceStore, new FakeTimeProvider(FixedNow), TestData.SharedScope, new EntryKindClassifier());
     }
 
     [Fact]
@@ -333,11 +333,36 @@ public class WorkspaceServiceTests
         store.DeletedContexts.ShouldContain("workspace:ws-1");
     }
 
+    /// <summary>Consolidation writes each kept row with the kind the outbox row declares, not a blanket memory.</summary>
+    [Fact]
+    public async Task ConsolidateAsync_PassesEachRowsDeclaredKind()
+    {
+        var store = new FakeStore
+        {
+            EntriesByContext =
+            {
+                ["workspace:ws-1"] =
+                [
+                    new MemoryEntry("h1", "docs/guide.md", "workspace:ws-1", "guide", 1, EntryKind: "file"),
+                    new MemoryEntry("h2", "note.md", "workspace:ws-1", "note", 1, EntryKind: "memory"),
+                    new MemoryEntry("h3", "old.md", "workspace:ws-1", "legacy", 1)
+                ]
+            }
+        };
+        var service = Service(store, out _);
+
+        await service.ConsolidateAsync("acme", "ws-1", ["all"], TestContext.Current.CancellationToken);
+
+        store.PromotedKinds.ShouldBe([EntryKind.File, EntryKind.Memory, EntryKind.None]);
+    }
+
     private sealed class FakeStore : PermissiveFakeMemoryStore
     {
         public Dictionary<string, IReadOnlyList<MemoryEntry>> EntriesByContext { get; } = [];
 
         public List<(string Path, string Content, string Context)> PromotedContent { get; } = [];
+
+        public List<EntryKind> PromotedKinds { get; } = [];
 
         public List<string> DeletedContexts { get; } = [];
 
@@ -349,10 +374,11 @@ public class WorkspaceServiceTests
                 request.Context ?? ContextNaming.ProjectContext(request.ProjectId), request.Content, 1));
 
         public override Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content,
-            string? context, string? sourceFile = null, string? section = null,
+            string? context, EntryKind entryKind, string? sourceFile = null, string? section = null,
             CancellationToken cancellationToken = default)
         {
             PromotedContent.Add((path, content, context ?? ContextNaming.ProjectContext(projectId)));
+            PromotedKinds.Add(entryKind);
             return Task.FromResult(new MemoryEntryResult(new MemoryEntry("new-hash", path, context ?? ContextNaming.ProjectContext(projectId),
                 content, 1), true));
         }

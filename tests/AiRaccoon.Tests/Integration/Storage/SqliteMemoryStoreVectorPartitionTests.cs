@@ -54,7 +54,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
     public async Task Search_VectorOnly_FindsSharedScopedContent()
     {
         var shared = await _store.AddContentAsync("acme", "shared/a.md",
-            "distinctive shared content about quokkas", ContextNaming.SharedContext,
+            "distinctive shared content about quokkas", ContextNaming.SharedContext, EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
 
         var results = await VectorOnlySearchAsync("quokkas", SearchScope.Shared);
@@ -79,7 +79,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
     {
         await _workspaces.BeginAsync(new Workspace("ws-1", "acme"), FixedNow, TestContext.Current.CancellationToken);
         var workspace = await _store.AddContentAsync("acme", "w.md",
-            "distinctive workspace content about narwhals", ContextNaming.WorkspaceContext("ws-1"),
+            "distinctive workspace content about narwhals", ContextNaming.WorkspaceContext("ws-1"), EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
 
         var results = (await _store.SearchAsync(
@@ -94,7 +94,7 @@ public sealed class SqliteMemoryStoreVectorPartitionTests : IAsyncLifetime
     public async Task Search_VectorOnly_FindsCustomLabelledContent()
     {
         var labelled = await _store.AddContentAsync("acme", "c.md",
-            "distinctive custom content about axolotls", "my-label",
+            "distinctive custom content about axolotls", "my-label", EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
 
         var results = (await _store.SearchAsync(

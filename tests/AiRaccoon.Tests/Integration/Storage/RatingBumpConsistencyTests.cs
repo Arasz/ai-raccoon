@@ -43,7 +43,7 @@ public sealed class RatingBumpConsistencyTests : IDisposable
     public async Task ConcurrentSearches_LeaveRatingConsistentWithTheStoredAccessCount()
     {
         await _store.AddContentAsync(ProjectId, "/notes/hot.md", "the rating bump consistency probe",
-            ContextNaming.ProjectContext(ProjectId), cancellationToken: TestContext.Current.CancellationToken);
+            ContextNaming.ProjectContext(ProjectId), EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
 
         // Task.Run, not a bare Select: Microsoft.Data.Sqlite has no true async I/O, so Dapper's
         // ExecuteAsync completes synchronously and Task.WhenAll over a Select runs the searches one
@@ -68,7 +68,7 @@ public sealed class RatingBumpConsistencyTests : IDisposable
         // The uncontended path must keep the same invariant — the fix must not trade a race for a
         // formula that is merely wrong more quietly.
         await _store.AddContentAsync(ProjectId, "/notes/warm.md", "the sequential rating probe",
-            ContextNaming.ProjectContext(ProjectId), cancellationToken: TestContext.Current.CancellationToken);
+            ContextNaming.ProjectContext(ProjectId), EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
 
         for (var i = 0; i < 3; i++)
         {

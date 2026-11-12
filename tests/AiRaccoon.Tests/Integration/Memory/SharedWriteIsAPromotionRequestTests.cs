@@ -145,7 +145,7 @@ public sealed class SharedWriteIsAPromotionRequestTests : IDisposable
 
     private async Task<Workspace> BeginWorkspaceAsync(CancellationToken cancellationToken)
     {
-        var workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(_factory, TestData.SharedScope), new FakeTimeProvider(FixedNow), TestData.SharedScope);
+        var workspaces = new WorkspaceService(_store, new SqliteWorkspaceStore(_factory, TestData.SharedScope), new FakeTimeProvider(FixedNow), TestData.SharedScope, new EntryKindClassifier());
         return await workspaces.BeginAsync(ProjectId, cancellationToken: cancellationToken);
     }
 }

@@ -741,7 +741,8 @@ internal static class MemorySql
 
     public static readonly string SelectSourceByHashAndProject = $"""
                                                                    SELECT e.path AS Path, e.value AS Value, e.source_file AS SourceFile, e.section AS Section,
-                                                                          ms.source_type AS SourceType, ms.heading_path AS HeadingPath
+                                                                          ms.source_type AS SourceType, ms.heading_path AS HeadingPath,
+                                                                          e.entry_type AS EntryType
                                                                   FROM entries e
                                                                   LEFT JOIN memory_source ms ON ms.id = e.source_id
                                                                   WHERE e.hash = @hash AND {ProjectRows.Of("e.")}

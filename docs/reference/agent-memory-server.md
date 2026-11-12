@@ -165,8 +165,9 @@ config channel (see [Command-line options](#command-line-options)).
   Code runs its independent hybrid and remains project-scoped; shared-only requests return
   an empty code section. With no Code bit the response has no `code` key.
   `get_entry` requires exactly one type, reads only that type and does not fall back to another
-  corpus. Its existing `entryType` result still names the corpus (`memory` or `code`);
-  `entryKind` reports the selected Memory/File/Code taxonomy.
+  corpus. Its result has `corpus` (`memory` or `code`) and `entryKind` (the selected
+  memory/file/code taxonomy). The result `entryType` repeats `corpus`; it is deprecated and
+  removed in 3.0.0 (#947, [ADR-0147](../adr/0147-get-entry-reports-corpus-and-deprecates-entry-type.md)).
   `codeLimit`/`codeMinRelativeScore` override `limit`/`minRelativeScore` for the code section
   only (omit them to use the same values as the memory section) — the only per-section knobs.
   Every other per-call tuning arg (`rrfK`/`ftsWeight`/`vectorWeight`/`candidateWindow`) applies

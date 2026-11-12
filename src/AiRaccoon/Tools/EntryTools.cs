@@ -44,7 +44,7 @@ public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch
             var code = await codeSearch.GetAsync(canonical, hash, cancellationToken)
                        ?? throw new UnknownHashException(hash, canonical);
             result = new GetEntryResult(code.Hash, code.Value, code.Path, null, 0, code.LineStart,
-                code.LineEnd, SearchKindWireNames.Code, EntryTypeParameter.Code);
+                code.LineEnd, SearchKindWireNames.Code, SearchKindWireNames.Code, EntryTypeParameter.Code);
         }
         else
         {
@@ -52,7 +52,7 @@ public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch
             var entry = await store.GetAsync(canonical, hash, cancellationToken, kind)
                         ?? throw new UnknownHashException(hash, canonical);
             result = new GetEntryResult(entry.Hash, entry.Value, entry.Path, entry.Context, entry.CreatedAt,
-                null, null, SearchKindWireNames.Memory, classifier.ToStoredValue(kind));
+                null, null, SearchKindWireNames.Memory, SearchKindWireNames.Memory, classifier.ToStoredValue(kind));
         }
 
         return await gate.WrapAsync(canonical, result, cancellationToken);
@@ -63,9 +63,8 @@ public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch
     ///     context and creation time are null for a code chunk — a code chunk has no memory
     ///     context and no creation timestamp of its own.
     ///     <para>
-    ///         <c>EntryType</c> names the CORPUS that owns the hash, not the kind a row holds: a
-    ///         code chunk is not a row of <c>entries</c> — it lives in the code corpus — so it has
-    ///         no row kind to carry.
+    ///         <c>Corpus</c> names the corpus that owns the hash: memory or code. The deprecated
+    ///         <c>EntryType</c> repeats it until 3.0.0 (ADR-0147).
     ///     </para>
     ///     <c>EntryKind</c> names the selected taxonomy: memory, file, or code.
     /// </summary>
@@ -77,6 +76,9 @@ public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch
         long? CreatedAt,
         int? LineStart,
         int? LineEnd,
+        [property: Description("The corpus that owns the hash: memory or code.")]
+        string Corpus,
+        [property: Description("Deprecated: same as corpus; removed in 3.0.0. Use entryKind for the kind.")]
         string EntryType,
         string EntryKind);
 }

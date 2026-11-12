@@ -237,7 +237,7 @@ public sealed class SharedProjectTests : IDisposable
         var ct = TestContext.Current.CancellationToken;
         await Should.ThrowAsync<ArgumentException>(() => new SqliteWorkspaceStore(_factory, TestData.SharedScope)
             .BeginAsync(new Workspace("scratch", "shared"), DateTimeOffset.UnixEpoch, ct));
-        await Should.ThrowAsync<ArgumentException>(() => _store.AddContentAsync("shared", "manual.md", "example", "shared", cancellationToken: ct));
+        await Should.ThrowAsync<ArgumentException>(() => _store.AddContentAsync("shared", "manual.md", "example", "shared", EntryKind.Memory, cancellationToken: ct));
     }
 
     [RetryTheory]

@@ -70,7 +70,7 @@ public sealed class ManagedHarness
             // uniformly null, which previously excluded every candidate from
             // SourceAffinityRanker's per-source grouping/consolidation logic entirely
             // (docs/reviews/2026-08-14-moe-codebase-review.md RAG-F8).
-            await store.AddContentAsync(ProjectId, doc.Id, doc.Text, ContextNaming.ProjectContext(ProjectId),
+            await store.AddContentAsync(ProjectId, doc.Id, doc.Text, ContextNaming.ProjectContext(ProjectId), EntryKind.Memory,
                 sourceFile: doc.Id, cancellationToken: cancellationToken);
         }
 

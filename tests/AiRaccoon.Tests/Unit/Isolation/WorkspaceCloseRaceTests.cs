@@ -42,7 +42,7 @@ public sealed class WorkspaceCloseRaceTests : IDisposable
             new SqliteMemorySourceStore(_factory), TestData.RealMarkdownChunker(), new FakeTimeProvider(FixedNow),
             TestData.CreateEmbeddingService(), null, null, null, null, null, null, null);
         _workspaceStore = new SqliteWorkspaceStore(_factory, TestData.SharedScope);
-        _service = new WorkspaceService(_memoryStore, _workspaceStore, new FakeTimeProvider(FixedNow), TestData.SharedScope);
+        _service = new WorkspaceService(_memoryStore, _workspaceStore, new FakeTimeProvider(FixedNow), TestData.SharedScope, new EntryKindClassifier());
     }
 
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
