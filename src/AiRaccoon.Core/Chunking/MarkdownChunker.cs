@@ -58,7 +58,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
         {
             var overlay = BuildOverlay(previousUnits, overlayTokens);
             var (chunkUnits, nextCursor, _) = BuildChunk(units, cursor, overlay, maxTokens, countTokens);
-            chunks.Add(string.Concat(chunkUnits.SelectMany(unit => unit.Lines)));
+            chunks.Add(string.Concat(chunkUnits.SelectMany(static unit => unit.Lines)));
             previousUnits = chunkUnits;
             cursor = nextCursor;
         }
@@ -82,7 +82,7 @@ public sealed class MarkdownChunker : IMarkdownChunker
         {
             var overlay = BuildOverlay(previousUnits, overlayTokens);
             var (chunkUnits, nextCursor, newUnitCount) = BuildChunk(units, cursor, overlay, maxTokens, countTokens);
-            var chunkText = string.Concat(chunkUnits.SelectMany(unit => unit.Lines));
+            var chunkText = string.Concat(chunkUnits.SelectMany(static unit => unit.Lines));
             if (!string.IsNullOrWhiteSpace(chunkText))
             {
                 chunks.Add(new TextChunk(chunkText, HeadingPathFor(chunkUnits, newUnitCount, cursor, contexts),
@@ -170,16 +170,15 @@ public sealed class MarkdownChunker : IMarkdownChunker
     ///     maxTokens alone when it was built, so shrinking down to it always terminates and, per that
     ///     same proof, always ends up within budget (docs/adr/0036).
     /// </summary>
-    private static ChunkBuild BuildChunk(List<Unit> units, int cursor,
-        List<Unit> overlay, int maxTokens, TokenCount countTokens)
+    private static ChunkBuild BuildChunk(List<Unit> units, int cursor, List<Unit> overlay, int maxTokens, TokenCount countTokens)
     {
         var chunkUnits = new List<Unit>(overlay);
-        var tokens = chunkUnits.Sum(unit => unit.TokenCount);
+        var tokens = chunkUnits.Sum(static unit => unit.TokenCount);
         var newUnitCount = 0;
-        var c = cursor;
-        while (c < units.Count)
+        var localCursor = cursor;
+        while (localCursor < units.Count)
         {
-            var next = units[c];
+            var next = units[localCursor];
             if (newUnitCount > 0 && tokens + next.TokenCount > maxTokens)
             {
                 break;
@@ -188,10 +187,10 @@ public sealed class MarkdownChunker : IMarkdownChunker
             chunkUnits.Add(next);
             tokens += next.TokenCount;
             newUnitCount++;
-            c++;
+            localCursor++;
         }
 
-        while (countTokens(string.Concat(chunkUnits.SelectMany(unit => unit.Lines))) > maxTokens)
+        while (countTokens(string.Concat(chunkUnits.SelectMany(static unit => unit.Lines))) > maxTokens)
         {
             if (chunkUnits.Count > newUnitCount)
             {
@@ -208,18 +207,18 @@ public sealed class MarkdownChunker : IMarkdownChunker
 
             chunkUnits.RemoveAt(chunkUnits.Count - 1);
             newUnitCount--;
-            c--;
+            localCursor--;
         }
 
         int deferred;
         do
         {
-            deferred = DeferOpenSection(chunkUnits, newUnitCount, units, c);
+            deferred = DeferOpenSection(chunkUnits, newUnitCount, units, localCursor);
             newUnitCount -= deferred;
-            c -= deferred;
+            localCursor -= deferred;
         } while (deferred > 0);
 
-        return new ChunkBuild(chunkUnits, c, newUnitCount);
+        return new ChunkBuild(chunkUnits, localCursor, newUnitCount);
     }
 
     /// <summary>
@@ -232,11 +231,13 @@ public sealed class MarkdownChunker : IMarkdownChunker
         var i = -1;
         for (var idx = chunkUnits.Count - 1; idx > newStart; idx--)
         {
-            if (IsSectionOpenerUnit(chunkUnits[idx]))
+            if (!IsSectionOpenerUnit(chunkUnits[idx]))
             {
-                i = idx;
-                break;
+                continue;
             }
+
+            i = idx;
+            break;
         }
 
         if (i < 0)
@@ -247,11 +248,13 @@ public sealed class MarkdownChunker : IMarkdownChunker
         var headingHasOwnContent = false;
         for (var idx = i + 1; idx < chunkUnits.Count; idx++)
         {
-            if (IsContentfulUnit(chunkUnits[idx]))
+            if (!IsContentfulUnit(chunkUnits[idx]))
             {
-                headingHasOwnContent = true;
-                break;
+                continue;
             }
+
+            headingHasOwnContent = true;
+            break;
         }
 
         var sectionIsCut = !headingHasOwnContent || SectionContinuesPastChunk(units, cursor);
@@ -265,11 +268,13 @@ public sealed class MarkdownChunker : IMarkdownChunker
         var remainingHasContent = false;
         for (var idx = newStart; idx < i; idx++)
         {
-            if (IsContentfulUnit(chunkUnits[idx]))
+            if (!IsContentfulUnit(chunkUnits[idx]))
             {
-                remainingHasContent = true;
-                break;
+                continue;
             }
+
+            remainingHasContent = true;
+            break;
         }
 
         if (!remainingHasContent)
@@ -351,26 +356,30 @@ public sealed class MarkdownChunker : IMarkdownChunker
 
             fenceLines.Add(line);
             fenceTokens += countTokens(line);
-            if (IsFenceDelimiter(line))
+            if (!IsFenceDelimiter(line))
             {
-                FlushFence(units, fenceLines, fenceTokens, maxTokens, countTokens);
-                fenceLines = null;
-                fenceTokens = 0;
+                continue;
             }
+
+            FlushFence(units, fenceLines, fenceTokens, maxTokens, countTokens);
+            fenceLines = null;
+            fenceTokens = 0;
         }
 
-        if (fenceLines is not null)
+        if (fenceLines is null)
         {
-            // Never closed: close it here rather than de-fence it. Abandoning the fence mid-region
-            // is what let a boundary land inside a code block, and it also inverted the fence
-            // parity of everything after the region's real closing delimiter.
-            var closer = CloserFor(fenceLines[0]);
-            fenceLines[^1] = EndWithNewline(fenceLines[^1]);
-            fenceLines.Add(closer);
-            FlushFence(units, fenceLines, fenceTokens + countTokens(closer), maxTokens, countTokens);
+            return markdown ? [.. units.Select(static unit => unit with { IsHeading = unit.Lines.Count == 1 && IsHeadingLine(unit.Lines[0]) })] : units;
         }
 
-        return markdown ? [.. units.Select(unit => unit with { IsHeading = unit.Lines.Count == 1 && IsHeadingLine(unit.Lines[0]) })] : units;
+        // Never closed: close it here rather than de-fence it. Abandoning the fence mid-region
+        // is what let a boundary land inside a code block, and it also inverted the fence
+        // parity of everything after the region's real closing delimiter.
+        var closer = CloserFor(fenceLines[0]);
+        fenceLines[^1] = EndWithNewline(fenceLines[^1]);
+        fenceLines.Add(closer);
+        FlushFence(units, fenceLines, fenceTokens + countTokens(closer), maxTokens, countTokens);
+
+        return markdown ? [.. units.Select(static unit => unit with { IsHeading = unit.Lines.Count == 1 && IsHeadingLine(unit.Lines[0]) })] : units;
     }
 
     private static void FlushFence(List<Unit> units, List<string> fenceLines, int fenceTokens, int maxTokens,
