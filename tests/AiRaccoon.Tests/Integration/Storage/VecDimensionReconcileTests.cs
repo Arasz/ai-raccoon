@@ -24,7 +24,7 @@ public sealed class VecDimensionReconcileTests
         await MemorySchema.EnsureAsync(connection, Ct);
 
         var changed = await new VecDimensionReconciler().ReconcileAsync(connection, transaction: null, 1024,
-            VecDimensionReconciler.MemoryVecTables, Ct);
+            MemoryVecTables.Names, Ct);
 
         changed.ShouldBeTrue("384 → 1024 is a mismatch and must be reconciled");
         (await TableSqlAsync(connection, "vec_entries")).ShouldContain("float[1024]");
@@ -39,7 +39,7 @@ public sealed class VecDimensionReconcileTests
         await MemorySchema.EnsureAsync(connection, Ct);
 
         var changed = await new VecDimensionReconciler().ReconcileAsync(connection, transaction: null, 384,
-            VecDimensionReconciler.MemoryVecTables, Ct);
+            MemoryVecTables.Names, Ct);
 
         changed.ShouldBeFalse("a matching dimension must not drop and recreate a populated index");
     }
@@ -56,7 +56,7 @@ public sealed class VecDimensionReconcileTests
         await connection.ExecuteAsync(new CommandDefinition("DROP TABLE vec_entries", cancellationToken: Ct));
 
         var changed = await new VecDimensionReconciler().ReconcileAsync(connection, transaction: null, 384,
-            VecDimensionReconciler.MemoryVecTables, Ct);
+            MemoryVecTables.Names, Ct);
 
         changed.ShouldBeTrue("a missing table is not a matching table");
         (await TableSqlAsync(connection, "vec_entries")).ShouldContain("float[384]");
@@ -73,7 +73,7 @@ public sealed class VecDimensionReconcileTests
         (await RowCountAsync(connection, "vec_entries")).ShouldBe(1, "seed must land a vec row first");
 
         await new VecDimensionReconciler().ReconcileAsync(connection, transaction: null, 1024,
-            VecDimensionReconciler.MemoryVecTables, Ct);
+            MemoryVecTables.Names, Ct);
 
         (await RowCountAsync(connection, "vec_entries")).ShouldBe(0,
             "repopulating from entries.embedding would insert 384-dim blobs into a float[1024] table");

@@ -96,7 +96,7 @@ public sealed class TypedVectorMaintenanceTests
             cancellationToken: TestContext.Current.CancellationToken));
 
         var reconciler = new VecDimensionReconciler();
-        await reconciler.ReconcileAsync(connection, null, Dimension, VecDimensionReconciler.MemoryVecTables,
+        await reconciler.ReconcileAsync(connection, null, Dimension, MemoryVecTables.Names,
             TestContext.Current.CancellationToken);
 
         var sql = await TableSqlAsync(connection, "vec_entries");
