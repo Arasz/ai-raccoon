@@ -52,8 +52,8 @@ public sealed partial class SqliteMemoryStore
     ///     behaves as the plain replace.
     /// </summary>
     public Task ReplaceAsync(string projectId, string path, string fileHash, string? context,
-        CancellationToken cancellationToken = default, bool preserveMemoryMetadata = false) =>
-        ReplaceIfChangedCoreAsync(projectId, path, fileHash, null, context, cancellationToken, preserveMemoryMetadata);
+        CancellationToken cancellationToken = default) =>
+        ReplaceIfChangedCoreAsync(projectId, path, fileHash, null, context, cancellationToken);
 
     /// <summary>
     ///     Direct-tool ingest that replaces the path's chunk set (Defect B). Ingest runs first and
@@ -184,10 +184,9 @@ public sealed partial class SqliteMemoryStore
     }
 
     private async Task<ReplaceResult> ReplaceIfChangedCoreAsync(string projectId, string path, string fileHash,
-        Func<SqliteConnection, Task<bool>>? guard, string? context, CancellationToken cancellationToken,
-        bool preserveMemoryMetadata = false)
+        Func<SqliteConnection, Task<bool>>? guard, string? context, CancellationToken cancellationToken)
     {
-        var result = await ReplaceCoreAsync(projectId, path, fileHash, guard, context, true, cancellationToken, preserveMemoryMetadata);
+        var result = await ReplaceCoreAsync(projectId, path, fileHash, guard, context, true, cancellationToken);
         return new ReplaceResult(result.Ran, result.Corpus, result.Skipped);
     }
 
@@ -201,7 +200,7 @@ public sealed partial class SqliteMemoryStore
     /// </summary>
     private async Task<ReplaceCoreResult> ReplaceCoreAsync(string projectId, string path,
         string? fileHash, Func<SqliteConnection, Task<bool>>? guard, string? context, bool fingerprint,
-        CancellationToken cancellationToken, bool preserveMemoryMetadata = false)
+        CancellationToken cancellationToken)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
 
@@ -224,7 +223,7 @@ public sealed partial class SqliteMemoryStore
 
         try
         {
-            var ingestResult = await fileIngestor.IngestFileAsync(connection, projectId, path, context, cancellationToken, preserveMemoryMetadata);
+            var ingestResult = await fileIngestor.IngestFileAsync(connection, projectId, path, context, cancellationToken);
 
             var waitFrom = timeProvider.GetTimestamp();
             await BeginTransaction(connection, cancellationToken);

@@ -61,7 +61,7 @@ public interface IFileIngestor
     ///     wrapping transaction commits). Rechunking may preserve the existing Memory declaration and TTL.
     /// </summary>
     Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId, string path,
-        string? context, CancellationToken cancellationToken, bool preserveMemoryMetadata = false);
+        string? context, CancellationToken cancellationToken);
 
     Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId, string path,
         string? context, CancellationToken cancellationToken);

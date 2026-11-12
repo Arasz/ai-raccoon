@@ -382,21 +382,17 @@ public sealed class ChunkRebudgetTests : IDisposable
     }
 
     [RetryTheory]
-    [InlineData("memory", 7, true)]
-    [InlineData("file", null, true)]
-    [InlineData("memory", null, false)]
-    public async Task MirrorReplacement_OnlyRechunkPreservesDeclaredMemoryTtl(string kind, int? expectedTtl, bool rechunk)
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MirrorReplacement_RechunkAndReIngest_BothKeepTheDeclaredMemoryKindAndTtl(bool rechunk)
     {
         var file = Path.Combine(_dataRoot, "declared-kind.md");
         await File.WriteAllTextAsync(file, FileBody(), Ct);
         await _store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), Ct);
         await _store.IngestFileAsync(ProjectId, file, null, Ct);
         await using var connection = await OpenAsync();
-        // A bank from before schema v24: the guard would refuse the TTL seeded on a non-memory row.
         await connection.ExecuteAsync(new CommandDefinition(
-            "DROP TRIGGER IF EXISTS entries_guard_bi; DROP TRIGGER IF EXISTS entries_guard_bu;", cancellationToken: Ct));
-        await connection.ExecuteAsync(new CommandDefinition(
-            "UPDATE entries SET entry_type = @kind, ttl_days = 7", new { kind }, cancellationToken: Ct));
+            "UPDATE entries SET entry_type = 'memory', ttl_days = 7", cancellationToken: Ct));
         (await RowsAsync(connection, file)).Count.ShouldBeGreaterThan(1);
         _embeddings.ChunkBudgetOverride = NewBudget;
 
@@ -411,24 +407,19 @@ public sealed class ChunkRebudgetTests : IDisposable
         }
         var after = await RowsAsync(connection, file);
         after.ShouldNotBeEmpty();
-        after.ShouldAllBe(row => row.TtlDays == expectedTtl);
+        after.ShouldAllBe(row => row.TtlDays == 7);
         var kinds = await connection.QueryAsync<string>(new CommandDefinition(
             "SELECT entry_type FROM entries WHERE path = @file", new { file }, cancellationToken: Ct));
-        kinds.ShouldAllBe(value => value == (rechunk ? kind : "file"));
+        kinds.ShouldAllBe(value => value == "memory");
     }
 
-    [RetryTheory]
-    [InlineData("file", null)]
-    [InlineData("memory", 7)]
-    public async Task Rebudget_DeclaredKindControlsWhetherReplacementKeepsTtl(string kind, int? expectedTtl)
+    [RetryFact]
+    public async Task Rebudget_ADeclaredMemoryNote_KeepsItsKindAndTtlThroughReplacement()
     {
         await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote(), SourceFile: "hermes/session"), Ct);
         await using var connection = await OpenAsync();
-        // A bank from before schema v24: the guard would refuse the TTL seeded on a non-memory row.
         await connection.ExecuteAsync(new CommandDefinition(
-            "DROP TRIGGER IF EXISTS entries_guard_bi; DROP TRIGGER IF EXISTS entries_guard_bu;", cancellationToken: Ct));
-        await connection.ExecuteAsync(new CommandDefinition(
-            "UPDATE entries SET entry_type = @kind, ttl_days = 7", new { kind }, cancellationToken: Ct));
+            "UPDATE entries SET entry_type = 'memory', ttl_days = 7", cancellationToken: Ct));
         var before = await RowsAsync(connection);
         before.Count.ShouldBeGreaterThan(1);
         _embeddings.ChunkBudgetOverride = NewBudget;
@@ -438,10 +429,10 @@ public sealed class ChunkRebudgetTests : IDisposable
         report.NoteGroupsRechunked.ShouldBe(1);
         var after = await RowsAsync(connection);
         after.ShouldNotBeEmpty();
-        after.ShouldAllBe(row => row.TtlDays == expectedTtl);
+        after.ShouldAllBe(row => row.TtlDays == 7);
         var kinds = await connection.QueryAsync<string>(new CommandDefinition(
             "SELECT entry_type FROM entries", cancellationToken: Ct));
-        kinds.ShouldAllBe(value => value == kind);
+        kinds.ShouldAllBe(value => value == "memory");
     }
 
     [RetryFact]

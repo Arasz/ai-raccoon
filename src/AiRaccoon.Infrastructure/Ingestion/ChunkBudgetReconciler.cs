@@ -223,8 +223,7 @@ public sealed partial class ChunkBudgetReconciler(
             // under this group's own scope/context/workspace, and prunes only this bucket — so the
             // same file stored under two contexts keeps both and never silently relabels to project.
             await memoryStore().ReplaceAsync(group.ProjectId, group.SourceFile,
-                WatchDigestExecutor.ComputeHash(group.SourceFile, scan.Content), MirrorContext(group), cancellationToken,
-                true);
+                WatchDigestExecutor.ComputeHash(group.SourceFile, scan.Content), MirrorContext(group), cancellationToken);
             mirrorsRechunked++;
         }
 
@@ -379,7 +378,7 @@ public sealed partial class ChunkBudgetReconciler(
                         createdAt = template.CreatedAt,
                         updatedAt = now,
                         sourceId = template.SourceId,
-                        ttlDays = entryType == EntryKindWireNames.Memory ? template.TtlDays : null,
+                        ttlDays = template.TtlDays,
                         entryType,
                         // Plain notes keep WriteChunks' sentinel; the phase-end repair positions citing notes.
                         chunkIndex = -1,
