@@ -29,4 +29,4 @@ The solution targets `net10.0` and global.json pins SDK 10.0.401. The global too
 - Users need the .NET 11 runtime to run 2.8.0. The README gets a Breaking changes line. A machine that has only a newer runtime major again stops the tool until the tool moves to that major.
 - Async stacks from profilers and `new StackTrace()` are shorter. Code that counts frames or reads the names of compiler-generated `MoveNext` frames must not depend on them.
 - Thread-affine native calls (the MLX session, ADR for #722) keep their dedicated thread. Runtime-async changes how a continuation is run, not where `ConfigureAwait(false)` or a custom scheduler sends it. The MLX and CoreML tests are the check.
-- If runtime-async causes a defect, remove the one property in `Directory.Build.targets` to roll back. One project can opt out with `<UseRuntimeAsync>false</UseRuntimeAsync>`.
+- If runtime-async causes a defect, roll back in one change: remove the property in `Directory.Build.targets` and delete `RuntimeAsyncTests`, which otherwise fails by design. One project can opt out with `<UseRuntimeAsync>false</UseRuntimeAsync>`, and `RuntimeAsyncTests` must then skip that assembly.
