@@ -181,6 +181,7 @@ has every name; the records keep theirs, because a record is frozen.
 | [0144 — Measure the delay before MCP tool dispatch](0144-mcp-dispatch-delay-is-measured-from-the-http-request.md) | Persist the elapsed time from the HTTP request Activity start to MCP tool filter entry, then compare it with tool and search duration; the HTTP request Activity supplies the response-completion boundary | — |
 | [0145 — Target .NET 11 and compile with runtime-async](0145-target-dotnet-11-with-runtime-async.md) | Every net10.0 project targets net11.0, SDK 11.0.100, runtime-async on for net11.0 projects, packages at latest except sqlite-vec, Tokenizers (#943) and ONNX Runtime (#944). | — |
 | [0146 — A declared kind survives every copy of a row](0146-a-declared-kind-survives-every-copy-of-a-row.md) | `AddContentAsync` takes the kind as a required argument; consolidation and share write the source row's declared kind and never a TTL; an undeclared kind resolves by shape | — |
+| [0147 — `get_entry` reports the corpus in `corpus`, and its output `entryType` is deprecated](0147-get-entry-reports-corpus-and-deprecates-entry-type.md) | The output `entryType` names the corpus while the input names the kind. Output gains `corpus` (same value), the output `entryType` is deprecated and removed in 3.0.0 (#947), and the name is never reused for the kind because that would change its meaning silently | — |
 
 ## Numbers never used
 
