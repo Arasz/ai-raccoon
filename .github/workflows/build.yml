@@ -173,7 +173,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-fast-test-stderr
-          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          path: tests/AiRaccoon.Tests/bin/Debug/net11.0/test-stderr.log
           if-no-files-found: ignore
 
   build-bdd:
@@ -235,7 +235,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-bdd-test-stderr
-          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          path: tests/AiRaccoon.Tests/bin/Debug/net11.0/test-stderr.log
           if-no-files-found: ignore
 
   build-slow:
@@ -328,7 +328,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-slow-test-stderr
-          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          path: tests/AiRaccoon.Tests/bin/Debug/net11.0/test-stderr.log
           if-no-files-found: ignore
       - name: Triage crash dumps
         if: failure()

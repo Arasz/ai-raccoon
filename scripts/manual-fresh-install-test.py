@@ -126,7 +126,7 @@ for dirpath, dirnames, filenames in os.walk(os.path.join(TOOLPATH, ".store")):
     if "tools" in dirnames:
         store_root = dirpath; break
 check("store layout found", store_root is not None, TOOLPATH)
-tool_dir = os.path.join(store_root, "tools", "net10.0", "osx-arm64") if store_root else ""
+tool_dir = os.path.join(store_root, "tools", "net11.0", "osx-arm64") if store_root else ""
 for f in ["AiRaccoon.dll", "AiRaccoon.deps.json", "AiRaccoon.runtimeconfig.json",
           "libonnxruntime.dylib", "libsqlite3mc.dylib", "vec0.dylib"]:
     # libsqlite3mc.dylib is the only sqlite native since the 2.4.0 bundle switch

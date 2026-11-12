@@ -19,7 +19,7 @@ probe = _load()
 TEST_OUTPUT = """\
 skipped AiRaccoon.Tests.Integration.Embedding.BundledEngineGpuSessionTests.PreferGpu_OnMacOs (1ms)
   the standard ORT build implements WebGPU only on macOS
-Test run summary: Failed! - /w/AiRaccoon.Tests.dll (net10.0|x64)
+Test run summary: Failed! - /w/AiRaccoon.Tests.dll (net11.0|x64)
   total: 4
   failed: 1
   succeeded: 2

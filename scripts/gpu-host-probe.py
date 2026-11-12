@@ -30,7 +30,7 @@ DOTNET_INSTALL_URL = "https://dot.net/v1/dotnet-install.sh"
 ORT_GPU_NUPKG_SHA256 = "77ca23682fc164789e67cd0fa4ce022b1b1c94e1978046c6446eee5fb0a3a3d6"
 CUDA_WHEELS = ("nvidia-cuda-runtime==13.*", "nvidia-cublas==13.*", "nvidia-curand==10.*", "nvidia-cudnn-cu13==9.*")
 CUDA_SONAMES = ("libcudart.so.13", "libcublas.so.13", "libcublasLt.so.13", "libcurand.so.10", "libcudnn.so.9")
-TESTS_DLL = "tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll"
+TESTS_DLL = "tests/AiRaccoon.Tests/bin/Debug/net11.0/AiRaccoon.Tests.dll"
 GPU_TESTS = "AiRaccoon.Tests.Integration.Embedding.BundledEngineGpuSessionTests"
 CUDA_TESTS = "AiRaccoon.Tests.Integration.Embedding.BundledEngineCudaSessionTests"
 

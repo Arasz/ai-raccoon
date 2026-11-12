@@ -139,13 +139,13 @@ jobs:
           AIRACCOON_REQUIRE_WEBGPU: 1
         run: |
           vulkaninfo --summary | grep -E 'deviceName|driverName' || true
-          dotnet exec tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineGpuSessionTests
+          dotnet exec tests/AiRaccoon.Tests/bin/Debug/net11.0/AiRaccoon.Tests.dll --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineGpuSessionTests
       - name: Upload test stderr log
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: gpu-vulkan-test-stderr
-          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          path: tests/AiRaccoon.Tests/bin/Debug/net11.0/test-stderr.log
           if-no-files-found: ignore
 
   build-arm64:
@@ -213,7 +213,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-arm64-test-stderr
-          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/test-stderr.log
+          path: tests/AiRaccoon.Tests/bin/Debug/net11.0/test-stderr.log
           if-no-files-found: ignore
 
   build-mlx:
@@ -279,12 +279,12 @@ jobs:
         env:
           AIRACCOON_REQUIRE_MLX: 1
         run: |
-          dotnet exec tests/AiRaccoon.Tests/bin/Debug/net10.0/osx-arm64/AiRaccoon.Tests.dll --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineMlxSessionTests
+          dotnet exec tests/AiRaccoon.Tests/bin/Debug/net11.0/osx-arm64/AiRaccoon.Tests.dll --filter-class AiRaccoon.Tests.Integration.Embedding.BundledEngineMlxSessionTests
       - name: Upload test stderr log
         # Host and CLI console logs go to this file, not the job log (tests/AiRaccoon.Tests/TestConsoleLog.cs).
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-mlx-test-stderr
-          path: tests/AiRaccoon.Tests/bin/Debug/net10.0/osx-arm64/test-stderr.log
+          path: tests/AiRaccoon.Tests/bin/Debug/net11.0/osx-arm64/test-stderr.log
           if-no-files-found: ignore
