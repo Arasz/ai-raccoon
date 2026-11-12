@@ -2,6 +2,8 @@ using System.Text;
 using AiRaccoon.Infrastructure.Assets;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Resilience;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.ML.OnnxRuntime;
 
 namespace AiRaccoon.Infrastructure.Embedding.Download;
@@ -68,14 +70,17 @@ public interface IOnnxSmokeTester
 
 public sealed class OnnxSmokeTestException(string message, Exception? inner = null) : Exception(message, inner);
 
-/// <summary>Real smoke tester: an InferenceSession constructor over the downloaded graph.</summary>
-public sealed class OrtOnnxSmokeTester : IOnnxSmokeTester
+/// <summary>Real smoke tester: loads the downloaded graph through the ORT session logger.</summary>
+public sealed class OrtOnnxSmokeTester(ILogger<OrtOnnxSmokeTester>? logger = null) : IOnnxSmokeTester
 {
+    private readonly ILogger _logger = logger ?? NullLogger<OrtOnnxSmokeTester>.Instance;
+
     public IReadOnlyDictionary<string, int> Verify(string onnxPath)
     {
         try
         {
-            using var session = new InferenceSession(onnxPath);
+            using var options = new SessionOptions();
+            using var session = OrtSessionLog.Create(onnxPath, options, _logger);
             return session.OutputRanks();
         }
         catch (Exception ex)

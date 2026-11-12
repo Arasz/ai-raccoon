@@ -193,8 +193,7 @@ public sealed partial class MemoryTools(
         }
 
         var warning = await ComposeWarningAsync(guard.Verdict, query, parsedTypes, dispatch.CodeWarning, cancellationToken);
-        var result = BuildSearchResultList(dispatch, warning, searchQuery);
-        var envelope = await gate.WrapAsync(canonicalProjectId, result, cancellationToken);
+        var envelope = await gate.WrapAsync(canonicalProjectId, BuildSearchResultList(dispatch, warning, searchQuery), cancellationToken);
         return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
     }
 
