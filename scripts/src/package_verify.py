@@ -67,7 +67,7 @@ def detect_rid():
 
 def entries_matching(nupkg, suffix):
     """Stored paths in the nupkg ending in suffix — a bundled file may live at the package root or
-    under tools/net10.0/<rid>/…, and this matches it wherever it was packed."""
+    under tools/net11.0/<rid>/…, and this matches it wherever it was packed."""
     with zipfile.ZipFile(nupkg) as zf:
         names = zf.namelist()
     return [name for name in names if name.endswith(suffix)]

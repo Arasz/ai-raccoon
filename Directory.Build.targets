@@ -1,5 +1,10 @@
 <Project>
 
+    <!-- ADR-0145: compile async methods as runtime-async; remove this property to roll back. -->
+    <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net11.0'))">
+        <Features>$(Features);runtime-async=on</Features>
+    </PropertyGroup>
+
     <!-- ADR-0115: on win-x64, win-arm64 and linux-x64 the build ships ONNX Runtime's WebGPU-enabled core
          (fetched by scripts/download-webgpu-core.py) in place of the NuGet core: same file name, same
          destination, so the plain `onnxruntime` import finds it under JIT probing, Native AOT's lazy

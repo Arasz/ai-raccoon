@@ -19,7 +19,7 @@ probe = _load()
 TEST_OUTPUT = """\
 skipped AiRaccoon.Tests.Integration.Embedding.BundledEngineGpuSessionTests.PreferGpu_OnMacOs (1ms)
   the standard ORT build implements WebGPU only on macOS
-Test run summary: Failed! - /w/AiRaccoon.Tests.dll (net10.0|x64)
+Test run summary: Failed! - /w/AiRaccoon.Tests.dll (net11.0|x64)
   total: 4
   failed: 1
   succeeded: 2
@@ -157,3 +157,11 @@ def test_ensure_dotnet_records_a_failed_install_instead_of_raising(tmp_path, mon
 
     assert ready is False
     assert found.commit.startswith("dotnet install failed")
+
+
+def test_dotnet_channel_matches_the_sdk_that_global_json_pins():
+    import json
+
+    pinned = json.loads((PROBE_PATH.parent.parent / "global.json").read_text())["sdk"]["version"]
+
+    assert probe.DOTNET_CHANNEL == ".".join(pinned.split(".")[:2])
