@@ -1,7 +1,6 @@
 using System.Text;
 using System.Text.Json;
 using AiRaccoon.Core.Chunking;
-using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Infrastructure.Chunking;
 
@@ -9,22 +8,16 @@ namespace AiRaccoon.Infrastructure.Chunking;
 ///     Flattens a notebook's markdown and code cells into markdown, one heading per cell, and hands
 ///     the result to the markdown chunker. Outputs, attachments and metadata are dropped; unreadable input yields no chunks.
 /// </summary>
-public sealed class NotebookChunker : INotebookChunker
+internal sealed class NotebookChunker(IMarkdownChunker markdownChunker) : INotebookChunker
 {
-    private readonly IMarkdownChunker _markdownChunker;
-
-    public NotebookChunker(IMarkdownChunker markdownChunker)
-    {
-        Guard.IsNotNull(markdownChunker);
-        _markdownChunker = markdownChunker;
-    }
+    private static readonly char[] TrimmedChars = ['\r', '\n'];
 
     public IReadOnlyList<string> Chunk(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null)
     {
         var markdown = Flatten(text);
         return markdown.Length == 0
             ? []
-            : _markdownChunker.Chunk(markdown, maxTokens, overlayTokens, countTokens).Where(HasContent).ToList();
+            : markdownChunker.Chunk(markdown, maxTokens, overlayTokens, countTokens).Where(HasContent).ToList();
     }
 
     public IReadOnlyList<TextChunk> ChunkWithHeadings(string text, int maxTokens, int overlayTokens = 0, TokenCount? countTokens = null)
@@ -32,7 +25,7 @@ public sealed class NotebookChunker : INotebookChunker
         var markdown = Flatten(text);
         return markdown.Length == 0
             ? []
-            : _markdownChunker.ChunkWithHeadings(markdown, maxTokens, overlayTokens, countTokens)
+            : markdownChunker.ChunkWithHeadings(markdown, maxTokens, overlayTokens, countTokens)
                 .Where(static chunk => HasContent(chunk.Text)).ToList();
     }
 
@@ -87,7 +80,7 @@ public sealed class NotebookChunker : INotebookChunker
             return;
         }
 
-        var source = Source(cell).Trim('\r', '\n');
+        var source = Source(cell).Trim(TrimmedChars);
         if (string.IsNullOrWhiteSpace(source))
         {
             return;
@@ -189,8 +182,7 @@ public sealed class NotebookChunker : INotebookChunker
     }
 
     private static string NamedString(JsonElement metadata, string section, string key) =>
-        metadata.TryGetProperty(section, out var node) && node.ValueKind == JsonValueKind.Object
-                                                       && node.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
+        metadata.TryGetProperty(section, out var node) && node.ValueKind == JsonValueKind.Object && node.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString() ?? ""
             : "";
 }
