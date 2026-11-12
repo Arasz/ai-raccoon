@@ -550,9 +550,9 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [RetryFact]
     public async Task AddContent_IsIdempotent_ByPathInBucket()
     {
-        var first = await _store.AddContentAsync("acme", "docs/note.md", "note content", null,
+        var first = await _store.AddContentAsync("acme", "docs/note.md", "note content", null, EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
-        var second = await _store.AddContentAsync("acme", "docs/note.md", "note content", null,
+        var second = await _store.AddContentAsync("acme", "docs/note.md", "note content", null, EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
 
         second.Entry.Hash.ShouldBe(first.Entry.Hash);
@@ -598,11 +598,11 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         await EnsureWorkspaceAsync("ws-1");
         // Consolidation (WorkspaceService) promotes via add_content with the workspace entry's
         // path: the committed row must keep that logical path and its path-scoped hash.
-        await _store.AddContentAsync("acme", "docs/note.md", "workspace draft", "workspace:ws-1",
+        await _store.AddContentAsync("acme", "docs/note.md", "workspace draft", "workspace:ws-1", EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
 
         var committed = await _store.AddContentAsync("acme", "docs/note.md", "workspace draft",
-            ContextNaming.ProjectContext("acme"), cancellationToken: TestContext.Current.CancellationToken);
+            ContextNaming.ProjectContext("acme"), EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
 
         committed.Entry.Context.ShouldBe("project:acme");
         committed.Entry.Path.ShouldBe("docs/note.md");
@@ -612,8 +612,8 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     [RetryFact]
     public async Task ListFiles_ReturnsJsonTree_FromEntryPaths()
     {
-        await _store.AddContentAsync("acme", "docs/guide.md", "guide", null, cancellationToken: TestContext.Current.CancellationToken);
-        await _store.AddContentAsync("acme", "notes.md", "notes", null, cancellationToken: TestContext.Current.CancellationToken);
+        await _store.AddContentAsync("acme", "docs/guide.md", "guide", null, EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
+        await _store.AddContentAsync("acme", "notes.md", "notes", null, EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
 
         var tree = await _store.ListFilesAsync("acme", TestContext.Current.CancellationToken);
 
@@ -842,7 +842,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         // cannot accidentally save this assertion — only a genuine score wins it.
         var bestMatch = await _store.AddContentAsync("acme", "zz-deploy-pipeline-decision.md",
             "The docker container deployment pipeline automatically triggers a rollback when health checks fail three times.",
-            ContextNaming.ProjectContext("acme"), cancellationToken: TestContext.Current.CancellationToken);
+            ContextNaming.ProjectContext("acme"), EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
 
         string[] noise =
         [
@@ -873,7 +873,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         // duplicate of a row already asserted on above would no longer prove this regression.
         var shared = await _store.AddContentAsync("acme", "shared/off-topic-schema-note.md",
             "sqlite schema write guards reject any bank whose version exceeds what the pipeline validator supports",
-            ContextNaming.SharedContext, cancellationToken: TestContext.Current.CancellationToken);
+            ContextNaming.SharedContext, EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
 
         var results = (await _store.SearchAsync(
             new SearchQuery("acme", query, Limit: 25, MinRelativeScore: 0.0),
@@ -1017,7 +1017,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
         {
             barrier.SignalAndWait();
             return await _store.AddContentAsync("acme", "p.md", "identical fact",
-                null, cancellationToken: TestContext.Current.CancellationToken);
+                null, EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
         })).ToArray();
         var results = await Task.WhenAll(tasks);
 
@@ -1036,9 +1036,9 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     public async Task AddContentAsync_SecondSamePath_CreatedFalse()
     {
         var first = await _store.AddContentAsync("acme", "p.md", "identical fact",
-            null, cancellationToken: TestContext.Current.CancellationToken);
+            null, EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
         var second = await _store.AddContentAsync("acme", "p.md", "identical fact",
-            null, cancellationToken: TestContext.Current.CancellationToken);
+            null, EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
 
         first.Created.ShouldBeTrue("the first write creates the row");
         second.Created.ShouldBeFalse("the path pre-check finds the existing row — re-add is not a creation");
@@ -1241,7 +1241,7 @@ public sealed class SqliteMemoryStoreTests : IDisposable
     public async Task AddContentAsync_SetsSourceId_OnEntry()
     {
         var result = await _store.AddContentAsync(
-            "acme", "shared/test.md", "shared content fact", ContextNaming.SharedContext,
+            "acme", "shared/test.md", "shared content fact", ContextNaming.SharedContext, EntryKind.Memory,
             "docs/shared.md", "## Shared",
             TestContext.Current.CancellationToken);
 

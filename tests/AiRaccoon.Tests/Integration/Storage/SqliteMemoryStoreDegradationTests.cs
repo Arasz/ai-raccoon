@@ -50,7 +50,7 @@ public sealed class SqliteMemoryStoreDegradationTests : IDisposable
     [RetryFact]
     public async Task Search_WithAHyphenatedSectionAnchor_DoesNotDegrade()
     {
-        await _store.AddContentAsync("acme", "notes.md", "the quick brown fox", null,
+        await _store.AddContentAsync("acme", "notes.md", "the quick brown fox", null, EntryKind.Memory,
             "notes.md", "getting-started", TestContext.Current.CancellationToken);
 
         var results = (await _store.SearchAsync(

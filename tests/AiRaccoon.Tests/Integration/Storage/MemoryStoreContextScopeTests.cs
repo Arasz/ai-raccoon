@@ -42,7 +42,7 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
         // The access gate authorises the request's projectId, so a context that re-targets the row
         // would place it in a project the caller was never cleared for.
         await Should.ThrowAsync<ContextOutsideProjectException>(() => _store.AddContentAsync(
-            Caller, "/notes/leak.md", "planted", ContextNaming.ProjectContext(Victim),
+            Caller, "/notes/leak.md", "planted", ContextNaming.ProjectContext(Victim), EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken));
 
         (await RowsForProjectAsync(Victim)).ShouldBe(0, "the refused write must leave no trace");
@@ -53,7 +53,7 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
     public async Task AddContentAsync_WithTheCallersOwnProjectContext_Writes()
     {
         await _store.AddContentAsync(Caller, "/notes/ours.md", "kept",
-            ContextNaming.ProjectContext(Caller), cancellationToken: TestContext.Current.CancellationToken);
+            ContextNaming.ProjectContext(Caller), EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
 
         (await RowsForProjectAsync(Caller)).ShouldBe(1);
     }
@@ -66,7 +66,7 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
         var context = ContextNaming.LabelContext(Caller, "docs");
 
         await _store.AddContentAsync(Caller, "/notes/labelled.md", "labelled",
-            context, cancellationToken: TestContext.Current.CancellationToken);
+            context, EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
 
         var stored = await StoredLabelAsync();
         stored.ShouldBe("docs");
@@ -79,7 +79,7 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
         // The access gate authorises the request's projectId; a context that re-targets the delete
         // would destroy rows in a project the caller was never cleared for.
         await _store.AddContentAsync(Victim, "/notes/theirs.md", "theirs",
-            ContextNaming.ProjectContext(Victim), cancellationToken: TestContext.Current.CancellationToken);
+            ContextNaming.ProjectContext(Victim), EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
 
         await Should.ThrowAsync<ContextOutsideProjectException>(() => _store.DeleteContextAsync(
             Caller, ContextNaming.ProjectContext(Victim), TestContext.Current.CancellationToken));
@@ -93,7 +93,7 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
         // `shared` names no project, so a filter built from it carries no project predicate and
         // would sweep every project's promoted rows.
         await _store.AddContentAsync(Victim, "/notes/promoted.md", "promoted",
-            ContextNaming.SharedContext, cancellationToken: TestContext.Current.CancellationToken);
+            ContextNaming.SharedContext, EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
 
         await Should.ThrowAsync<ContextOutsideProjectException>(() => _store.DeleteContextAsync(
             Caller, ContextNaming.SharedContext, TestContext.Current.CancellationToken));
@@ -105,7 +105,7 @@ public sealed class MemoryStoreContextScopeTests : IDisposable
     public async Task DeleteContextAsync_WithTheCallersOwnProjectContext_Deletes()
     {
         await _store.AddContentAsync(Caller, "/notes/ours.md", "ours",
-            ContextNaming.ProjectContext(Caller), cancellationToken: TestContext.Current.CancellationToken);
+            ContextNaming.ProjectContext(Caller), EntryKind.Memory, cancellationToken: TestContext.Current.CancellationToken);
 
         var deleted = await _store.DeleteContextAsync(
             Caller, ContextNaming.ProjectContext(Caller), TestContext.Current.CancellationToken);

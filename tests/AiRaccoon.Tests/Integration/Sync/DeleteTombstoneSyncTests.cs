@@ -97,7 +97,7 @@ public sealed class DeleteTombstoneSyncTests : IDisposable
         var project = await _store.WriteAsync(new MemoryWriteRequest(Project, Content), ct);
         project.Hash.ShouldBe(workspace.Hash, "arrange: the workspace and committed rows share one hash");
         var custom = await _store.AddContentAsync(Project, project.Path, Content,
-            ContextNaming.LabelContext(Project, "custom"), cancellationToken: ct);
+            ContextNaming.LabelContext(Project, "custom"), EntryKind.Memory, cancellationToken: ct);
         custom.Entry.Hash.ShouldBe(project.Hash, "arrange: the custom row shares the same hash");
 
         await Sync(_factory).MemorySyncAsync(Project, ObjectKey, ct);
@@ -298,11 +298,11 @@ public sealed class DeleteTombstoneSyncTests : IDisposable
 
         var project = await _store.WriteAsync(new MemoryWriteRequest(Project, Content), ct);
         await _store.AddContentAsync(Project, project.Path, Content,
-            ContextNaming.LabelContext(Project, "ctxA"), cancellationToken: ct);
+            ContextNaming.LabelContext(Project, "ctxA"), EntryKind.Memory, cancellationToken: ct);
         var peerSameLabel = await peerStore.AddContentAsync(Project, project.Path, Content,
-            ContextNaming.LabelContext(Project, "ctxA"), cancellationToken: ct);
+            ContextNaming.LabelContext(Project, "ctxA"), EntryKind.Memory, cancellationToken: ct);
         var peerOtherLabel = await peerStore.AddContentAsync(Project, project.Path, Content,
-            ContextNaming.LabelContext(Project, "other"), cancellationToken: ct);
+            ContextNaming.LabelContext(Project, "other"), EntryKind.Memory, cancellationToken: ct);
         peerSameLabel.Entry.Hash.ShouldBe(project.Hash, "arrange: the peer's same-label row shares the hash");
         peerOtherLabel.Entry.Hash.ShouldBe(project.Hash, "arrange: the peer's other-label row shares the hash");
 

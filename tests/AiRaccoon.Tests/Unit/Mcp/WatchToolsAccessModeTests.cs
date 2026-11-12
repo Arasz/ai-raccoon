@@ -150,7 +150,7 @@ public sealed class WatchToolsAccessModeTests
             Task.FromResult(new EmbedPendingResult(0, 0));
 
         public override Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content,
-            string? context, string? sourceFile = null, string? section = null,
+            string? context, EntryKind entryKind, string? sourceFile = null, string? section = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new MemoryEntryResult(new MemoryEntry("new-hash", path, context ?? "project:acme-web", content, 1), true));
 
