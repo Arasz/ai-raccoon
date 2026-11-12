@@ -2283,25 +2283,34 @@ internal static class MemorySchema
         // bodies here instead would leave a body naming a column its table does not have, and the
         // next embedded row would fail. So the typed shape is read first, structurally: every spec
         // table must expose the expected columns (pragma_table_xinfo lists vec0's partition keys).
-        foreach (var spec in MemoryVecTables.All)
-        {
-            var columns = (await connection.QueryAsync<string>(
+        // One statement covers the columns and the stored bodies: this runs on every open.
+        var rows = (await connection.QueryAsync<VecGuardRow>(
                 new CommandDefinition(
-                    "SELECT name FROM pragma_table_xinfo(@table)", new { table = spec.Table },
-                    cancellationToken: cancellationToken))).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            if (!MemoryVecTables.ExpectedColumns.All(columns.Contains))
-            {
-                return;
-            }
+                    """
+                    SELECT 'column' AS Kind, m.name AS Name, c.name AS Detail
+                    FROM sqlite_master m, pragma_table_xinfo(m.name) c
+                    WHERE m.type = 'table' AND m.name IN @tables
+                    UNION ALL
+                    SELECT 'trigger', name, sql FROM sqlite_master WHERE type = 'trigger' AND name IN @triggers
+                    """,
+                    new
+                    {
+                        tables = MemoryVecTables.Names.ToArray(),
+                        triggers = MemoryVecTables.All.Select(spec => spec.UpdateTrigger).ToArray()
+                    },
+                    cancellationToken: cancellationToken)))
+            .ToList();
+
+        var columnsByTable = rows.Where(r => r.Kind == "column")
+            .ToLookup(r => r.Name, r => r.Detail, StringComparer.Ordinal);
+        if (MemoryVecTables.All.Any(spec =>
+                !MemoryVecTables.ExpectedColumns.All(column =>
+                    columnsByTable[spec.Table].Contains(column, StringComparer.OrdinalIgnoreCase))))
+        {
+            return;
         }
 
-        var stored = (await connection.QueryAsync<TriggerRow>(
-                new CommandDefinition(
-                    "SELECT name AS Name, sql AS Sql FROM sqlite_master WHERE type = 'trigger' AND name IN @names",
-                    new { names = MemoryVecTables.All.Select(spec => spec.UpdateTrigger).ToArray() },
-                    cancellationToken: cancellationToken)))
-            .ToDictionary(o => o.Name, o => o.Sql, StringComparer.Ordinal);
-
+        var stored = rows.Where(r => r.Kind == "trigger").ToDictionary(r => r.Name, r => r.Detail, StringComparer.Ordinal);
         if (MemoryVecTables.All.All(spec =>
                 stored.TryGetValue(spec.UpdateTrigger, out var body)
                 && body is not null
@@ -2882,6 +2891,8 @@ internal static class MemorySchema
     private sealed record PragmaColumnRow(string Name, string Type, long NotNull, long Pk);
 
     private sealed record TriggerRow(string Name, string? Sql);
+
+    private sealed record VecGuardRow(string Kind, string Name, string? Detail);
 
 
     private sealed record TombstoneRow(string ProjectId, string Hash, string Scope, long DeletedAt);

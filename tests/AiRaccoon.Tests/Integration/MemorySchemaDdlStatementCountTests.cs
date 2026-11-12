@@ -31,7 +31,7 @@ public sealed class MemorySchemaDdlStatementCountTests
 
         // The whole point of the gate: an install past its first run pays 6 cheap reads, not the full block.
         CountDdl(statements).ShouldBe(0, Report(statements));
-        statements.Count.ShouldBe(6, Report(statements));
+        statements.Count(s => !s.StartsWith("-- PRAGMA table_xinfo=", StringComparison.Ordinal)).ShouldBe(6, Report(statements));
     }
 
     /// <summary>
@@ -100,10 +100,13 @@ public sealed class MemorySchemaDdlStatementCountTests
         - statements.Count(s => s.Contains("watch.scope.", StringComparison.Ordinal))
         - statements.Count(s =>
             s.Contains("type = 'trigger' AND name = 'promotion_queue_entries_ad'", StringComparison.Ordinal))
-        // ADR-0124 vec-trigger-body probe: one sqlite_master read for both vec triggers and the
-        // tables they belong to (ADR-0141 reads the tables' shape in the same read), unconditional
+        // ADR-0124 vec-trigger-body probe: one read for both vec triggers and the columns of
+        // the tables they belong to (ADR-0141 reads the tables' shape in the same read), unconditional
         // on every open — a repair probe on both sides of the digest gate, like the one above:
-        - statements.Count(s => s.Contains("name IN ('vec_entries_au', 'vec_structure_au', 'vec_entries', 'vec_structure')", StringComparison.Ordinal))
+        - statements.Count(s => s.Contains("name IN ('vec_entries_au','vec_structure_au')", StringComparison.Ordinal))
+        // ...and the trace markers sqlite emits for the pragma_table_xinfo table-valued call inside it
+        // (comments, not statements: the probe is still one read):
+        - statements.Count(s => s.StartsWith("-- PRAGMA table_xinfo=", StringComparison.Ordinal))
         // code-corpus probes: S2 column ensure (digest-mismatch branch only) + the S7
         // watch-overlap prune's watches read, demoted off the v11 ladder to an unconditional
         // every-open step:
