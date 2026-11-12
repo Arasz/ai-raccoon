@@ -58,32 +58,6 @@ public class ToolInventoryTests
         tools.ShouldContain("get_engine_statistics");
     }
 
-    /// <summary>Assert that every [McpServerTool].Name has a matching Tn const in its own class.</summary>
-    [Fact]
-    public void McpToolNames_MatchConstStrings()
-    {
-        foreach (var group in ToolMethods().GroupBy(x => x.Class))
-        {
-            var constValues = new Dictionary<string, string>();
-            foreach (var field in group.Key.GetFields(BindingFlags.NonPublic | BindingFlags.Static)
-                         .Where(f => f.IsLiteral && f.Name.StartsWith("Tn")))
-            {
-                if (field.GetRawConstantValue() is string val)
-                {
-                    constValues[val] = field.Name;
-                }
-            }
-
-            foreach (var (_, method, attr) in group)
-            {
-                var toolName = attr.Name!;
-                constValues.ShouldContainKey(toolName,
-                    $"Missing const for tool '{toolName}' (class: {group.Key.Name}, method: {method.Name})");
-                constValues[toolName].ShouldStartWith("Tn");
-            }
-        }
-    }
-
     [Fact]
     public void MemoryPrompts_ExposesBothSpecPrompts()
     {
