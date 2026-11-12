@@ -155,10 +155,10 @@ public sealed class DigestConvoyDoesNotStarveTheDrainTests : IDisposable
     private sealed class SlowFileIngestor(IFileIngestor inner, TimeSpan delay) : IFileIngestor
     {
         public async Task<FileIngestResult> IngestFileAsync(SqliteConnection connection, string projectId,
-            string path, string? context, CancellationToken cancellationToken, bool preserveMemoryMetadata = false)
+            string path, string? context, CancellationToken cancellationToken)
         {
             await Task.Delay(delay, cancellationToken);
-            return await inner.IngestFileAsync(connection, projectId, path, context, cancellationToken, preserveMemoryMetadata);
+            return await inner.IngestFileAsync(connection, projectId, path, context, cancellationToken);
         }
 
         public Task<DirectoryIngestResult> IngestDirectoryAsync(SqliteConnection connection, string projectId,

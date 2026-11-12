@@ -25,7 +25,9 @@ A row's kind (`entry_type`: `memory` or `file`) is declared by the path that wro
 
 **No copy writes a TTL.** `AddContentAsync` inserts through `InsertEntry`, which has no `ttl_days` column, so a copy carries no TTL whatever its kind. A TTL is a `memory` row's forgetting knob (`set_memory_ttl` already refuses other kinds); a copied `file` row must not gain one. A test pins that a copied `file` row has none.
 
-**Scope.** This record covers consolidation and share. Re-ingest keeps a row's kind in a later change, which removes `preserveMemoryMetadata` and will amend this record.
+**A re-ingest keeps the declared kind and its TTL.** `FileIngestor` always reads the path's previous row in the bucket and resolves the kind with `ResolveStoredValue(previous?.EntryType, path, path)`; the new rows take that kind and the previous row's TTL. A path whose row is declared `memory` stays `memory` with its TTL through a watcher or plain re-ingest; a first ingest resolves by path shape (`file`) with no TTL. The `preserveMemoryMetadata` flag is gone from `IMemoryStore.ReplaceAsync` and the ingest chain, so no caller can forget to ask. The schema v24 guard triggers make a TTL on a non-`memory` row impossible, so the code no longer re-checks the kind before carrying a TTL forward. The cost is one indexed SELECT per ingested file.
+
+**Scope.** Consolidation, share and re-ingest.
 
 **Rejected alternatives.**
 
