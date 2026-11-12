@@ -8,7 +8,6 @@ public static class DynamicParametersExtensions
 {
     private static string[] StoredTypes(EntryType types)
     {
-        EntryTypeParameter.RefuseUnknownBits(types);
         var names = new List<string>();
         if ((types & EntryType.Memory) != 0)
         {

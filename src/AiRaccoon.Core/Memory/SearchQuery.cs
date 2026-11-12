@@ -22,6 +22,16 @@ public sealed record SearchQuery(
     public const int DefaultRrfK = 60;
 
     /// <summary>
+    ///     The kinds this query asks for. Validated here, once, on construction and on every
+    ///     <c>with</c>: the dispatcher and the store read it as already valid.
+    /// </summary>
+    public EntryType EntryTypes
+    {
+        get;
+        init => field = EntryTypeParameter.Require(value);
+    } = EntryTypeParameter.Require(EntryTypes);
+
+    /// <summary>
     ///     Floor on the max-normalized ranking, i.e. a fraction of this response's top hit — relative,
     ///     never an absolute quality bar. 0 disables it (see docs/adr/0047-relative-score-floor.md).
     /// </summary>

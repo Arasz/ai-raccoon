@@ -37,8 +37,7 @@ public sealed class SearchDispatcherEvidenceTests
         var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality, TestData.SharedScope);
 
         await dispatcher.DispatchAsync(
-            new SearchQuery("acme", "widgets"),
-            EntryType.Memory | EntryType.File,
+            new SearchQuery("acme", "widgets", EntryTypes: EntryType.Memory | EntryType.File),
             "all",
             "corr-evidence",
             sessionId: "sess-test",
@@ -79,8 +78,7 @@ public sealed class SearchDispatcherEvidenceTests
         var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality, TestData.SharedScope);
 
         await dispatcher.DispatchAsync(
-            new SearchQuery("acme", "widgets"),
-            EntryType.Memory | EntryType.File,
+            new SearchQuery("acme", "widgets", EntryTypes: EntryType.Memory | EntryType.File),
             "all",
             "corr-reorder",
             sessionId: "sess-test",
@@ -110,8 +108,7 @@ public sealed class SearchDispatcherEvidenceTests
         var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality, TestData.SharedScope);
 
         await dispatcher.DispatchAsync(
-            new SearchQuery("acme", "widgets"),
-            EntryType.Memory | EntryType.File,
+            new SearchQuery("acme", "widgets", EntryTypes: EntryType.Memory | EntryType.File),
             "all",
             "corr-orphan-first",
             sessionId: "sess-test",
@@ -145,8 +142,7 @@ public sealed class SearchDispatcherEvidenceTests
         var dispatcher = new SearchDispatcher(store, new EmptyCodeSearchService(), quality, TestData.SharedScope);
 
         var result = await dispatcher.DispatchAsync(
-            new SearchQuery("acme", "widgets"),
-            EntryType.Memory | EntryType.File,
+            new SearchQuery("acme", "widgets", EntryTypes: EntryType.Memory | EntryType.File),
             "all",
             "corr-null",
             sessionId: "sess-test",
@@ -167,8 +163,7 @@ public sealed class SearchDispatcherEvidenceTests
         var dispatcher = new SearchDispatcher(store, codeSearch, quality, TestData.SharedScope);
 
         var result = await dispatcher.DispatchAsync(
-            new SearchQuery("acme", "widgets"),
-            EntryType.Code,
+            new SearchQuery("acme", "widgets", EntryTypes: EntryType.Code),
             "code",
             "corr-code",
             sessionId: "sess-test",

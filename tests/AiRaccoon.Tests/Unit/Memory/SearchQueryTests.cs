@@ -127,4 +127,22 @@ public class SearchQueryTests
 
         result.IsValid.ShouldBeTrue();
     }
+
+    [Theory]
+    [InlineData(EntryType.None)]
+    [InlineData((EntryType)16)]
+    [InlineData(EntryType.Memory | (EntryType)16)]
+    public void EntryTypes_WithEmptyOrUnknownSelection_IsRefusedAtConstructionAndOnWith(EntryType types)
+    {
+        Should.Throw<ArgumentException>(() => new SearchQuery("acme", "widget", EntryTypes: types));
+        Should.Throw<ArgumentException>(() => new SearchQuery("acme", "widget") with { EntryTypes = types });
+    }
+
+    [Theory]
+    [InlineData(EntryType.Memory)]
+    [InlineData(EntryType.File)]
+    [InlineData(EntryType.Code)]
+    [InlineData(EntryTypeParameter.Default)]
+    public void EntryTypes_WithKnownSelection_IsKept(EntryType types) =>
+        new SearchQuery("acme", "widget", EntryTypes: types).EntryTypes.ShouldBe(types);
 }

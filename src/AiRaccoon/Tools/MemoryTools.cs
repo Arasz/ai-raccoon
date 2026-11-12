@@ -182,7 +182,7 @@ public sealed partial class MemoryTools(
         }
 
         var correlationId = Guid.CreateVersion7().ToString("N");
-        var dispatch = await searchDispatcher.DispatchAsync(searchQuery, parsedTypes, scope, correlationId,
+        var dispatch = await searchDispatcher.DispatchAsync(searchQuery, scope, correlationId,
             sessionId, codeLimit, codeMinRelativeScore,
             cancellationToken);
 

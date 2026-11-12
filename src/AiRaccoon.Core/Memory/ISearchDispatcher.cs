@@ -15,7 +15,7 @@ public interface ISearchDispatcher
     ///     calling agent's session id, forwarded verbatim to the quality service alongside (the
     ///     query itself stays attribution-free: it feeds backends that must ignore attribution).
     /// </summary>
-    Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, EntryType entryTypes, string rawScope,
+    Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, string rawScope,
         string correlationId, string sessionId, int? codeLimit = null, double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default);
 }
