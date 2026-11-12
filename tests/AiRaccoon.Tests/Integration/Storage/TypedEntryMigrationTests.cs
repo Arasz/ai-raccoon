@@ -166,6 +166,9 @@ public sealed class TypedEntryMigrationTests
 
         // The first v20 build's shape: a nullable column, and the kinds the backfill never reached.
         await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TRIGGER IF EXISTS entries_guard_bi; DROP TRIGGER IF EXISTS entries_guard_bu;",
+            cancellationToken: TestContext.Current.CancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(
             "DROP TRIGGER IF EXISTS vec_entries_au", cancellationToken: TestContext.Current.CancellationToken));
         await connection.ExecuteAsync(new CommandDefinition(
             "DROP TRIGGER IF EXISTS vec_structure_au", cancellationToken: TestContext.Current.CancellationToken));

@@ -27,6 +27,30 @@ internal static class MemorySchema
     internal const string AddEntryTypeColumnSql =
         $"ALTER TABLE entries ADD COLUMN entry_type TEXT NOT NULL DEFAULT '{EntryKindWireNames.None}' CHECK(entry_type IN ({EntryKindList}))";
 
+    /// <summary>The two triggers that hold the memory-only TTL rule and the kind domain on <c>entries</c>.</summary>
+    internal static readonly string[] EntryGuardTriggerNames = ["entries_guard_bi", "entries_guard_bu"];
+
+    /// <summary>
+    ///     The two guard triggers. Not part of <see cref="Ddl" />: <c>Ddl</c> reruns before the ladder, and
+    ///     the v20/v21 backfills update <c>entry_type</c> on legacy rows that may carry a TTL, which the
+    ///     guard would abort. A fresh bank creates them directly; a legacy bank gets them from v24.
+    /// </summary>
+    private static readonly string EntryGuardTriggerDdl = $"""
+        CREATE TRIGGER IF NOT EXISTS entries_guard_bi BEFORE INSERT ON entries BEGIN
+            SELECT RAISE(ABORT, 'entries.ttl_days: only memory rows carry a TTL')
+             WHERE NEW.ttl_days IS NOT NULL AND NEW.entry_type <> '{EntryKindWireNames.Memory}';
+            SELECT RAISE(ABORT, 'entries.entry_type: not a known kind')
+             WHERE NEW.entry_type IS NULL OR NEW.entry_type NOT IN ({EntryKindList});
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS entries_guard_bu BEFORE UPDATE OF ttl_days, entry_type ON entries BEGIN
+            SELECT RAISE(ABORT, 'entries.ttl_days: only memory rows carry a TTL')
+             WHERE NEW.ttl_days IS NOT NULL AND NEW.entry_type <> '{EntryKindWireNames.Memory}';
+            SELECT RAISE(ABORT, 'entries.entry_type: not a known kind')
+             WHERE NEW.entry_type IS NULL OR NEW.entry_type NOT IN ({EntryKindList});
+        END;
+        """;
+
     /// <summary>
     ///     Bucket uniqueness. Not part of <see cref="Ddl" />: on a legacy bank the duplicates
     ///     must be deleted before the index can be created, which is the ladder's job. A fresh
@@ -74,12 +98,13 @@ internal static class MemorySchema
     ///     <see cref="MigrateToV18Async" /> (rowless watch fingerprints dropped once),
     ///     <see cref="MigrateToV19Async" /> (ADR-0133, `ctx` is the vec0 partition key again),
     ///     <see cref="MigrateToV20Async" /> (the entry kind, denormalised onto the row),
-    ///     <see cref="MigrateToV21Async" /> (ADR-0141, the kind is a second vec0 partition key); v23 (the decision tables) has no step of its own, because the digest-gated Ddl creates them. Not every schema change needs a ladder
+    ///     <see cref="MigrateToV21Async" /> (ADR-0141, the kind is a second vec0 partition key),
+    ///     <see cref="MigrateToV24Async" /> (ADR-0148, the guard triggers); v23 (the decision tables) has no step of its own, because the digest-gated Ddl creates them. Not every schema change needs a ladder
     ///     step: a trigger body replacement that is safely re-runnable on every open belongs in the
     ///     unconditional <see cref="Ddl" /> instead (ADR-0023 amendment) — the ladder is for changes
     ///     that need guarded, one-time work.
     /// </summary>
-    internal const int CurrentVersion = 23;
+    internal const int CurrentVersion = 24;
 
     private const int DefaultEmbeddingDimension = 384;
 
@@ -778,6 +803,8 @@ internal static class MemorySchema
             await connection.ExecuteAsync(
                 new CommandDefinition(BucketIndexDdl, cancellationToken: cancellationToken));
             await connection.ExecuteAsync(
+                new CommandDefinition(EntryGuardTriggerDdl, cancellationToken: cancellationToken));
+            await connection.ExecuteAsync(
                 new CommandDefinition(TombstoneIndexDdl, cancellationToken: cancellationToken));
             // source_id index: created here for fresh banks (DDL already has the column),
             // and in MigrateToV5Async for v4→v5 migration banks.
@@ -935,6 +962,11 @@ internal static class MemorySchema
         if (healthy && storedVersion < 22)
         {
             await MigrateToV22Async(connection, cancellationToken);
+        }
+
+        if (healthy && storedVersion < 24)
+        {
+            await MigrateToV24Async(connection, cancellationToken);
         }
 
         // Both stamps land together, only once the ladder actually finished (healthy): stamping the
@@ -1443,6 +1475,19 @@ internal static class MemorySchema
              SET entry_type = {MemorySql.EntryTypeFromShape("entries.")}
              WHERE entry_type IS NULL OR entry_type = 'none'
              """, cancellationToken: cancellationToken));
+    }
+
+    /// <summary>
+    ///     v23→v24 (ADR-0148): only a memory row carries a TTL, so the TTL of every other row is
+    ///     cleared, and then the guard triggers keep it that way. Clear first: the triggers refuse
+    ///     the state the repair removes.
+    /// </summary>
+    private static async Task MigrateToV24Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(new CommandDefinition(
+            $"UPDATE entries SET ttl_days = NULL WHERE ttl_days IS NOT NULL AND entry_type <> '{EntryKindWireNames.Memory}'",
+            cancellationToken: cancellationToken));
+        await connection.ExecuteAsync(new CommandDefinition(EntryGuardTriggerDdl, cancellationToken: cancellationToken));
     }
 
     /// <summary>Preserves historical corpus selections as entry-type masks beside the original value.</summary>

@@ -223,6 +223,11 @@ public sealed partial class DoctorCommands(
             await streams.WriteOutputLineAsync($"entries with an unknown kind: {report.EntryKinds.Unknown}");
         }
 
+        if (report.EntryKinds.TtlOutsideMemory > 0)
+        {
+            await streams.WriteOutputLineAsync($"entries with a TTL that are not memory: {report.EntryKinds.TtlOutsideMemory}");
+        }
+
         await streams.WriteOutputLineAsync("doctor verifies schema shape only; it never repairs a bank");
 
         switch (report.Status)

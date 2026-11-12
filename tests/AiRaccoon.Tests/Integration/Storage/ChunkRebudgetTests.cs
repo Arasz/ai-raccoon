@@ -392,6 +392,9 @@ public sealed class ChunkRebudgetTests : IDisposable
         await _store.SetSettingAsync(IngestScopeKeys.ScopeGlobal, IngestScopeKeys.Serialize([_dataRoot]), Ct);
         await _store.IngestFileAsync(ProjectId, file, null, Ct);
         await using var connection = await OpenAsync();
+        // A bank from before schema v24: the guard would refuse the TTL seeded on a non-memory row.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TRIGGER IF EXISTS entries_guard_bi; DROP TRIGGER IF EXISTS entries_guard_bu;", cancellationToken: Ct));
         await connection.ExecuteAsync(new CommandDefinition(
             "UPDATE entries SET entry_type = @kind, ttl_days = 7", new { kind }, cancellationToken: Ct));
         (await RowsAsync(connection, file)).Count.ShouldBeGreaterThan(1);
@@ -421,6 +424,9 @@ public sealed class ChunkRebudgetTests : IDisposable
     {
         await _store.WriteAsync(new MemoryWriteRequest(ProjectId, LongNote(), SourceFile: "hermes/session"), Ct);
         await using var connection = await OpenAsync();
+        // A bank from before schema v24: the guard would refuse the TTL seeded on a non-memory row.
+        await connection.ExecuteAsync(new CommandDefinition(
+            "DROP TRIGGER IF EXISTS entries_guard_bi; DROP TRIGGER IF EXISTS entries_guard_bu;", cancellationToken: Ct));
         await connection.ExecuteAsync(new CommandDefinition(
             "UPDATE entries SET entry_type = @kind, ttl_days = 7", new { kind }, cancellationToken: Ct));
         var before = await RowsAsync(connection);

@@ -24,6 +24,8 @@ public sealed class EntryKindDomainTests
         if (releasedBank)
         {
             await connection.ExecuteAsync("""
+                DROP TRIGGER IF EXISTS entries_guard_bi;
+                DROP TRIGGER IF EXISTS entries_guard_bu;
                 DROP TRIGGER IF EXISTS vec_entries_au;
                 DROP TRIGGER IF EXISTS vec_structure_au;
                 ALTER TABLE entries DROP COLUMN entry_type;
