@@ -5,7 +5,22 @@
   "branch": "docs/checklist-2.9.0-decision-graph (from origin/main 924ce643)",
   "commit": "binary under test: 2.9.0+dd035aab086da198d969a279d5e889ce7f7a7e13 (published package)",
   "data-root": "/private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/data",
-  "note": "Scoped pass requested by the owner: latest-version check plus a full decision-graph pass (complex graph with edges and versions, exported as JSON). Published 2.9.0 installed to a scratch --tool-path; scratch data root; ephemeral port 64636; live bank never opened. Drivers: run.py, mcp.py in the data-root's parent; raw check log checks.json and run.out there."
+  "note": "Scoped pass requested by the owner: latest-version check plus a full decision-graph pass (complex graph with edges and versions, exported as JSON). Published 2.9.0 installed to a scratch --tool-path; scratch data root; ephemeral port 64636; live bank never opened. Drivers: run.py, mcp.py in the data-root's parent; raw check log checks.json and run.out there.",
+  "scope": [
+   "build-and-install-global-package",
+   "server-lifecycle",
+   "full-mcp-surface",
+   "decision-tool-replies-match-output-schema",
+   "decision-record-and-replay",
+   "decision-version-conflicts-refused",
+   "decision-graph-query-and-precedents",
+   "decision-cli-parity-and-export",
+   "decision-access-mode-read-only",
+   "decision-semantica-import",
+   "decision-unlink-keeps-history",
+   "decision-graph-bounds",
+   "decision-mcp-export-size-cap"
+  ]
  },
  "derived": {
   "version": "2.9.0",
