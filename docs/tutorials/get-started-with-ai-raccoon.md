@@ -27,7 +27,7 @@ flowchart LR
 
 ## Step 1: Install the CLI tool
 
-Install `ai-raccoon` with the .NET 10 SDK:
+Install `ai-raccoon` with the .NET 11 SDK. The tool runs on the ASP.NET Core 11 runtime, which the SDK includes:
 
 ```bash
 dotnet tool install -g ai-raccoon

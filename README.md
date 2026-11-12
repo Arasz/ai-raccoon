@@ -5,7 +5,7 @@
 [![NuGet](https://img.shields.io/nuget/v/ai-raccoon.svg)](https://www.nuget.org/packages/ai-raccoon)
 [![M8ven Score](https://m8ven.ai/badge/mcp/arasz-ai-proxy-1h8736)](https://m8ven.ai/mcp/arasz-ai-proxy-1h8736?s=readme)
 
-An MCP server that gives AI agents persistent, project-scoped memory and a searchable index of the project's own code. It runs locally on .NET 10 and SQLite, with hybrid keyword and semantic search, workspace sandboxes, a shared
+An MCP server that gives AI agents persistent, project-scoped memory and a searchable index of the project's own code. It runs locally on .NET 11 and SQLite, with hybrid keyword and semantic search, workspace sandboxes, a shared
 cross-project tier, and optional cloud sync.
 
 ```mermaid
@@ -64,7 +64,7 @@ Older releases: [What's new history](docs/reference/whats-new-history.md). A rel
 
 ## Breaking changes
 
-Upgrading from an older version? Check [Breaking changes](docs/reference/breaking-changes.md) for what to do past each version. The latest one is 2.0.0.
+Upgrading from an older version? Check [Breaking changes](docs/reference/breaking-changes.md) for what to do past each version. The latest one is 2.8.0.
 
 ## Performance
 

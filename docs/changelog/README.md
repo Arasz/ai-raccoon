@@ -11,6 +11,8 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [2.8.0 — AiRaccoon runs on .NET 11](2.8.0-dotnet-11.md)
+
 - [2.7.0 — MCP dispatch delay is visible in performance metrics](2.7.0-mcp-dispatch-delay.md)
 
 - [2.6.1 — decision tools match their output schema](2.6.1-decision-tools-match-their-output-schema.md)

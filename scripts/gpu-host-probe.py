@@ -26,11 +26,12 @@ from pathlib import Path
 ORT_VERSION = "1.30.0"
 # SHA-256 of Microsoft.ML.OnnxRuntime.Gpu.Linux 1.30.0 from nuget.org (its SHA-512 matches the catalog).
 ORT_GPU_NUPKG_URL = "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.Gpu.Linux/%s" % ORT_VERSION
+DOTNET_CHANNEL = "11.0"  # the major.minor of the SDK global.json pins
 DOTNET_INSTALL_URL = "https://dot.net/v1/dotnet-install.sh"
 ORT_GPU_NUPKG_SHA256 = "77ca23682fc164789e67cd0fa4ce022b1b1c94e1978046c6446eee5fb0a3a3d6"
 CUDA_WHEELS = ("nvidia-cuda-runtime==13.*", "nvidia-cublas==13.*", "nvidia-curand==10.*", "nvidia-cudnn-cu13==9.*")
 CUDA_SONAMES = ("libcudart.so.13", "libcublas.so.13", "libcublasLt.so.13", "libcurand.so.10", "libcudnn.so.9")
-TESTS_DLL = "tests/AiRaccoon.Tests/bin/Debug/net10.0/AiRaccoon.Tests.dll"
+TESTS_DLL = "tests/AiRaccoon.Tests/bin/Debug/net11.0/AiRaccoon.Tests.dll"
 GPU_TESTS = "AiRaccoon.Tests.Integration.Embedding.BundledEngineGpuSessionTests"
 CUDA_TESTS = "AiRaccoon.Tests.Integration.Embedding.BundledEngineCudaSessionTests"
 
@@ -180,15 +181,15 @@ def probe_vulkan(found: Probe, env: dict[str, str]) -> None:
 
 
 def ensure_dotnet(env: dict[str, str], found: Probe) -> bool:
-    """Installs .NET 10 when missing; False, with the failure in found.commit, when the install fails."""
+    """Installs the DOTNET_CHANNEL SDK when missing; False, with the failure in found.commit, when the install fails."""
     section("dotnet")
     sdks = run(["dotnet", "--list-sdks"], env=env).stdout if shutil.which("dotnet", path=env["PATH"]) else ""
-    if not re.search(r"^10\.", sdks, re.MULTILINE):
+    if not re.search(r"^%s\." % re.escape(DOTNET_CHANNEL), sdks, re.MULTILINE):
         installer = Path("/tmp/dotnet-install.sh")
         dotnet_root = Path.home() / ".dotnet"
         failure = download(DOTNET_INSTALL_URL, installer)
         if failure is None:
-            install = run(["bash", str(installer), "--channel", "10.0", "--install-dir", str(dotnet_root)])
+            install = run(["bash", str(installer), "--channel", DOTNET_CHANNEL, "--install-dir", str(dotnet_root)])
             if install.returncode != 0:
                 failure = "exit %d: %s" % (install.returncode, tail(install.stdout, 1))
         if failure is not None:
