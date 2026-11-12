@@ -207,6 +207,8 @@ public sealed class GetEntryCodeToolTests : IAsyncLifetime
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
         await connection.ExecuteAsync(new CommandDefinition("""
             PRAGMA ignore_check_constraints=ON;
+            DROP TRIGGER IF EXISTS entries_guard_bi;
+            DROP TRIGGER IF EXISTS entries_guard_bu;
             INSERT INTO entries(hash,path,value,entry_type,scope,project_id,created_at,updated_at)
             VALUES(@hash,@path,@value,@kind,@scope,@projectId,1,1);
             """, new { hash, path, value, kind, scope, projectId },

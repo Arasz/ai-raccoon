@@ -36,7 +36,7 @@ public sealed class DecisionBankLifecycleTests : IDisposable
         }
 
         await using var migrated = await Factory().OpenBankAsync(ct);
-        (await migrated.ExecuteScalarAsync<int>("PRAGMA user_version")).ShouldBe(23);
+        (await migrated.ExecuteScalarAsync<int>("PRAGMA user_version")).ShouldBe(MemorySchema.CurrentVersion);
         (await migrated.ExecuteScalarAsync<string>("SELECT value FROM settings WHERE key='decision-migration-proof'")).ShouldBe("kept");
         var tables = (await migrated.QueryAsync<string>("SELECT name FROM sqlite_master WHERE type='table'")).ToHashSet(StringComparer.Ordinal);
         DecisionSchema.TableNames.ShouldAllBe(table => tables.Contains(table));
