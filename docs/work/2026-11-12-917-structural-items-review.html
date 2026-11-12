@@ -1,0 +1,547 @@
+<meta charset="utf-8">
+<title>Issue 917 owner gate</title>
+
+<!--
+  Refinement review form. Fill in CONFIG and DECISIONS below; nothing else needs editing.
+
+  Works unchanged as (a) a local file:// page and (b) a published Artifact. It deliberately has
+  no <!doctype>/<html>/<head>/<body>: the Artifact publisher supplies those, and a browser
+  synthesises them for a local file. The <meta charset> is first in the byte stream so the local
+  file decodes as UTF-8 (the sniffer scans the first 1024 bytes wherever the tag sits).
+
+  Dependency-free on purpose: the Artifact CSP blocks every external host and a file:// page has
+  no server. No CDN, no fonts, no fetch.
+-->
+
+<script>
+  var CONFIG = {
+    title: "Issue #917: 7 decisions before the structural fixes",
+    subtitle: "Owner gate · 2026-11-12 · deferred 2.x review items (checked only)",
+    source: "https://github.com/Arasz/ai-raccoon/issues/917 · docs/work/2026-10-23-2x-release-review.md",
+    outName: "2026-11-12-917-structural-items-feedback.md",
+    expectedDir: "/Users/arasz/RiderProjects/ai-raccoon/.ai-badger/worktrees/air-fix-deferred-2x-review-items/docs/work",
+    storageKey: "owner-gate:2026-11-12-917-structural-items:v1"
+  };
+  var DECISIONS = [
+    { group: "How the task runs", id: "G1",
+      claim: "The task runs the low-effort loop: 7 small PRs, one reviewer each",
+      detail: ["Plan: 7 lanes in 3 waves. Wave 1: L1 (TTL + kind guard triggers, items 1+6), L2 (search carrier, item 2), L4 (get_entry corpus, item 4), L5 (consolidation + share keep kind, item 5). Wave 2: L3 (drop <code>preserveMemoryMetadata</code>, item 3), L8 (<code>MemoryVecTables</code> spec list, item 8). Wave 3: L7 (one <code>ToolNames</code> source, item 7).",
+        "High-effort adds a 3-expert MoE panel at plan review and at code review for each lane, and a QA pass."],
+      why: "<b>Cost:</b> high-effort is about 3× the review tokens. Most lanes are refactors with no behaviour change.",
+      placeholder: "Approve = low. Change = high, or name the lanes that need high." },
+    { id: "G2",
+      claim: "The 7 PRs ship together as 2.8.0 (minor)",
+      detail: ["Each PR leaves <code>VERSION</code> alone (batching rule in <code>docs/changelog/README.md</code>). The last PR bumps to 2.8.0 and writes one changelog entry.",
+        "2.8.0 holds behaviour changes (D1, D4, D6) and a new response field (D3), but no breaking change."],
+      why: "<b>If we don't batch:</b> 7 releases, each one a public publish with its production approval.",
+      placeholder: "Notes" },
+    { group: "Schema (L1)", id: "D1",
+      claim: "Schema v24 clears the TTL on every non-memory row, then adds guard triggers",
+      detail: ["Today the memory-only TTL rule lives in code at 4 write paths (FileIngestor:330, ChunkBudgetReconciler:372, SyncService:480, UpdateEntryTtl). Old File rows from before 2.1.0 can still carry a TTL, and the sweep honours it (MemorySql.cs:822).",
+        "v24 runs <code>UPDATE entries SET ttl_days=NULL WHERE ttl_days IS NOT NULL AND entry_type&lt;&gt;'memory'</code>, then creates the triggers. I count the affected rows on the eval bank copy first and report the number in the PR."],
+      why: "<b>Effect:</b> the sweep stops deleting those File and unclassified rows. They stay until their file is removed or re-ingested.",
+      placeholder: "Approve = clear them. Change = e.g. delete them, or keep the TTL and only guard new writes." },
+    { id: "D2",
+      claim: "The guard is a BEFORE INSERT/UPDATE trigger, not a column CHECK",
+      detail: ["SQLite cannot add a CHECK to an existing table. A CHECK needs a full rebuild of <code>entries</code> (v17 precedent: rename, copy, re-create triggers, VACUUM). The v20 step alone took about 6 s on a 25k-row copy.",
+        "The same trigger also refuses a NULL or unknown <code>entry_type</code>. That closes item 6: dev banks stamped v20/v21 with no column CHECK get the guard too, and the doctor already reports a missing trigger by name. The doctor gets one new count: rows with a TTL that are not memory."],
+      why: "<b>Trade-off:</b> a trigger is enforced by the bank like a CHECK, but <code>PRAGMA table_info</code> does not show it. It shows only in the doctor's object inventory.",
+      placeholder: "Notes" },
+    { group: "Behaviour changes", id: "D3",
+      claim: "get_entry adds a <code>corpus</code> output field now; the output <code>entryType</code> is deprecated and removed in 3.0.0",
+      detail: ["Today the output <code>entryType</code> holds the corpus (memory|code), and <code>entryKind</code> holds the kind (memory|file|code). The input <code>entryType</code> means the kind.",
+        "2.8.0: add <code>corpus</code> (same value as output <code>entryType</code>) and mark the output <code>entryType</code> deprecated in the tool description and docs. 3.0.0: remove the output <code>entryType</code>. The name is never re-used for the kind, because a client that does not update would read wrong values with no error.",
+        "The Hermes plugin reads neither field."],
+      why: "<b>Alternative:</b> rename now and cut 3.0.0 in this task. That breaks every client that reads <code>entryType</code> today.",
+      placeholder: "Approve = additive now, remove in 3.0.0. Change = break now in 3.0.0." },
+    { id: "D4",
+      claim: "A re-ingest keeps a row's declared kind and its TTL",
+      detail: ["Today only ChunkBudgetReconciler passes <code>preserveMemoryMetadata: true</code>. A watcher run or a plain re-ingest of a path that holds a declared <code>memory</code> row resets it to <code>file</code> and drops the TTL.",
+        "After the fix, FileIngestor always reads the previous row and calls <code>ResolveStoredValue(previous.EntryType, …)</code>. The flag leaves 7 signatures. A first ingest still resolves by path shape to <code>file</code>. Cost: one indexed SELECT per file."],
+      why: "<b>Effect:</b> a memory note that has a file mirror stops losing its kind and expiry when the file is re-watched.",
+      placeholder: "Notes" },
+    { id: "D6",
+      claim: "Workspace consolidation and share_memory keep each row's declared kind",
+      detail: ["Consolidation (WorkspaceService:69 → AddContentAsync) writes every kept row as <code>memory</code>. <code>ShareAsync</code> (SqliteMemoryStore:174) has the same bug, which the issue did not list.",
+        "Fix: <code>AddContentAsync</code> takes the kind as a required argument. Consolidation passes the row's kind; share reads <code>entry_type</code> from the source row. Both fixes go in lane L5."],
+      why: "<b>If share is left out:</b> the same defect stays one call away, and the ADR would claim something that is only half true.",
+      placeholder: "Approve = fix both. Change = consolidation only." },
+    { group: "Cleanup", id: "D5",
+      claim: "Delete the dead <code>SetSweepThresholdAsync</code> and its <code>trigger_memory_cleanup_threshold</code> gate",
+      detail: ["ForgettingPolicyService:37 gates it on a tool name that does not exist. No production code calls it; only AccessModeGuardTests:134/156 and one BDD step (NativeMemorySteps:1427).",
+        "Lane L7 adds one <code>Tools/ToolNames.cs</code>, and a test checks its constants equal the generated tool inventory. The dead method and its tests go."],
+      why: "<b>Alternative:</b> expose it as a real tool. That is a new feature, not part of #917.",
+      placeholder: "Approve = delete. Change = keep, or make it a tool." }
+  ];
+</script>
+
+<style>
+  :root {
+    --ink: #141a21; --paper: #eef2f5; --surface: #f8fafb; --sunk: #e4eaef;
+    --line: #cbd5dd; --grey: #56626e; --dim: #7d8894;
+    --warn: #a8503a; --live: #12707c; --flag: #8a6a1f; --ok: #2f6d4f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #e6ecf2; --paper: #0f141a; --surface: #161d25; --sunk: #10161c;
+      --line: #2b3742; --grey: #9aa7b4; --dim: #6f7c89;
+      --warn: #d98467; --live: #4fc3cf; --flag: #d7b45a; --ok: #6fbf95;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #e6ecf2; --paper: #0f141a; --surface: #161d25; --sunk: #10161c;
+    --line: #2b3742; --grey: #9aa7b4; --dim: #6f7c89;
+    --warn: #d98467; --live: #4fc3cf; --flag: #d7b45a; --ok: #6fbf95;
+  }
+  :root[data-theme="light"] {
+    --ink: #141a21; --paper: #eef2f5; --surface: #f8fafb; --sunk: #e4eaef;
+    --line: #cbd5dd; --grey: #56626e; --dim: #7d8894;
+    --warn: #a8503a; --live: #12707c; --flag: #8a6a1f; --ok: #2f6d4f;
+  }
+
+  body {
+    margin: 0; padding: clamp(1.5rem,4vw,3rem) 1.1rem 11rem;
+    background: var(--paper); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 54rem; margin: 0 auto; display: flex; flex-direction: column; gap: 2.5rem; }
+  .mono, h1, h2, .tag, .verdict-opt, .btn, .did { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; }
+
+  header { display: flex; flex-direction: column; gap: .8rem; }
+  .tag { font-size: .72rem; letter-spacing: .15em; text-transform: uppercase; color: var(--dim); }
+  h1 { margin: 0; font-size: clamp(1.5rem,4vw,2.2rem); line-height: 1.15; letter-spacing: -.03em; font-weight: 600; text-wrap: balance; }
+  .lede { margin: 0; max-width: 62ch; color: var(--grey); }
+  h2 {
+    margin: 0 0 -.6rem; font-size: .76rem; letter-spacing: .15em; text-transform: uppercase;
+    color: var(--dim); font-weight: 600; padding-bottom: .5rem; border-bottom: 1px solid var(--line);
+  }
+
+  .d { background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: .85rem; }
+  .d.answered { border-left: 3px solid var(--ok); }
+  .d-head { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: baseline; }
+  .did { font-size: .74rem; letter-spacing: .1em; font-weight: 600; color: var(--live); white-space: nowrap; }
+  .d-claim { font-weight: 600; font-size: 1.02rem; flex: 1 1 18rem; }
+  .d-body { margin: 0; color: var(--grey); font-size: .94rem; }
+  .d-body + .d-body { margin-top: -.35rem; }
+  .d-body strong { color: var(--ink); font-weight: 600; }
+  code { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: .87em; background: var(--sunk); border: 1px solid var(--line); border-radius: 3px; padding: .06em .32em; }
+  .why { border-left: 3px solid var(--flag); background: var(--sunk); padding: .6rem .85rem; border-radius: 0 4px 4px 0; font-size: .9rem; color: var(--grey); }
+  .why b { color: var(--ink); }
+
+  fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
+  legend { padding: 0; font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); font-family: ui-monospace, Menlo, monospace; }
+  .verdicts { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .verdict-opt { position: relative; }
+  .verdict-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .verdict-opt span {
+    display: inline-block; cursor: pointer; user-select: none;
+    border: 1px solid var(--line); background: var(--paper); border-radius: 3px;
+    padding: .32rem .7rem; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; color: var(--grey);
+  }
+  .verdict-opt input:focus-visible + span { outline: 2px solid var(--live); outline-offset: 2px; }
+  .verdict-opt input:checked + span[data-v="approve"] { background: var(--ok);   border-color: var(--ok);   color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="change"]  { background: var(--flag); border-color: var(--flag); color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="reject"]  { background: var(--warn); border-color: var(--warn); color: var(--paper); }
+  .verdict-opt input:checked + span[data-v="defer"]   { background: var(--grey); border-color: var(--grey); color: var(--paper); }
+
+  textarea {
+    width: 100%; box-sizing: border-box; resize: vertical; min-height: 3.2rem;
+    background: var(--paper); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 4px; padding: .55rem .7rem; font: inherit; font-size: .93rem; line-height: 1.5;
+  }
+  textarea:focus-visible { outline: 2px solid var(--live); outline-offset: 1px; border-color: var(--live); }
+  textarea::placeholder { color: var(--dim); }
+
+  .bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--surface); border-top: 1px solid var(--line); padding: .7rem 1.1rem; display: flex; flex-wrap: wrap; gap: .5rem .9rem; align-items: center; justify-content: center; }
+  .count { font-size: .85rem; color: var(--grey); font-variant-numeric: tabular-nums; }
+  .btn { cursor: pointer; border: 1px solid var(--live); background: var(--live); color: var(--paper); border-radius: 3px; padding: .45rem 1rem; font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+  .btn.secondary { background: transparent; color: var(--live); }
+  .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* The status line is the whole point of the fallback chain: it names the mechanism used and
+     where the bytes went. Never let a save be silent. */
+  #status { flex-basis: 100%; text-align: center; font-size: .86rem; color: var(--grey); margin: 0; }
+  #status.ok   { color: var(--ok); }
+  #status.warn { color: var(--flag); }
+  #status.bad  { color: var(--warn); }
+  #status code { font-size: .85em; }
+
+  .out { display: flex; flex-direction: column; gap: .6rem; }
+  .out textarea { min-height: 14rem; font-family: ui-monospace, Menlo, monospace; font-size: .84rem; }
+  .hint { font-size: .85rem; color: var(--dim); margin: 0; }
+  .path { word-break: break-all; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="tag" id="hdr-sub"></div>
+    <h1 id="hdr-title"></h1>
+    <p class="lede">
+      Rule on each item and add a note where it matters. Answers save in this browser as you type,
+      so you can leave and come back.
+    </p>
+    <p class="lede" id="hdr-stale"><strong>Reviewed something else in this browser before?</strong>
+      Press <b>Clear all</b> first — local pages share one storage area, and a stale answer that
+      looks like a fresh one is the failure mode this form exists to prevent.</p>
+    <p class="lede" id="hdr-src"></p>
+  </header>
+
+  <div id="cards"></div>
+
+  <div class="out" id="out" hidden>
+    <p class="hint" id="outHint">Select all and copy, then paste this back into the conversation.</p>
+    <textarea id="outText" readonly aria-label="Generated feedback"></textarea>
+  </div>
+</div>
+
+<div class="bar">
+  <span class="count" id="count"></span>
+  <button class="btn" id="save" type="button">Save feedback</button>
+  <button class="btn secondary" id="copy" type="button">Copy feedback</button>
+  <button class="btn secondary" id="show" type="button">Show as text</button>
+  <button class="btn secondary" id="clear" type="button">Clear all</button>
+  <p id="status" role="status" aria-live="polite"></p>
+</div>
+
+<script>
+  var VERDICTS = ["approve", "change", "reject", "defer"];
+
+  document.getElementById("hdr-title").textContent = CONFIG.title;
+  document.getElementById("hdr-sub").textContent = CONFIG.subtitle;
+  document.title = CONFIG.title;
+  if (CONFIG.source) {
+    document.getElementById("hdr-src").innerHTML = "Full document: <code>" + esc(CONFIG.source) + "</code>";
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  /* ---- render ---- */
+  var host = document.getElementById("cards");
+  var currentGroup = null;
+  DECISIONS.forEach(function (d) {
+    if (d.group && d.group !== currentGroup) {
+      currentGroup = d.group;
+      var h = document.createElement("h2");
+      h.textContent = d.group;
+      host.appendChild(h);
+    }
+    var card = document.createElement("div");
+    card.className = "d";
+    card.dataset.id = d.id;
+
+    var head = document.createElement("div");
+    head.className = "d-head";
+    var idSpan = document.createElement("span");
+    idSpan.className = "did";
+    idSpan.textContent = d.id;
+    var claimSpan = document.createElement("span");
+    claimSpan.className = "d-claim";
+    claimSpan.textContent = d.claim || "";
+    head.appendChild(idSpan);
+    head.appendChild(claimSpan);
+    card.appendChild(head);
+
+    (d.detail || []).forEach(function (p) {
+      var el = document.createElement("p");
+      el.className = "d-body";
+      el.innerHTML = p;
+      card.appendChild(el);
+    });
+
+    if (d.why) {
+      var why = document.createElement("div");
+      why.className = "why";
+      why.innerHTML = d.why;
+      card.appendChild(why);
+    }
+
+    var fs = document.createElement("fieldset");
+    var lg = document.createElement("legend");
+    lg.textContent = "Verdict";
+    fs.appendChild(lg);
+    var holder = document.createElement("div");
+    holder.className = "verdicts";
+    VERDICTS.forEach(function (v) {
+      var label = document.createElement("label");
+      label.className = "verdict-opt";
+      var input = document.createElement("input");
+      input.type = "radio";
+      input.name = "v-" + d.id;
+      input.value = v;
+      var span = document.createElement("span");
+      span.dataset.v = v;
+      span.textContent = v;
+      label.appendChild(input);
+      label.appendChild(span);
+      holder.appendChild(label);
+    });
+    fs.appendChild(holder);
+    card.appendChild(fs);
+
+    var ta = document.createElement("textarea");
+    ta.placeholder = d.placeholder || "Notes";
+    ta.setAttribute("aria-label", d.id + " notes");
+    card.appendChild(ta);
+
+    host.appendChild(card);
+  });
+
+  var cards = Array.prototype.slice.call(document.querySelectorAll(".d"));
+
+  /* ---- state ---- */
+  function state() {
+    var out = {};
+    cards.forEach(function (card) {
+      var id = card.dataset.id;
+      var picked = card.querySelector('input[name="v-' + id + '"]:checked');
+      var note = card.querySelector("textarea").value.trim();
+      if (picked || note) { out[id] = { verdict: picked ? picked.value : "", note: note }; }
+    });
+    return out;
+  }
+
+  function paint() {
+    var s = state();
+    cards.forEach(function (c) { c.classList.toggle("answered", !!(s[c.dataset.id] && s[c.dataset.id].verdict)); });
+    var n = Object.keys(s).filter(function (k) { return s[k].verdict; }).length;
+    document.getElementById("count").textContent = n + " of " + cards.length + " answered";
+  }
+
+  function save() {
+    try { localStorage.setItem(CONFIG.storageKey, JSON.stringify(state())); } catch (e) { /* private mode */ }
+    paint();
+  }
+
+  function load() {
+    var raw;
+    try { raw = localStorage.getItem(CONFIG.storageKey); } catch (e) { return; }
+    if (!raw) { return; }
+    var s;
+    try { s = JSON.parse(raw); } catch (e) { return; }
+    cards.forEach(function (card) {
+      var e = s[card.dataset.id];
+      if (!e) { return; }
+      if (e.verdict) {
+        var input = card.querySelector('input[name="v-' + card.dataset.id + '"][value="' + e.verdict + '"]');
+        if (input) { input.checked = true; }
+      }
+      if (e.note) { card.querySelector("textarea").value = e.note; }
+    });
+  }
+
+  /* ---- markdown (see references/result-template.md) ---- */
+  function markdownNote(note) {
+    return note.split("\n").map(function (line) { return "> " + line; }).join("\n");
+  }
+
+  function markdown() {
+    var s = state();
+    var lines = [];
+    var answered = cards.filter(function (c) { return s[c.dataset.id] && s[c.dataset.id].verdict; });
+    lines.push("# Refinement feedback — " + CONFIG.title);
+    lines.push("");
+    lines.push("<!-- refinement-form: " + CONFIG.storageKey +
+               " · saved " + new Date().toISOString() +
+               " · answered " + answered.length + "/" + cards.length + " -->");
+    if (CONFIG.source) { lines.push(""); lines.push("Source document: `" + CONFIG.source + "`"); }
+    lines.push("");
+
+    cards.forEach(function (card) {
+      var id = card.dataset.id;
+      var e = s[id];
+      if (!e || !e.verdict) { return; }
+      lines.push("## " + id + " — " + card.querySelector(".d-claim").textContent.trim());
+      lines.push("");
+      lines.push("**Verdict:** " + e.verdict.toUpperCase());
+      lines.push("");
+      lines.push("**Notes:**");
+      lines.push("");
+      lines.push(e.note ? markdownNote(e.note) : "_(none)_");
+      lines.push("");
+      lines.push("---");
+      lines.push("");
+    });
+
+    var missing = cards.filter(function (c) { return !(s[c.dataset.id] && s[c.dataset.id].verdict); });
+    lines.push("## Not answered");
+    lines.push("");
+    if (missing.length) {
+      missing.forEach(function (c) {
+        var e = s[c.dataset.id];
+        lines.push("- " + c.dataset.id + " — " + c.querySelector(".d-claim").textContent.trim() +
+                   (e && e.note ? " (note only, no verdict)" : ""));
+        if (e && e.note) { lines.push(""); lines.push(e.note.split("\n").map(function (line) {
+          return "  > " + line;
+        }).join("\n")); lines.push(""); }
+      });
+    } else {
+      lines.push("_(none — every item has a verdict)_");
+    }
+    lines.push("");
+    lines.push("<!-- end refinement feedback -->");
+    return lines.join("\n");
+  }
+
+  /* ---- status ---- */
+  var statusEl = document.getElementById("status");
+  function report(kind, html) {
+    statusEl.className = kind;
+    statusEl.innerHTML = html;
+  }
+
+  function revealText(hint) {
+    var out = document.getElementById("out");
+    document.getElementById("outText").value = markdown();
+    document.getElementById("outHint").textContent = hint || "Select all and copy, then paste this back into the conversation.";
+    out.hidden = false;
+    out.scrollIntoView({ block: "nearest" });
+  }
+
+  /* ---- remembered output directory -------------------------------------------------
+     A file:// page cannot discover its own folder, and startIn takes only the
+     WellKnownDirectory enum (a path throws TypeError) — so the folder cannot be preset.
+     What CAN be done: grant the directory ONCE, persist the FileSystemDirectoryHandle in
+     IndexedDB (which works on file://), and write silently on every later save. Handles
+     survive reload; the permission does not, so it is re-requested inside the click
+     handler, where a user gesture is available. Net effect: one dialog ever, not one per
+     save. Choose the folder holding this HTML file and the picker never returns. */
+  var DB = "refinement-fs", STORE = "handles", KEY = CONFIG.storageKey + ":dir";
+
+  function idb(mode, fn) {
+    return new Promise(function (resolve, reject) {
+      var open = indexedDB.open(DB, 1);
+      open.onupgradeneeded = function () { open.result.createObjectStore(STORE); };
+      open.onerror = function () { reject(open.error); };
+      open.onsuccess = function () {
+        var tx = open.result.transaction(STORE, mode);
+        var rq = fn(tx.objectStore(STORE));
+        rq.onsuccess = function () { resolve(rq.result); };
+        rq.onerror = function () { reject(rq.error); };
+      };
+    });
+  }
+
+  var loadDir = function () { return idb("readonly", function (s) { return s.get(KEY); }).catch(function () { return null; }); };
+  var saveDir = function (h) { return idb("readwrite", function (s) { return s.put(h, KEY); }).catch(function () { return null; }); };
+
+  /// Writes into a granted directory. Returns false if permission is refused or gone.
+  async function writeInto(dir, text) {
+    var opts = { mode: "readwrite" };
+    if ((await dir.queryPermission(opts)) !== "granted"
+        && (await dir.requestPermission(opts)) !== "granted") { return false; }
+    var fh = await dir.getFileHandle(CONFIG.outName, { create: true });
+    var w = await fh.createWritable();
+    await w.write(text);
+    await w.close();
+    return true;
+  }
+
+  /* ---- save chain: remembered dir -> directory grant -> download -> clipboard -> textarea ----
+     Verified on Chrome 150 (file://): the File System Access API is exposed and is a secure
+     context, but throws SecurityError unless called inside the click handler. Firefox and
+     WebKit do not expose it at all and fall straight through to the download. */
+  document.getElementById("save").addEventListener("click", async function () {
+    var text = markdown();
+
+    if (typeof window.showDirectoryPicker === "function") {
+      try {
+        // 1a) Already granted a folder in a previous session — write with no dialog at all.
+        var dir = await loadDir();
+        if (dir && await writeInto(dir, text)) {
+          report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to the folder you granted earlier — no dialog needed.");
+          return;
+        }
+
+        // 1b) First save (or the grant was revoked): ask once, then remember it forever.
+        dir = await window.showDirectoryPicker({ id: "refinement-out", mode: "readwrite" });
+        if (await writeInto(dir, text)) {
+          await saveDir(dir);
+          report("ok", "Saved <code>" + esc(CONFIG.outName) + "</code> to <code>" + esc(dir.name) +
+            "</code>. That folder is remembered — later saves write straight there.");
+          return;
+        }
+        report("warn", "Write permission was refused — nothing was written.");
+        return;
+      } catch (err) {
+        if (err && err.name === "AbortError") {
+          // Cancelled on purpose. Do NOT fall through to a download the reviewer didn't ask for.
+          report("warn", "Save cancelled — nothing was written.");
+          return;
+        }
+        report("warn", "Direct save failed (" + esc(err && err.name) + "). Falling back to a download…");
+      }
+    }
+
+    // 2) a[download] — lands in the browser's download folder, NOT next to this file.
+    try {
+      var blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = CONFIG.outName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      report("warn", "Download initiated for <code>" + esc(CONFIG.outName) + "</code> to your <b>browser's download folder</b> — " +
+        "this is <b>not</b> next to this page." +
+        (CONFIG.expectedDir ? " Move it to <code class=\"path\">" + esc(CONFIG.expectedDir) + "</code>, or tell the agent where it is." : ""));
+      revealText("The download was initiated. If it did not appear, copy this generated feedback manually.");
+      return;
+    } catch (err2) {
+      report("warn", "Download failed (" + esc(err2 && err2.name) + "). Trying the clipboard…");
+    }
+
+    // 3) clipboard
+    try {
+      await navigator.clipboard.writeText(text);
+      report("ok", "Copied to the clipboard — paste it back into the conversation.");
+      revealText("Also shown below, in case the paste goes wrong.");
+      return;
+    } catch (err3) {
+      // 4) always-visible textarea — the guaranteed way out
+      revealText("Could not save or copy automatically. Select all of this and copy it manually.");
+      report("bad", "Automatic save and copy both failed. The full feedback is in the box above — copy it by hand.");
+    }
+  });
+
+  document.getElementById("copy").addEventListener("click", async function (ev) {
+    var btn = ev.currentTarget;
+    try {
+      await navigator.clipboard.writeText(markdown());
+      btn.textContent = "Copied";
+      report("ok", "Copied to the clipboard — paste it back into the conversation.");
+    } catch (e) {
+      revealText("Clipboard access was refused. Select all of this and copy it manually.");
+      report("warn", "Clipboard refused — the text is in the box above.");
+    }
+    setTimeout(function () { btn.textContent = "Copy feedback"; }, 2200);
+  });
+
+  document.getElementById("show").addEventListener("click", function () {
+    revealText();
+    document.getElementById("outText").focus();
+    document.getElementById("outText").select();
+  });
+
+  document.getElementById("clear").addEventListener("click", function () {
+    cards.forEach(function (card) {
+      var picked = card.querySelector('input[name="v-' + card.dataset.id + '"]:checked');
+      if (picked) { picked.checked = false; }
+      card.querySelector("textarea").value = "";
+    });
+    document.getElementById("out").hidden = true;
+    report("", "Cleared. Nothing saved in this browser for this review.");
+    save();
+  });
+
+  document.addEventListener("input", save);
+  document.addEventListener("change", save);
+
+  load();
+  paint();
+</script>
