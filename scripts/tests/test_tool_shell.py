@@ -41,7 +41,7 @@ CONTENT_TYPES = """<?xml version="1.0" encoding="utf-8"?>
 </Types>
 """
 
-PAYLOAD_NAME = "tools/net10.0/any/ai-raccoon"
+PAYLOAD_NAME = "tools/net11.0/any/ai-raccoon"
 PAYLOAD = b"#!/bin/sh\nexec dotnet $0.dll \"$@\"\n"
 
 
@@ -88,7 +88,7 @@ def test_find_settings_rejects_multiple_settings_files(tmp_path):
     buf = BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr("DotnetToolSettings.xml", SHELL_SETTINGS)
-        zf.writestr("lib/net10.0/DotnetToolSettings.xml", SHELL_SETTINGS)
+        zf.writestr("lib/net11.0/DotnetToolSettings.xml", SHELL_SETTINGS)
     pkg = write_pkg(tmp_path, buf.getvalue())
     with zipfile.ZipFile(pkg) as zf:
         with pytest.raises(SystemExit) as exc:

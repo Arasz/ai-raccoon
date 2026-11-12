@@ -82,8 +82,8 @@ atexit.register(lambda: shutil.rmtree(BASE, ignore_errors=True))  # cleanup even
 print(f"== step 0: env preconditions (base {BASE}) ==")
 r = run(["dotnet", "--list-runtimes"])
 rts = r.stdout
-check("net10 runtime present", "Microsoft.NETCore.App 10.0" in rts, rts.splitlines()[0] if rts else "none")
-check("aspnet runtime present", "Microsoft.AspNetCore.App 10.0" in rts)
+check("net11 runtime present", "Microsoft.NETCore.App 11.0" in rts, rts.splitlines()[0] if rts else "none")
+check("aspnet runtime present", "Microsoft.AspNetCore.App 11.0" in rts)
 check("host is arm64", subprocess.run(["uname", "-m"], capture_output=True, text=True).stdout.strip() == "arm64")
 had_passphrase = os.environ.pop("AIRACCOON_DB_PASSPHRASE", None)
 os.environ["NUGET_PACKAGES"] = NUGET_PKGS
@@ -126,7 +126,7 @@ for dirpath, dirnames, filenames in os.walk(os.path.join(TOOLPATH, ".store")):
     if "tools" in dirnames:
         store_root = dirpath; break
 check("store layout found", store_root is not None, TOOLPATH)
-tool_dir = os.path.join(store_root, "tools", "net10.0", "osx-arm64") if store_root else ""
+tool_dir = os.path.join(store_root, "tools", "net11.0", "osx-arm64") if store_root else ""
 for f in ["AiRaccoon.dll", "AiRaccoon.deps.json", "AiRaccoon.runtimeconfig.json",
           "libonnxruntime.dylib", "libsqlite3mc.dylib", "vec0.dylib"]:
     # libsqlite3mc.dylib is the only sqlite native since the 2.4.0 bundle switch
