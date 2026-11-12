@@ -1,0 +1,290 @@
+{
+ "_note": "Copy to docs/work/checklist/<yyyy-mm-dd>-<subject>.json. Never fill this file in place. status is pass|fail|skipped|substituted; substituted means checked by a different instrument than the item names, and its reason must say which. accepted stays null until a human answers it, so an unfinished run is visibly unfinished. Delete any item whose feature no longer exists rather than skipping it.",
+ "run": {
+  "date": "2026-11-12",
+  "branch": "docs/checklist-2.9.0-decision-graph (from origin/main 924ce643)",
+  "commit": "binary under test: 2.9.0+dd035aab086da198d969a279d5e889ce7f7a7e13 (published package)",
+  "data-root": "/private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/data",
+  "note": "Scoped pass requested by the owner: latest-version check plus a full decision-graph pass (complex graph with edges and versions, exported as JSON). Published 2.9.0 installed to a scratch --tool-path; scratch data root; ephemeral port 64636; live bank never opened. Drivers: run.py, mcp.py in the data-root's parent; raw check log checks.json and run.out there."
+ },
+ "derived": {
+  "version": "2.9.0",
+  "mcp-tool-count": "43",
+  "mcp-prompt-count": "2",
+  "note": "Produced by scripts/derive-facts.py at run time, never typed from memory or a previous run."
+ },
+ "findings-against-prior-runs": [
+  {
+   "prior-run": "2026-11-11-2.6.0-decision-recording.json, item decision-tool-replies-match-output-schema",
+   "prior-claim": "The item validates every decision tool's reply (6 named, 8 called in schema_check.py).",
+   "what-is-actually-true": "The template item and the 2.6.0 driver never validated the five write tools amend_decision, transition_decision, supersede_decision, link_decisions, unlink_decisions. This run validated all 13 decision tools; all pass on 2.9.0.",
+   "evidence": "template expected-result names record/get/query/precedents/graph/preview only; this run's checks.json schema block lists 13 tools, 0 invalid.",
+   "so-what": "A schema regression in a write tool would have passed the template item. The item should name every decision tool, or derive them from tools/list; that is an upstream template change in ai-badger."
+  }
+ ],
+ "items": [
+  {
+   "item": "build-and-install-global-package",
+   "expected-result": "Release pack succeeds; install to an isolated tool path, or force-update the global tool when requested; installed --version matches derived.version.",
+   "command": "dotnet tool install ai-raccoon --version 2.9.0 --tool-path <scratch>/tool (SDK 11 /usr/local/share/dotnet/dotnet); <scratch>/tool/ai-raccoon --version; shasum -a 256 of AiRaccoon.dll in scratch and ~/.dotnet/tools/.store; NuGet search + RID flatcontainer index; git log -1 v2.9.0; lsof -p <live server pid>",
+   "evidence": [
+    "derived.version=2.9.0 (scripts/derive-facts.py at origin/main 924ce643)",
+    "NuGet search latest 2.9.0; ai-raccoon.osx-arm64 flatcontainer latest 2.9.0; gh release list: v2.9.0 Latest 2026-11-12T18:06:12Z",
+    "scratch --version: 2.9.0+dd035aab086da198d969a279d5e889ce7f7a7e13; global --version: 2.9.0+dd035aab086da198d969a279d5e889ce7f7a7e13; tag v2.9.0 = dd035aab",
+    "AiRaccoon.dll sha256 scratch = global = 062e52fb10031dabd5e13925d34a3858a6e7d605db7e6b023ab4382a442b2934",
+    "live server pid 77332 started 19:44:13 after store install 19:26:08 and maps ~/.dotnet/tools/.store/ai-raccoon/2.9.0/.../AiRaccoon.dll",
+    "first attempt with PATH dotnet (Homebrew SDK 10.0.403): 'Settings file DotnetToolSettings.xml was not found in the package' -> environment (two dotnet installs), not product"
+   ],
+   "observed-result": "Latest published version is 2.9.0; the installed global tool, the live server and the scratch install are the same 2.9.0 build (same commit and DLL hash). origin/main has 3 post-release commits (chunker refactor, docs, state) still at VERSION 2.9.0, so they are not in any package yet.",
+   "status": "pass",
+   "accepted": null,
+   "acceptance-reason": ""
+  },
+  {
+   "item": "server-lifecycle",
+   "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+   "command": "/private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/tool/ai-raccoon --data-root /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/data serve --port 0 --idle-timeout 0; later serve --port 64636 --restart --idle-timeout 0 (inside run.py ro phase)",
+   "evidence": [
+    "serve.log: 'ai-raccoon: 2.9.0+dd035aab... serving on port 64636 from <scratch>/tool/.store/...'",
+    "serve-restart.log: new server on 64636 served the same bank; ro still refused after restart; graph intact"
+   ],
+   "observed-result": "Ephemeral port bound and read back; --restart cycled the scratch server on its own port; 7721 never targeted.",
+   "status": "pass",
+   "accepted": null,
+   "acceptance-reason": ""
+  },
+  {
+   "item": "full-mcp-surface",
+   "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+   "command": "python3 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/mcp.py 64636 --list; prompts/list",
+   "evidence": [
+    "tools/list: 43 tools (derived 43); prompts/list: memory-usage-guide, workspace-consolidation-guide (derived 2)",
+    "13 decision tools called live 219 times; non-decision tools not called"
+   ],
+   "observed-result": "Counts match derived facts. Reachability was proven only for the 13 decision tools.",
+   "status": "skipped",
+   "accepted": null,
+   "acceptance-reason": "",
+   "skip-reason": "Run scoped by the owner to version + decision graph; listing matched derived counts but the 30 non-decision tools and legacy names were not called."
+  },
+  {
+   "item": "decision-tool-replies-match-output-schema",
+   "expected-result": "Validate every decision tool's structuredContent against the outputSchema that tools/list advertises (jsonschema Draft 2020-12), the way Claude Code does, for record_decision, get_decision, query_decisions, find_decision_precedents, get_decision_graph and preview_decisions. Every reply must validate. A raw JSON-RPC client that reads only content[0].text cannot fail this item, so the other decision items do not cover it. (ADR-0142; MCP structured output)",
+   "command": "python3 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/run.py 64636 (driver; every successful decision reply validated against tools/list outputSchema with jsonschema Draft 2020-12)",
+   "evidence": [
+    "register_decision_task: 7 valid replies, 0 invalid",
+    "record_decision: 96 valid replies, 0 invalid",
+    "get_decision: 39 valid replies, 0 invalid",
+    "amend_decision: 3 valid replies, 0 invalid",
+    "transition_decision: 4 valid replies, 0 invalid",
+    "query_decisions: 35 valid replies, 0 invalid",
+    "link_decisions: 14 valid replies, 0 invalid",
+    "supersede_decision: 1 valid replies, 0 invalid",
+    "get_decision_graph: 12 valid replies, 0 invalid",
+    "find_decision_precedents: 2 valid replies, 0 invalid",
+    "unlink_decisions: 1 valid replies, 0 invalid",
+    "export_decisions: 4 valid replies, 0 invalid",
+    "preview_decisions: 1 valid replies, 0 invalid",
+    "PASS preview_decisions all returns :: {'text': 'Project 09c857c1-bba6-434a-9c8b-6a4d1f15fe06; selected tasks: 3\\nTask bounds-chain: Graph bounds fixture\\nTask storage-migration: Storage migration\\nTask platform-architecture: Platform architecture\\n01a1d163-5db8-76b6-9a62-b44a9d760172 [accepted] Us",
+    "validator mutation check on a real get_decision_graph reply: real 0 errors; truncated=null 1; nodes removed 1; projectRevision as string 1"
+   ],
+   "observed-result": "All 13 decision tools (template names 6) returned structuredContent valid against their advertised outputSchema: 219 replies, 0 invalid. The 2.6.0 failure is fixed.",
+   "status": "pass",
+   "accepted": null,
+   "acceptance-reason": ""
+  },
+  {
+   "item": "decision-record-and-replay",
+   "expected-result": "register_decision_task then record_decision on a registered scratch project. A record without status is proposed, status=accepted is accepted, and an empty required field is refused as invalid-argument. Resending the same sessionId+requestId returns replayed=true with the same decisionId and revision; judge 'no duplicate' by the export counts, not by the replay flag alone. (ADR-0142, docs/how-to/record-project-decisions.md)",
+   "command": "python3 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/run.py 64636 (driver; every successful decision reply validated against tools/list outputSchema with jsonschema Draft 2020-12)",
+   "evidence": [
+    "PASS register scratch project :: [0, \"registered 09c857c1-bba6-434a-9c8b-6a4d1f15fe06\", \"n.Settings.CliSettingsBackend[687]\\n      ai-raccoon: the backend on port 64636 keeps running after this command exits, under its own idle timeout \\u2014 stop it with ai-raccoon serve --restart --port 646",
+    "PASS register task platform-architecture + replay :: [[false, {\"taskId\": \"platform-architecture\", \"title\": \"Platform architecture\", \"registeredOrder\": 1, \"registeredAt\": \"2026-11-12T20:11:52.612307+00:00\", \"sourceRef\": \"https://example.invalid/platform-architecture\", \"_replayed\": false, \"_rev\": 1}], [false, {\"ta",
+    "PASS register task storage-migration + replay :: [[false, {\"taskId\": \"storage-migration\", \"title\": \"Storage migration\", \"registeredOrder\": 2, \"registeredAt\": \"2026-11-12T20:11:52.619561+00:00\", \"sourceRef\": \"https://example.invalid/storage-migration\", \"_replayed\": false, \"_rev\": 2}], [false, {\"taskId\": \"stor",
+    "PASS register task bounds-chain + replay :: [[false, {\"taskId\": \"bounds-chain\", \"title\": \"Graph bounds fixture\", \"registeredOrder\": 3, \"registeredAt\": \"2026-11-12T20:11:52.624504+00:00\", \"sourceRef\": \"https://example.invalid/bounds-chain\", \"_replayed\": false, \"_rev\": 3}], [false, {\"taskId\": \"bounds-chai",
+    "PASS record A status=accepted -> accepted :: [false, \"accepted\"]",
+    "PASS record B status=accepted -> accepted :: [false, \"accepted\"]",
+    "PASS record C status=accepted -> accepted :: [false, \"accepted\"]",
+    "PASS record D status=(omitted) -> proposed :: [false, \"proposed\"]",
+    "PASS record E status=(omitted) -> proposed :: [false, \"proposed\"]",
+    "PASS record F status=(omitted) -> proposed :: [false, \"proposed\"]",
+    "PASS record G status=(omitted) -> proposed :: [false, \"proposed\"]",
+    "PASS record H status=accepted -> accepted :: [false, \"accepted\"]",
+    "PASS record H2 status=accepted -> accepted :: [false, \"accepted\"]",
+    "PASS record I status=accepted -> accepted :: [false, \"accepted\"]",
+    "PASS same sessionId+requestId replays :: [{\"decisionId\": \"01a1d163-5e0a-739f-92e0-797696e2ef36\", \"version\": 1, \"taskId\": \"platform-architecture\", \"projectRevision\": 14, \"content\": {\"title\": \"Replay probe\", \"category\": \"probe\", \"scenario\": \"replay\", \"outcome\": \"o\", \"reasoning\": \"r\", \"confidence\": null",
+    "PASS empty outcome refused invalid-argument :: [true, \"invalid-argument: Parameter \\\"outcome\\\" (string) must not be null or whitespace, was whitespace. (Parameter 'outcome')\"]"
+   ],
+   "observed-result": "16/16 checks pass.",
+   "status": "pass",
+   "accepted": null,
+   "acceptance-reason": ""
+  },
+  {
+   "item": "decision-version-conflicts-refused",
+   "expected-result": "Each write guard must be seen refusing: amend with a stale expectedVersion -> decision-conflict naming currentVersion; accepted->proposed -> decision-invalid-transition; link_decisions with a stale expectedProjectRevision -> decision-conflict; amending a superseded decision -> decision-invalid-transition. Pair each refusal with the same call succeeding on fresh values. (ADR-0142, docs/how-to/record-project-decisions.md)",
+   "command": "python3 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/run.py 64636 (driver; every successful decision reply validated against tools/list outputSchema with jsonschema Draft 2020-12)",
+   "evidence": [
+    "PASS amend A twice on fresh versions :: [[false, {\"decisionId\": \"01a1d163-5db8-76b6-9a62-b44a9d760172\", \"version\": 2, \"taskId\": \"platform-architecture\", \"projectRevision\": 15, \"content\": {\"title\": \"Use SQLite as the memory bank\", \"category\": \"architecture\", \"scenario\": \"Agents need durable project m",
+    "PASS amend A with stale expectedVersion -> decision-conflict naming currentVersion :: [true, \"decision-conflict: The decision changed; read its current version and retry with a new requestId. (currentVersion=3)\"]",
+    "PASS A history holds 3 versions :: [1, 2, 3]",
+    "PASS transition D proposed->accepted :: [false, {\"decisionId\": \"01a1d163-5dd1-78f3-a53b-9b6107b8de95\", \"version\": 2, \"taskId\": \"platform-architecture\", \"projectRevision\": 17, \"content\": {\"title\": \"Rank hybrid results with RRF\", \"category\": \"retrieval\", \"scenario\": \"Agents need durable project memory",
+    "PASS transition D accepted->proposed -> decision-invalid-transition :: [true, \"decision-invalid-transition: Cannot transition from Accepted to Proposed.\"]",
+    "PASS transition F -> rejected :: [false, {\"decisionId\": \"01a1d163-5de0-7e4b-8f10-eda8a243d5f4\", \"version\": 2, \"taskId\": \"platform-architecture\", \"projectRevision\": 18, \"content\": {\"title\": \"Store embeddings as fp32\", \"category\": \"storage\", \"scenario\": \"Agents need durable project memory (F)\",",
+    "PASS transition G -> rejected :: [false, {\"decisionId\": \"01a1d163-5de9-7be7-8254-5a4b7c87542a\", \"version\": 2, \"taskId\": \"platform-architecture\", \"projectRevision\": 19, \"content\": {\"title\": \"Use Postgres with pgvector\", \"category\": \"architecture\", \"scenario\": \"Agents need durable project memor",
+    "PASS transition I -> deprecated :: [false, {\"decisionId\": \"01a1d163-5e03-77b6-979d-91a45d2322da\", \"version\": 2, \"taskId\": \"storage-migration\", \"projectRevision\": 20, \"content\": {\"title\": \"Disable WAL for portability\", \"category\": \"storage\", \"scenario\": \"Agents need durable project memory (I)\", ",
+    "PASS link with stale expectedProjectRevision -> decision-conflict :: [true, \"decision-conflict: Decision revision conflict: expected 30, current 31. (currentProjectRevision=31)\"]",
+    "PASS same link on fresh revision succeeds :: [false, {\"edgeId\": \"01a1d163-5ebf-7c2f-8780-f278dab40ddb\", \"sourceId\": \"01a1d163-5e03-77b6-979d-91a45d2322da\", \"targetId\": \"01a1d163-5db8-76b6-9a62-b44a9d760172\", \"kind\": \"depends_on\", \"reason\": \"fresh\", \"taskId\": \"storage-migration\", \"createdRevision\": 32, \"c",
+    "PASS amend superseded H -> decision-invalid-transition :: [true, \"decision-invalid-transition: Cannot amend a Superseded decision.\"]",
+    "PASS paired amend on active A succeeds :: [false, {\"decisionId\": \"01a1d163-5db8-76b6-9a62-b44a9d760172\", \"version\": 4, \"taskId\": \"platform-architecture\", \"projectRevision\": 34, \"content\": {\"title\": \"Use SQLite as the memory bank\", \"category\": \"architecture\", \"scenario\": \"Agents need durable project me"
+   ],
+   "observed-result": "12/12 checks pass.",
+   "status": "pass",
+   "accepted": null,
+   "acceptance-reason": ""
+  },
+  {
+   "item": "decision-graph-query-and-precedents",
+   "expected-result": "link_decisions depends_on appears in get_decision_graph with both nodes. query_decisions by literal text and by category return only the matching decision, and a no-match term returns [] (negative control). After supersede_decision, find_decision_precedents omits the superseded decision unless includeInactive=true. (ADR-0142, docs/how-to/record-project-decisions.md)",
+   "command": "python3 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/run.py 64636 (driver; every successful decision reply validated against tools/list outputSchema with jsonschema Draft 2020-12)",
+   "evidence": [
+    "PASS link B depends_on A :: [false, {\"edgeId\": \"01a1d163-5e61-7b08-aada-b9e7388aca69\", \"sourceId\": \"01a1d163-5dc3-7b83-ad73-9c6ff80e9237\", \"targetId\": \"01a1d163-5db8-76b6-9a62-b44a9d760172\", \"kind\": \"depends_on\", \"reason\": \"B depends_on A\", \"taskId\": \"platform-architecture\", \"createdRevi",
+    "PASS link C depends_on A :: [false, {\"edgeId\": \"01a1d163-5e6b-7eac-91bd-10deb8d39ef6\", \"sourceId\": \"01a1d163-5dcc-7224-a36f-16b699ebaa79\", \"targetId\": \"01a1d163-5db8-76b6-9a62-b44a9d760172\", \"kind\": \"depends_on\", \"reason\": \"C depends_on A\", \"taskId\": \"platform-architecture\", \"createdRevi",
+    "PASS link D depends_on B :: [false, {\"edgeId\": \"01a1d163-5e76-79aa-a747-9d8cbcfe6844\", \"sourceId\": \"01a1d163-5dd1-78f3-a53b-9b6107b8de95\", \"targetId\": \"01a1d163-5dc3-7b83-ad73-9c6ff80e9237\", \"kind\": \"depends_on\", \"reason\": \"D depends_on B\", \"taskId\": \"platform-architecture\", \"createdRevi",
+    "PASS link D depends_on C :: [false, {\"edgeId\": \"01a1d163-5e7e-7734-9116-c1b7879f2976\", \"sourceId\": \"01a1d163-5dd1-78f3-a53b-9b6107b8de95\", \"targetId\": \"01a1d163-5dcc-7224-a36f-16b699ebaa79\", \"kind\": \"depends_on\", \"reason\": \"D depends_on C\", \"taskId\": \"platform-architecture\", \"createdRevi",
+    "PASS link E supports B :: [false, {\"edgeId\": \"01a1d163-5e86-7eea-9188-5486c8ee3684\", \"sourceId\": \"01a1d163-5dd7-75fe-ac3d-2ef785b13710\", \"targetId\": \"01a1d163-5dc3-7b83-ad73-9c6ff80e9237\", \"kind\": \"supports\", \"reason\": \"E supports B\", \"taskId\": \"platform-architecture\", \"createdRevision",
+    "PASS link F contradicts E :: [false, {\"edgeId\": \"01a1d163-5e90-7d54-b112-4ce2ed14f55d\", \"sourceId\": \"01a1d163-5dd7-75fe-ac3d-2ef785b13710\", \"targetId\": \"01a1d163-5de0-7e4b-8f10-eda8a243d5f4\", \"kind\": \"contradicts\", \"reason\": \"F contradicts E\", \"taskId\": \"platform-architecture\", \"createdRe",
+    "PASS link G contradicts A :: [false, {\"edgeId\": \"01a1d163-5e96-7361-be21-f8c25023f564\", \"sourceId\": \"01a1d163-5db8-76b6-9a62-b44a9d760172\", \"targetId\": \"01a1d163-5de9-7be7-8254-5a4b7c87542a\", \"kind\": \"contradicts\", \"reason\": \"G contradicts A\", \"taskId\": \"platform-architecture\", \"createdRe",
+    "PASS link H depends_on A :: [false, {\"edgeId\": \"01a1d163-5e9c-7895-8df6-d47102bef6c5\", \"sourceId\": \"01a1d163-5df2-7b2b-81e9-8a052b71ad95\", \"targetId\": \"01a1d163-5db8-76b6-9a62-b44a9d760172\", \"kind\": \"depends_on\", \"reason\": \"H depends_on A\", \"taskId\": \"storage-migration\", \"createdRevision",
+    "PASS link H2 depends_on A :: [false, {\"edgeId\": \"01a1d163-5ea4-73cd-8e60-ce4a9ed5d893\", \"sourceId\": \"01a1d163-5dfb-7891-bdb2-9b3830ccaeb7\", \"targetId\": \"01a1d163-5db8-76b6-9a62-b44a9d760172\", \"kind\": \"depends_on\", \"reason\": \"H2 depends_on A\", \"taskId\": \"storage-migration\", \"createdRevisio",
+    "PASS link E supports D :: [false, {\"edgeId\": \"01a1d163-5eab-72c2-93e1-20e04f4c5ae1\", \"sourceId\": \"01a1d163-5dd7-75fe-ac3d-2ef785b13710\", \"targetId\": \"01a1d163-5dd1-78f3-a53b-9b6107b8de95\", \"kind\": \"supports\", \"reason\": \"E supports D\", \"taskId\": \"platform-architecture\", \"createdRevision",
+    "PASS link D supports E :: [false, {\"edgeId\": \"01a1d163-5eb2-70e1-b961-675f4d93cb06\", \"sourceId\": \"01a1d163-5dd1-78f3-a53b-9b6107b8de95\", \"targetId\": \"01a1d163-5dd7-75fe-ac3d-2ef785b13710\", \"kind\": \"supports\", \"reason\": \"D supports E\", \"taskId\": \"platform-architecture\", \"createdRevision",
+    "PASS self link A->A refused :: [true, \"decision-invalid-link: A decision cannot link to itself.\"]",
+    "PASS depends_on cycle A->D (D->B->A exists) refused :: [true, \"decision-invalid-link: The DependsOn link would create a cycle.\"]",
+    "PASS link kind supersedes via link_decisions refused :: [true, \"invalid-argument: Parameter \\\"kind\\\" must be true, was false. (Parameter 'kind')\"]",
+    "PASS revision unchanged by the three refusals :: [32, 32]",
+    "PASS supersede H by H2 :: [false, {\"replacement\": {\"decisionId\": \"01a1d163-5dfb-7891-bdb2-9b3830ccaeb7\", \"version\": 1, \"taskId\": \"storage-migration\", \"projectRevision\": 12, \"content\": {\"title\": \"Sync banks through an append-only change log\", \"category\": \"sync\", \"scenario\": \"Agents need",
+    "PASS H status is superseded :: superseded",
+    "PASS reverse supersession H->H2 refused :: [true, \"decision-invalid-transition: Both replacement and replaced decisions must be accepted.\"]",
+    "PASS A downstream depth 10 = A,B,C,D,H,H2,I (context edges excluded) :: {\"got\": 7, \"want\": 7, \"edges\": [\"depends_on\", \"depends_on\", \"depends_on\", \"depends_on\", \"depends_on\", \"depends_on\", \"supersedes\", \"depends_on\"]}",
+    "PASS D upstream = diamond D,B,C,A with 4 depends_on edges :: {\"nodes\": 4, \"edges\": [\"depends_on\", \"depends_on\", \"depends_on\", \"depends_on\"]}",
+    "PASS includeContext adds supports/contradicts edges (E<->D, F->E) :: {\"nodes\": 10, \"kinds\": [\"contradicts\", \"depends_on\", \"supersedes\", \"supports\"]}",
+    "PASS H2 graph shows supersedes edge to H :: [\"depends_on\", \"depends_on\", \"depends_on\", \"depends_on\", \"supersedes\", \"depends_on\"]",
+    "PASS query literal 'zirconb' -> only B :: [\"Use sqlite-vec for vector search\"]",
+    "PASS query category sync (statuses omitted = all) -> H and H2 only :: [[\"Sync banks through S3 snapshots\", \"superseded\"], [\"Sync banks through an append-only change log\", \"accepted\"]]",
+    "PASS query category sync statuses=[accepted] -> H2 only :: [[\"Sync banks through an append-only change log\", \"accepted\"]]",
+    "PASS query no-match 'zeppelin' -> [] :: []",
+    "PASS precedents omit superseded H unless includeInactive :: {\"excl\": 0, \"incl\": 1}"
+   ],
+   "observed-result": "27/27 checks pass. Graph fixture: 3 tasks, 14 MCP decisions + 1 CLI decision, 23 versions, 15 edges (9 depends_on incl. a diamond D->{B,C}->A and a 3-chain, 3 supports incl. a legal E<->D cycle, 2 contradicts, 1 supersedes), 1 edge unlinked; statuses proposed 6, accepted 5, rejected 2, superseded 1, deprecated 1. Refused as designed: self link, transitive depends_on cycle, supersedes via link_decisions, reverse supersession. Export: docs/work/checklist/2026-11-12-2.9.0-decision-graph-export.json (decisions export --all, mode 0600).",
+   "status": "pass",
+   "accepted": null,
+   "acceptance-reason": ""
+  },
+  {
+   "item": "decision-cli-parity-and-export",
+   "expected-result": "ai-raccoon decisions record/query/get --history/preview reach the same records through the server. export --all --output writes a 0600 file whose counts match what was written (decisions, versions, edges); a second export to the same path without --force exits 10. An unregistered project exits 18; a record file naming taskId exits 10 and sends nothing. (ADR-0142, docs/how-to/record-project-decisions.md)",
+   "command": "python3 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/run.py 64636 (driver; every successful decision reply validated against tools/list outputSchema with jsonschema Draft 2020-12)",
+   "evidence": [
+    "PASS MCP export all: decisions count matches written :: {\"counts\": {\"tasks\": 3, \"decisions\": 14, \"versions\": 22, \"edges\": 15, \"boundaryNodes\": 0, \"imports\": 0}, \"expected\": 14}",
+    "PASS MCP export versions = sum of currentVersion via get_decision :: {\"counts\": 22, \"expected\": 22}",
+    "PASS MCP export edges = 15 written (11 + I->A + supersedes + 2 chain) :: {\"tasks\": 3, \"decisions\": 14, \"versions\": 22, \"edges\": 15, \"boundaryNodes\": 0, \"imports\": 0}",
+    "PASS cli record exits 0 :: [0, \"{\\n  \\\"projectId\\\": \\\"09c857c1-bba6-434a-9c8b-6a4d1f15fe06\\\",\\n  \\\"projectRevision\\\": 41,\\n  \\\"value\\\": {\\n    \\\"decisionId\\\": \\\"01a1d163-609b-7ff1-8400-4e55d94c2ad5\\\",\\n    \\\"version\\\": 1,\\n    \\\"taskId\\\": \\\"platform-architecture\\\",\\n    \\\"projectRevisio",
+    "PASS MCP query sees the CLI-recorded decision :: [\"01a1d163-609b-7ff1-8400-4e55d94c2ad5\", [{\"decision\": {\"decisionId\": \"01a1d163-609b-7ff1-8400-4e55d94c2ad5\", \"title\": \"CLI-recorded decision\", \"status\": \"proposed\", \"currentVersion\": 1, \"boundary\": false}, \"category\": \"tooling\", \"outcome\": \"decisions record g",
+    "PASS cli query 'zirconb' finds only B (same as MCP) :: [0, \"{\\n  \\\"projectId\\\": \\\"09c857c1-bba6-434a-9c8b-6a4d1f15fe06\\\",\\n  \\\"projectRevision\\\": 41,\\n  \\\"value\\\": {\\n    \\\"decisions\\\": [\\n      {\\n        \\\"decision\\\": {\\n          \\\"decisionId\\\": \\\"01a1d163-5dc3-7b83-ad73-9c6ff80e9237\\\",\\n          \\\"title\\\": \\\"",
+    "PASS cli get A --history shows 4 versions :: [0, \"{\\n  \\\"projectId\\\": \\\"09c857c1-bba6-434a-9c8b-6a4d1f15fe06\\\",\\n  \\\"projectRevision\\\": 41,\\n  \\\"value\\\": {\\n    \\\"record\\\": {\\n      \\\"decisionId\\\": \\\"01a1d163-5db8-76b6-9a62-b44a9d760172\\\",\\n      \\\"originTaskId\\\": \\\"platfo\"]",
+    "PASS cli preview --all exits 0 and names A :: [0, \"Project 09c857c1-bba6-434a-9c8b-6a4d1f15fe06; selected tasks: 3\\nTask bounds-chain: Graph bounds fixture\\nTask storage-migration: Storage migration\\nTask platform-architecture: Platform architecture\\n01a1d163-5db8-76b6-9a62-b44a9d760172 [accepted] Use SQL",
+    "PASS cli export --all --output: mode 0600, counts == MCP export counts :: {\"code\": 0, \"mode\": \"0o600\", \"cli\": {\"tasks\": 3, \"decisions\": 15, \"versions\": 23, \"edges\": 15, \"boundaryNodes\": 0, \"imports\": 0}, \"mcp\": {\"tasks\": 3, \"decisions\": 15, \"versions\": 23, \"edges\": 15, \"boundaryNodes\": 0, \"imports\": 0}}",
+    "PASS second export without --force exits 10 :: [10, \"coon: /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/export/decision-graph-cli-all.json already exists; pass --force to replace it\"]",
+    "PASS unregistered project exits 18 :: [18, \" not registered. Look up this repository's id with get_project_id, mint a new one with save_project_id_token, or register it with 'ai-raccoon project id register 710365cf-366a-46d7-a251-0c7fc16ac951'.\"]",
+    "PASS record file naming taskId exits 10, revision unchanged :: [10, \"0/bad.json must hold one JSON object with unique fields and without taskId, sessionId, requestId \\u2014 the task comes from --task-id and the retry identity from --session-id/--request-id; nothing was sent\", 41, 41]"
+   ],
+   "observed-result": "12/12 checks pass.",
+   "status": "pass",
+   "accepted": null,
+   "acceptance-reason": ""
+  },
+  {
+   "item": "decision-access-mode-read-only",
+   "expected-result": "settings access set <id> ro: record_decision over MCP returns access-denied, the CLI exits 17, projectRevision is unchanged and reads still work. After serve --restart on the same scratch port the project is still ro. Restore rw before any further write step. (ADR-0142, docs/how-to/record-project-decisions.md)",
+   "command": "python3 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/run.py 64636 (driver; every successful decision reply validated against tools/list outputSchema with jsonschema Draft 2020-12)",
+   "evidence": [
+    "PASS settings access set ro :: [0, \"access set to ro for project 09c857c1-bba6-434a-9c8b-6a4d1f15fe06\", \"n.Settings.CliSettingsBackend[687]\\n      ai-raccoon: the backend on port 64636 keeps running after this command exits, under its own idle timeout \\u2014 stop it with ai-raccoon serve --",
+    "PASS MCP record in ro -> access-denied :: [true, \"access-denied: record_decision requires mode rw (current ro); run 'ai-raccoon settings access set 09c857c1-bba6-434a-9c8b-6a4d1f15fe06 rw' to raise this project's mode, or 'ai-raccoon settings access default set rw' for all projects\"]",
+    "PASS MCP link in ro -> access-denied :: [true, \"access-denied: link_decisions requires mode rw (current ro); run 'ai-raccoon settings access set 09c857c1-bba6-434a-9c8b-6a4d1f15fe06 rw' to raise this project's mode, or 'ai-raccoon settings access default set rw' for all projects\"]",
+    "PASS CLI record in ro exits 17 :: [17, \"equires mode rw (current ro); run 'ai-raccoon settings access set 09c857c1-bba6-434a-9c8b-6a4d1f15fe06 rw' to raise this project's mode, or 'ai-raccoon settings access default set rw' for all projects\"]",
+    "PASS revision unchanged, reads work :: [41, 41]",
+    "PASS after serve --restart still access-denied :: [[true, \"access-denied: record_decision requires mode rw (current ro); run 'ai-raccoon settings access set 09c857c1-bba6-434a-9c8b-6a4d1f15fe06 rw' to raise this project's mode, or 'ai-raccoon settings access default set rw' for all projects\"], \"Raccoon[660]\\n",
+    "PASS graph survives restart (D upstream diamond) :: ",
+    "PASS restore rw; a write succeeds :: [0, \"n.Settings.CliSettingsBackend[687]\\n      ai-raccoon: the backend on port 64636 keeps running after this command exits, under its own idle timeout \\u2014 stop it with ai-raccoon serve --restart --port 64636\"]"
+   ],
+   "observed-result": "8/8 checks pass.",
+   "status": "pass",
+   "accepted": null,
+   "acceptance-reason": ""
+  },
+  {
+   "item": "decision-semantica-import",
+   "expected-result": "decisions import-semantica with tests/AiRaccoon.Tests/Resources/Semantica/export-graph-json-0.7.0.json: preview with the legacy tasks unregistered exits 17; a mapping with one decision's status removed exits 17 with a missing-status blocker; the clean preview exits 0 and prints the --apply command; apply creates decisions in their mapped statuses with replayed=false; re-running apply returns replayed=true and leaves the revision unchanged; export shows importRecords equal to entities+relationships. (ADR-0142, docs/how-to/record-project-decisions.md)",
+   "command": "python3 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/run.py 64636 (driver; every successful decision reply validated against tools/list outputSchema with jsonschema Draft 2020-12)",
+   "evidence": [
+    "PASS preview with legacy tasks unregistered exits 17 :: [17, \"s.CliSettingsBackend[687]\\n      ai-raccoon: the backend on port 64636 keeps running after this command exits, under its own idle timeout \\u2014 stop it with ai-raccoon serve --restart --port 64636\\nai-raccoon: the import has 2 blockers; fix the mapping ",
+    "PASS mapping without a status exits 17 with missing-status :: [17, \"gs.CliSettingsBackend[687]\\n      ai-raccoon: the backend on port 64636 keeps running after this command exits, under its own idle timeout \\u2014 stop it with ai-raccoon serve --restart --port 64636\\nai-raccoon: the import has 1 blocker; fix the mapping ",
+    "PASS clean preview exits 0 and prints --apply :: [0, \"ai-raccoon decisions import-semantica --project-id 09c857c1-bba6-434a-9c8b-6a4d1f15fe06 --input /Users/arasz/RiderProjects/ai-raccoon/tests/AiRaccoon.Tests/Resources/Semantica/export-graph-json-0.7.0.json --mapping /Users/arasz/RiderProjects/ai-raccoon/te",
+    "PASS apply replayed=false, re-apply replayed=true, revision unchanged :: [0, \"{\\n  \\\"projectId\\\": \\\"09c857c1-bba6-434a-9c8b-6a4d1f15fe06\\\",\\n  \\\"projectRevision\\\": 45,\\n  \\\"value\\\": {\\n    \\\"sourceDigest\\\": \\\"290A36C00C2DDE2CBA4C32243E71F5244D9FEA0D8F8F17B5560AD475B74F5A11\\\",\\n    \\\"counts\\\": {\\n \", 0, \"{\\n  \\\"projectId\\\": \\\"09c857",
+    "PASS export importRecords == entities + relationships :: {\"imports\": 22, \"source\": 22, \"statuses\": [\"accepted\", \"accepted\", \"proposed\", \"rejected\"]}"
+   ],
+   "observed-result": "5/5 checks pass.",
+   "status": "pass",
+   "accepted": null,
+   "acceptance-reason": ""
+  },
+  {
+   "item": "decision-unlink-keeps-history",
+   "expected-result": "unlink_decisions with a stale expectedProjectRevision -> decision-conflict; with the current revision the edge leaves get_decision_graph but stays in export_decisions with removedAt and removalActor; unlinking a supersedes edge -> decision-invalid-transition (supersession is permanent). (ADR-0142, docs/how-to/record-project-decisions.md)",
+   "command": "python3 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/run.py 64636 (driver; every successful decision reply validated against tools/list outputSchema with jsonschema Draft 2020-12)",
+   "evidence": [
+    "PASS unlink stale revision -> decision-conflict :: [true, \"decision-conflict: Decision revision conflict: expected 33, current 34. (currentProjectRevision=34)\"]",
+    "PASS unlink current revision :: [false, {\"edgeId\": \"01a1d163-5ebf-7c2f-8780-f278dab40ddb\", \"sourceId\": \"01a1d163-5e03-77b6-979d-91a45d2322da\", \"targetId\": \"01a1d163-5db8-76b6-9a62-b44a9d760172\", \"kind\": \"depends_on\", \"reason\": \"fresh\", \"taskId\": \"storage-migration\", \"createdRevision\": 32, \"c",
+    "PASS edge gone from graph :: 01a1d163-5ebf-7c2f-8780-f278dab40ddb",
+    "PASS unlink supersedes edge -> decision-invalid-transition :: [true, \"decision-invalid-transition: A supersession edge is permanent.\"]",
+    "PASS unlinked edge stays in export with removedAt + removalActor :: [{\"edgeId\": \"01a1d163-5ebf-7c2f-8780-f278dab40ddb\", \"sourceId\": \"01a1d163-5e03-77b6-979d-91a45d2322da\", \"targetId\": \"01a1d163-5db8-76b6-9a62-b44a9d760172\", \"kind\": \"depends_on\", \"reason\": \"fresh\", \"taskId\": \"storage-migration\", \"createdRevision\": 32, \"createdA"
+   ],
+   "observed-result": "5/5 checks pass.",
+   "status": "pass",
+   "accepted": null,
+   "acceptance-reason": ""
+  },
+  {
+   "item": "decision-graph-bounds",
+   "expected-result": "On a chain X1 depends_on X2 depends_on X3, get_decision_graph from X1 upstream: depth 0 = seed alone with truncated reason depth; depth 1 = 2 nodes, reason depth; depth 2 = 3 nodes, not truncated; maxNodes 2 = 2 nodes, reason nodes. downstream from X1 returns the seed alone (direction control). depth 11 and maxNodes 0 -> invalid-argument. Upstream = edges whose source is the node (DecisionService.Views.cs). (ADR-0142, docs/how-to/record-project-decisions.md)",
+   "command": "python3 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/run.py 64636 (driver; every successful decision reply validated against tools/list outputSchema with jsonschema Draft 2020-12)",
+   "evidence": [
+    "PASS X1 upstream depth 0 = 1 nodes, reason depth :: {\"nodes\": 1, \"truncated\": true, \"reasons\": [\"depth\"]}",
+    "PASS X1 upstream depth 1 = 2 nodes, reason depth :: {\"nodes\": 2, \"truncated\": true, \"reasons\": [\"depth\"]}",
+    "PASS X1 upstream depth 2 = 3 nodes, reason None :: {\"nodes\": 3, \"truncated\": false, \"reasons\": []}",
+    "PASS X1 upstream maxNodes 2 = 2 nodes, reason nodes :: {\"nodes\": 2, \"truncated\": true, \"reasons\": [\"nodes\"]}",
+    "PASS X1 downstream = seed alone (direction control) :: 1",
+    "PASS depth 11 -> invalid-argument :: [true, \"invalid-argument: Parameter \\\"depth\\\" (int) must be between or equal to <0> and <10>, was <11>. (Parameter 'depth')\\nActual value was 11.\"]",
+    "PASS maxNodes 0 -> invalid-argument :: [true, \"invalid-argument: Parameter \\\"maxNodes\\\" (int) must be between or equal to <1> and <500>, was <0>. (Parameter 'maxNodes')\\nActual value was 0.\"]"
+   ],
+   "observed-result": "7/7 checks pass.",
+   "status": "pass",
+   "accepted": null,
+   "acceptance-reason": ""
+  },
+  {
+   "item": "decision-mcp-export-size-cap",
+   "expected-result": "Record enough decisions in one task to pass 1 MiB (reasoning is capped at 16 000 chars, so about 80 x 15 000). MCP export_decisions of that task -> decision-export-too-large naming the byte size and the CLI command; ai-raccoon decisions export of the same task exits 0 and its counts match what was recorded. (ADR-0142, docs/how-to/record-project-decisions.md)",
+   "command": "python3 /private/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/air290/run.py 64636 (driver; every successful decision reply validated against tools/list outputSchema with jsonschema Draft 2020-12)",
+   "evidence": [
+    "PASS MCP export of 80 x 15000-char task -> decision-export-too-large naming bytes + CLI :: decision-export-too-large: The export is 1258711 bytes, over the 1048576-byte MCP limit, so nothing was returned. Run 'ai-raccoon decisions export --project-id 09c857c1-bba6-434a-9c8b-6a4d1f15fe06' with the same selector to stream it in full.",
+    "PASS CLI export of same task exits 0, counts match :: {\"code\": 0, \"bytes\": 1297784, \"counts\": {\"tasks\": 1, \"decisions\": 80, \"versions\": 80, \"edges\": 0, \"boundaryNodes\": 0, \"imports\": 0}}"
+   ],
+   "observed-result": "2/2 checks pass.",
+   "status": "pass",
+   "accepted": null,
+   "acceptance-reason": ""
+  }
+ ]
+}

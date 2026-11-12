@@ -1,0 +1,1448 @@
+{
+  "projectId": "09c857c1-bba6-434a-9c8b-6a4d1f15fe06",
+  "projectRevision": 41,
+  "schemaVersion": 1,
+  "exportedAt": "2026-11-12T20:11:54.486879\u002B00:00",
+  "selector": {
+    "last": null,
+    "all": true,
+    "taskIds": null
+  },
+  "selectedTaskIds": [
+    "bounds-chain",
+    "storage-migration",
+    "platform-architecture"
+  ],
+  "tasks": [
+    {
+      "taskId": "bounds-chain",
+      "title": "Graph bounds fixture",
+      "registeredOrder": 3,
+      "registeredAt": "2026-11-12T20:11:52.624504\u002B00:00",
+      "sourceRef": "https://example.invalid/bounds-chain"
+    },
+    {
+      "taskId": "storage-migration",
+      "title": "Storage migration",
+      "registeredOrder": 2,
+      "registeredAt": "2026-11-12T20:11:52.619561\u002B00:00",
+      "sourceRef": "https://example.invalid/storage-migration"
+    },
+    {
+      "taskId": "platform-architecture",
+      "title": "Platform architecture",
+      "registeredOrder": 1,
+      "registeredAt": "2026-11-12T20:11:52.612307\u002B00:00",
+      "sourceRef": "https://example.invalid/platform-architecture"
+    }
+  ],
+  "decisions": [
+    {
+      "record": {
+        "decisionId": "01a1d163-5db8-76b6-9a62-b44a9d760172",
+        "originTaskId": "platform-architecture",
+        "currentVersion": 4,
+        "createdAt": "2026-11-12T20:11:52.632816\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5db8-76b6-9a62-b44a9d760172",
+          "version": 1,
+          "taskId": "platform-architecture",
+          "projectRevision": 4,
+          "content": {
+            "title": "Use SQLite as the memory bank",
+            "category": "architecture",
+            "scenario": "Agents need durable project memory (A)",
+            "outcome": "Use SQLite as the memory bank (decision A)",
+            "reasoning": "Checklist fixture A; zircona marker",
+            "confidence": 0.9,
+            "maker": "checklist",
+            "alternatives": [
+              "not use sqlite as the memory bank"
+            ],
+            "consequences": [
+              "A constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-A.md",
+                "description": "fixture source A"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "accepted",
+          "recordedAt": "2026-11-12T20:11:52.632816\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        },
+        {
+          "decisionId": "01a1d163-5db8-76b6-9a62-b44a9d760172",
+          "version": 2,
+          "taskId": "platform-architecture",
+          "projectRevision": 15,
+          "content": {
+            "title": "Use SQLite as the memory bank",
+            "category": "architecture",
+            "scenario": "Agents need durable project memory (A)",
+            "outcome": "SQLite bank, schema v23",
+            "reasoning": "revised",
+            "confidence": null,
+            "maker": null,
+            "alternatives": [],
+            "consequences": [],
+            "sources": [],
+            "validFrom": null,
+            "validUntil": null
+          },
+          "status": "accepted",
+          "recordedAt": "2026-11-12T20:11:52.738391\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": "name schema version"
+        },
+        {
+          "decisionId": "01a1d163-5db8-76b6-9a62-b44a9d760172",
+          "version": 3,
+          "taskId": "platform-architecture",
+          "projectRevision": 16,
+          "content": {
+            "title": "Use SQLite as the memory bank",
+            "category": "architecture",
+            "scenario": "Agents need durable project memory (A)",
+            "outcome": "SQLite bank, schema v23, SQLCipher optional",
+            "reasoning": "revised",
+            "confidence": null,
+            "maker": null,
+            "alternatives": [],
+            "consequences": [],
+            "sources": [],
+            "validFrom": null,
+            "validUntil": null
+          },
+          "status": "accepted",
+          "recordedAt": "2026-11-12T20:11:52.742293\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": "add encryption"
+        },
+        {
+          "decisionId": "01a1d163-5db8-76b6-9a62-b44a9d760172",
+          "version": 4,
+          "taskId": "platform-architecture",
+          "projectRevision": 34,
+          "content": {
+            "title": "Use SQLite as the memory bank",
+            "category": "architecture",
+            "scenario": "Agents need durable project memory (A)",
+            "outcome": "SQLite bank, schema v23, SQLCipher optional, WAL on",
+            "reasoning": "revised",
+            "confidence": null,
+            "maker": null,
+            "alternatives": [],
+            "consequences": [],
+            "sources": [],
+            "validFrom": null,
+            "validUntil": null
+          },
+          "status": "accepted",
+          "recordedAt": "2026-11-12T20:11:52.947827\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": "paired success"
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 2,
+          "edgeId": null
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 3,
+          "edgeId": null
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 4,
+          "edgeId": null
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5e96-7361-be21-f8c25023f564"
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-5dc3-7b83-ad73-9c6ff80e9237",
+        "originTaskId": "platform-architecture",
+        "currentVersion": 1,
+        "createdAt": "2026-11-12T20:11:52.643352\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5dc3-7b83-ad73-9c6ff80e9237",
+          "version": 1,
+          "taskId": "platform-architecture",
+          "projectRevision": 5,
+          "content": {
+            "title": "Use sqlite-vec for vector search",
+            "category": "retrieval",
+            "scenario": "Agents need durable project memory (B)",
+            "outcome": "Use sqlite-vec for vector search (decision B)",
+            "reasoning": "Checklist fixture B; zirconb marker",
+            "confidence": 0.8,
+            "maker": "checklist",
+            "alternatives": [
+              "not use sqlite-vec for vector search"
+            ],
+            "consequences": [
+              "B constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-B.md",
+                "description": "fixture source B"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "accepted",
+          "recordedAt": "2026-11-12T20:11:52.643352\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5e61-7b08-aada-b9e7388aca69"
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-5dcc-7224-a36f-16b699ebaa79",
+        "originTaskId": "platform-architecture",
+        "currentVersion": 1,
+        "createdAt": "2026-11-12T20:11:52.652493\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5dcc-7224-a36f-16b699ebaa79",
+          "version": 1,
+          "taskId": "platform-architecture",
+          "projectRevision": 6,
+          "content": {
+            "title": "Use FTS5 for keyword search",
+            "category": "retrieval",
+            "scenario": "Agents need durable project memory (C)",
+            "outcome": "Use FTS5 for keyword search (decision C)",
+            "reasoning": "Checklist fixture C; zirconc marker",
+            "confidence": 0.85,
+            "maker": "checklist",
+            "alternatives": [
+              "not use fts5 for keyword search"
+            ],
+            "consequences": [
+              "C constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-C.md",
+                "description": "fixture source C"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "accepted",
+          "recordedAt": "2026-11-12T20:11:52.652493\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5e6b-7eac-91bd-10deb8d39ef6"
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-5dd1-78f3-a53b-9b6107b8de95",
+        "originTaskId": "platform-architecture",
+        "currentVersion": 2,
+        "createdAt": "2026-11-12T20:11:52.657376\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5dd1-78f3-a53b-9b6107b8de95",
+          "version": 1,
+          "taskId": "platform-architecture",
+          "projectRevision": 7,
+          "content": {
+            "title": "Rank hybrid results with RRF",
+            "category": "retrieval",
+            "scenario": "Agents need durable project memory (D)",
+            "outcome": "Rank hybrid results with RRF (decision D)",
+            "reasoning": "Checklist fixture D; zircond marker",
+            "confidence": 0.7,
+            "maker": "checklist",
+            "alternatives": [
+              "not rank hybrid results with rrf"
+            ],
+            "consequences": [
+              "D constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-D.md",
+                "description": "fixture source D"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "proposed",
+          "recordedAt": "2026-11-12T20:11:52.657376\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        },
+        {
+          "decisionId": "01a1d163-5dd1-78f3-a53b-9b6107b8de95",
+          "version": 2,
+          "taskId": "platform-architecture",
+          "projectRevision": 17,
+          "content": {
+            "title": "Rank hybrid results with RRF",
+            "category": "retrieval",
+            "scenario": "Agents need durable project memory (D)",
+            "outcome": "Rank hybrid results with RRF (decision D)",
+            "reasoning": "Checklist fixture D; zircond marker",
+            "confidence": 0.7,
+            "maker": "checklist",
+            "alternatives": [
+              "not rank hybrid results with rrf"
+            ],
+            "consequences": [
+              "D constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-D.md",
+                "description": "fixture source D"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "accepted",
+          "recordedAt": "2026-11-12T20:11:52.76053\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": "benchmarked"
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 2,
+          "edgeId": null
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5e76-79aa-a747-9d8cbcfe6844"
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5e7e-7734-9116-c1b7879f2976"
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5eb2-70e1-b961-675f4d93cb06"
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-5dd7-75fe-ac3d-2ef785b13710",
+        "originTaskId": "platform-architecture",
+        "currentVersion": 1,
+        "createdAt": "2026-11-12T20:11:52.663735\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5dd7-75fe-ac3d-2ef785b13710",
+          "version": 1,
+          "taskId": "platform-architecture",
+          "projectRevision": 8,
+          "content": {
+            "title": "Store embeddings as fp16",
+            "category": "storage",
+            "scenario": "Agents need durable project memory (E)",
+            "outcome": "Store embeddings as fp16 (decision E)",
+            "reasoning": "Checklist fixture E; zircone marker",
+            "confidence": 0.6,
+            "maker": "checklist",
+            "alternatives": [
+              "not store embeddings as fp16"
+            ],
+            "consequences": [
+              "E constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-E.md",
+                "description": "fixture source E"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "proposed",
+          "recordedAt": "2026-11-12T20:11:52.663735\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5e90-7d54-b112-4ce2ed14f55d"
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5e86-7eea-9188-5486c8ee3684"
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5eab-72c2-93e1-20e04f4c5ae1"
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-5de0-7e4b-8f10-eda8a243d5f4",
+        "originTaskId": "platform-architecture",
+        "currentVersion": 2,
+        "createdAt": "2026-11-12T20:11:52.67292\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5de0-7e4b-8f10-eda8a243d5f4",
+          "version": 1,
+          "taskId": "platform-architecture",
+          "projectRevision": 9,
+          "content": {
+            "title": "Store embeddings as fp32",
+            "category": "storage",
+            "scenario": "Agents need durable project memory (F)",
+            "outcome": "Store embeddings as fp32 (decision F)",
+            "reasoning": "Checklist fixture F; zirconf marker",
+            "confidence": 0.4,
+            "maker": "checklist",
+            "alternatives": [
+              "not store embeddings as fp32"
+            ],
+            "consequences": [
+              "F constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-F.md",
+                "description": "fixture source F"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "proposed",
+          "recordedAt": "2026-11-12T20:11:52.67292\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        },
+        {
+          "decisionId": "01a1d163-5de0-7e4b-8f10-eda8a243d5f4",
+          "version": 2,
+          "taskId": "platform-architecture",
+          "projectRevision": 18,
+          "content": {
+            "title": "Store embeddings as fp32",
+            "category": "storage",
+            "scenario": "Agents need durable project memory (F)",
+            "outcome": "Store embeddings as fp32 (decision F)",
+            "reasoning": "Checklist fixture F; zirconf marker",
+            "confidence": 0.4,
+            "maker": "checklist",
+            "alternatives": [
+              "not store embeddings as fp32"
+            ],
+            "consequences": [
+              "F constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-F.md",
+                "description": "fixture source F"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "rejected",
+          "recordedAt": "2026-11-12T20:11:52.773652\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": "F rejected"
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 2,
+          "edgeId": null
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-5de9-7be7-8254-5a4b7c87542a",
+        "originTaskId": "platform-architecture",
+        "currentVersion": 2,
+        "createdAt": "2026-11-12T20:11:52.681745\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5de9-7be7-8254-5a4b7c87542a",
+          "version": 1,
+          "taskId": "platform-architecture",
+          "projectRevision": 10,
+          "content": {
+            "title": "Use Postgres with pgvector",
+            "category": "architecture",
+            "scenario": "Agents need durable project memory (G)",
+            "outcome": "Use Postgres with pgvector (decision G)",
+            "reasoning": "Checklist fixture G; zircong marker",
+            "confidence": 0.2,
+            "maker": "checklist",
+            "alternatives": [
+              "not use postgres with pgvector"
+            ],
+            "consequences": [
+              "G constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-G.md",
+                "description": "fixture source G"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "proposed",
+          "recordedAt": "2026-11-12T20:11:52.681745\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        },
+        {
+          "decisionId": "01a1d163-5de9-7be7-8254-5a4b7c87542a",
+          "version": 2,
+          "taskId": "platform-architecture",
+          "projectRevision": 19,
+          "content": {
+            "title": "Use Postgres with pgvector",
+            "category": "architecture",
+            "scenario": "Agents need durable project memory (G)",
+            "outcome": "Use Postgres with pgvector (decision G)",
+            "reasoning": "Checklist fixture G; zircong marker",
+            "confidence": 0.2,
+            "maker": "checklist",
+            "alternatives": [
+              "not use postgres with pgvector"
+            ],
+            "consequences": [
+              "G constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-G.md",
+                "description": "fixture source G"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "rejected",
+          "recordedAt": "2026-11-12T20:11:52.782044\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": "G rejected"
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        },
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 2,
+          "edgeId": null
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-5df2-7b2b-81e9-8a052b71ad95",
+        "originTaskId": "storage-migration",
+        "currentVersion": 2,
+        "createdAt": "2026-11-12T20:11:52.690645\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5df2-7b2b-81e9-8a052b71ad95",
+          "version": 1,
+          "taskId": "storage-migration",
+          "projectRevision": 11,
+          "content": {
+            "title": "Sync banks through S3 snapshots",
+            "category": "sync",
+            "scenario": "Agents need durable project memory (H)",
+            "outcome": "Sync banks through S3 snapshots (decision H)",
+            "reasoning": "Checklist fixture H; zirconh marker",
+            "confidence": 0.5,
+            "maker": "checklist",
+            "alternatives": [
+              "not sync banks through s3 snapshots"
+            ],
+            "consequences": [
+              "H constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-H.md",
+                "description": "fixture source H"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "accepted",
+          "recordedAt": "2026-11-12T20:11:52.690645\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        },
+        {
+          "decisionId": "01a1d163-5df2-7b2b-81e9-8a052b71ad95",
+          "version": 2,
+          "taskId": "storage-migration",
+          "projectRevision": 33,
+          "content": {
+            "title": "Sync banks through S3 snapshots",
+            "category": "sync",
+            "scenario": "Agents need durable project memory (H)",
+            "outcome": "Sync banks through S3 snapshots (decision H)",
+            "reasoning": "Checklist fixture H; zirconh marker",
+            "confidence": 0.5,
+            "maker": "checklist",
+            "alternatives": [
+              "not sync banks through s3 snapshots"
+            ],
+            "consequences": [
+              "H constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-H.md",
+                "description": "fixture source H"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "superseded",
+          "recordedAt": "2026-11-12T20:11:52.931063\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": "log replaces snapshots"
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "storage-migration",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        },
+        {
+          "taskId": "storage-migration",
+          "reason": "version",
+          "version": 2,
+          "edgeId": null
+        },
+        {
+          "taskId": "storage-migration",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5e9c-7895-8df6-d47102bef6c5"
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-5dfb-7891-bdb2-9b3830ccaeb7",
+        "originTaskId": "storage-migration",
+        "currentVersion": 1,
+        "createdAt": "2026-11-12T20:11:52.699862\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5dfb-7891-bdb2-9b3830ccaeb7",
+          "version": 1,
+          "taskId": "storage-migration",
+          "projectRevision": 12,
+          "content": {
+            "title": "Sync banks through an append-only change log",
+            "category": "sync",
+            "scenario": "Agents need durable project memory (H2)",
+            "outcome": "Sync banks through an append-only change log (decision H2)",
+            "reasoning": "Checklist fixture H2; zirconh2 marker",
+            "confidence": 0.75,
+            "maker": "checklist",
+            "alternatives": [
+              "not sync banks through an append-only change log"
+            ],
+            "consequences": [
+              "H2 constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-H2.md",
+                "description": "fixture source H2"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "accepted",
+          "recordedAt": "2026-11-12T20:11:52.699862\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "storage-migration",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        },
+        {
+          "taskId": "storage-migration",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5ea4-73cd-8e60-ce4a9ed5d893"
+        },
+        {
+          "taskId": "storage-migration",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5ee3-7845-b882-750fc181c411"
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-5e03-77b6-979d-91a45d2322da",
+        "originTaskId": "storage-migration",
+        "currentVersion": 2,
+        "createdAt": "2026-11-12T20:11:52.707245\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5e03-77b6-979d-91a45d2322da",
+          "version": 1,
+          "taskId": "storage-migration",
+          "projectRevision": 13,
+          "content": {
+            "title": "Disable WAL for portability",
+            "category": "storage",
+            "scenario": "Agents need durable project memory (I)",
+            "outcome": "Disable WAL for portability (decision I)",
+            "reasoning": "Checklist fixture I; zirconi marker",
+            "confidence": 0.3,
+            "maker": "checklist",
+            "alternatives": [
+              "not disable wal for portability"
+            ],
+            "consequences": [
+              "I constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-I.md",
+                "description": "fixture source I"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "accepted",
+          "recordedAt": "2026-11-12T20:11:52.707245\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        },
+        {
+          "decisionId": "01a1d163-5e03-77b6-979d-91a45d2322da",
+          "version": 2,
+          "taskId": "storage-migration",
+          "projectRevision": 20,
+          "content": {
+            "title": "Disable WAL for portability",
+            "category": "storage",
+            "scenario": "Agents need durable project memory (I)",
+            "outcome": "Disable WAL for portability (decision I)",
+            "reasoning": "Checklist fixture I; zirconi marker",
+            "confidence": 0.3,
+            "maker": "checklist",
+            "alternatives": [
+              "not disable wal for portability"
+            ],
+            "consequences": [
+              "I constrains later storage choices"
+            ],
+            "sources": [
+              {
+                "uri": "docs/adr/fixture-I.md",
+                "description": "fixture source I"
+              }
+            ],
+            "validFrom": "2026-11-12T00:00:00\u002B00:00",
+            "validUntil": null
+          },
+          "status": "deprecated",
+          "recordedAt": "2026-11-12T20:11:52.787438\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": "I deprecated"
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "storage-migration",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        },
+        {
+          "taskId": "storage-migration",
+          "reason": "version",
+          "version": 2,
+          "edgeId": null
+        },
+        {
+          "taskId": "storage-migration",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5ebf-7c2f-8780-f278dab40ddb"
+        },
+        {
+          "taskId": "storage-migration",
+          "reason": "edge-removed",
+          "version": null,
+          "edgeId": "01a1d163-5ebf-7c2f-8780-f278dab40ddb"
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-5e0a-739f-92e0-797696e2ef36",
+        "originTaskId": "platform-architecture",
+        "currentVersion": 1,
+        "createdAt": "2026-11-12T20:11:52.714038\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5e0a-739f-92e0-797696e2ef36",
+          "version": 1,
+          "taskId": "platform-architecture",
+          "projectRevision": 14,
+          "content": {
+            "title": "Replay probe",
+            "category": "probe",
+            "scenario": "replay",
+            "outcome": "o",
+            "reasoning": "r",
+            "confidence": null,
+            "maker": null,
+            "alternatives": [],
+            "consequences": [],
+            "sources": [],
+            "validFrom": null,
+            "validUntil": null
+          },
+          "status": "proposed",
+          "recordedAt": "2026-11-12T20:11:52.714038\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-5f3b-7e88-b91b-024714fd7592",
+        "originTaskId": "bounds-chain",
+        "currentVersion": 1,
+        "createdAt": "2026-11-12T20:11:53.01946\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5f3b-7e88-b91b-024714fd7592",
+          "version": 1,
+          "taskId": "bounds-chain",
+          "projectRevision": 36,
+          "content": {
+            "title": "Chain node 1",
+            "category": "chain",
+            "scenario": "chain 1",
+            "outcome": "node 1",
+            "reasoning": "bounds fixture",
+            "confidence": null,
+            "maker": null,
+            "alternatives": [],
+            "consequences": [],
+            "sources": [],
+            "validFrom": null,
+            "validUntil": null
+          },
+          "status": "proposed",
+          "recordedAt": "2026-11-12T20:11:53.01946\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "bounds-chain",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        },
+        {
+          "taskId": "bounds-chain",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5f48-7df3-85bc-ba4f52d01f7c"
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-5f3e-7d9d-9428-6f19a4faa502",
+        "originTaskId": "bounds-chain",
+        "currentVersion": 1,
+        "createdAt": "2026-11-12T20:11:53.022443\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5f3e-7d9d-9428-6f19a4faa502",
+          "version": 1,
+          "taskId": "bounds-chain",
+          "projectRevision": 37,
+          "content": {
+            "title": "Chain node 2",
+            "category": "chain",
+            "scenario": "chain 2",
+            "outcome": "node 2",
+            "reasoning": "bounds fixture",
+            "confidence": null,
+            "maker": null,
+            "alternatives": [],
+            "consequences": [],
+            "sources": [],
+            "validFrom": null,
+            "validUntil": null
+          },
+          "status": "proposed",
+          "recordedAt": "2026-11-12T20:11:53.022443\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "bounds-chain",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        },
+        {
+          "taskId": "bounds-chain",
+          "reason": "edge-created",
+          "version": null,
+          "edgeId": "01a1d163-5f4e-798f-b270-8e15025949a2"
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-5f41-72a7-904a-214168910a2e",
+        "originTaskId": "bounds-chain",
+        "currentVersion": 1,
+        "createdAt": "2026-11-12T20:11:53.025515\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-5f41-72a7-904a-214168910a2e",
+          "version": 1,
+          "taskId": "bounds-chain",
+          "projectRevision": 38,
+          "content": {
+            "title": "Chain node 3",
+            "category": "chain",
+            "scenario": "chain 3",
+            "outcome": "node 3",
+            "reasoning": "bounds fixture",
+            "confidence": null,
+            "maker": null,
+            "alternatives": [],
+            "consequences": [],
+            "sources": [],
+            "validFrom": null,
+            "validUntil": null
+          },
+          "status": "proposed",
+          "recordedAt": "2026-11-12T20:11:53.025515\u002B00:00",
+          "actor": "checklist-2.9.0",
+          "sessionId": "checklist-2.9.0",
+          "changeReason": null
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "bounds-chain",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        }
+      ]
+    },
+    {
+      "record": {
+        "decisionId": "01a1d163-609b-7ff1-8400-4e55d94c2ad5",
+        "originTaskId": "platform-architecture",
+        "currentVersion": 1,
+        "createdAt": "2026-11-12T20:11:53.371236\u002B00:00"
+      },
+      "versions": [
+        {
+          "decisionId": "01a1d163-609b-7ff1-8400-4e55d94c2ad5",
+          "version": 1,
+          "taskId": "platform-architecture",
+          "projectRevision": 41,
+          "content": {
+            "title": "CLI-recorded decision",
+            "category": "tooling",
+            "scenario": "People record from a terminal",
+            "outcome": "decisions record goes through the server",
+            "reasoning": "Same gate as MCP; quartzcli marker",
+            "confidence": null,
+            "maker": null,
+            "alternatives": [],
+            "consequences": [],
+            "sources": [],
+            "validFrom": null,
+            "validUntil": null
+          },
+          "status": "proposed",
+          "recordedAt": "2026-11-12T20:11:53.371236\u002B00:00",
+          "actor": "cli-01a1d163606a7d0cae549efc66d6f608",
+          "sessionId": "cli-01a1d163606a7d0cae549efc66d6f608",
+          "changeReason": null
+        }
+      ],
+      "touches": [
+        {
+          "taskId": "platform-architecture",
+          "reason": "version",
+          "version": 1,
+          "edgeId": null
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "edgeId": "01a1d163-5e96-7361-be21-f8c25023f564",
+      "sourceId": "01a1d163-5db8-76b6-9a62-b44a9d760172",
+      "targetId": "01a1d163-5de9-7be7-8254-5a4b7c87542a",
+      "kind": "contradicts",
+      "reason": "G contradicts A",
+      "taskId": "platform-architecture",
+      "createdRevision": 27,
+      "createdAt": "2026-11-12T20:11:52.85444\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    },
+    {
+      "edgeId": "01a1d163-5e61-7b08-aada-b9e7388aca69",
+      "sourceId": "01a1d163-5dc3-7b83-ad73-9c6ff80e9237",
+      "targetId": "01a1d163-5db8-76b6-9a62-b44a9d760172",
+      "kind": "depends_on",
+      "reason": "B depends_on A",
+      "taskId": "platform-architecture",
+      "createdRevision": 21,
+      "createdAt": "2026-11-12T20:11:52.801069\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    },
+    {
+      "edgeId": "01a1d163-5e6b-7eac-91bd-10deb8d39ef6",
+      "sourceId": "01a1d163-5dcc-7224-a36f-16b699ebaa79",
+      "targetId": "01a1d163-5db8-76b6-9a62-b44a9d760172",
+      "kind": "depends_on",
+      "reason": "C depends_on A",
+      "taskId": "platform-architecture",
+      "createdRevision": 22,
+      "createdAt": "2026-11-12T20:11:52.811674\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    },
+    {
+      "edgeId": "01a1d163-5e76-79aa-a747-9d8cbcfe6844",
+      "sourceId": "01a1d163-5dd1-78f3-a53b-9b6107b8de95",
+      "targetId": "01a1d163-5dc3-7b83-ad73-9c6ff80e9237",
+      "kind": "depends_on",
+      "reason": "D depends_on B",
+      "taskId": "platform-architecture",
+      "createdRevision": 23,
+      "createdAt": "2026-11-12T20:11:52.822033\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    },
+    {
+      "edgeId": "01a1d163-5e7e-7734-9116-c1b7879f2976",
+      "sourceId": "01a1d163-5dd1-78f3-a53b-9b6107b8de95",
+      "targetId": "01a1d163-5dcc-7224-a36f-16b699ebaa79",
+      "kind": "depends_on",
+      "reason": "D depends_on C",
+      "taskId": "platform-architecture",
+      "createdRevision": 24,
+      "createdAt": "2026-11-12T20:11:52.830634\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    },
+    {
+      "edgeId": "01a1d163-5eb2-70e1-b961-675f4d93cb06",
+      "sourceId": "01a1d163-5dd1-78f3-a53b-9b6107b8de95",
+      "targetId": "01a1d163-5dd7-75fe-ac3d-2ef785b13710",
+      "kind": "supports",
+      "reason": "D supports E",
+      "taskId": "platform-architecture",
+      "createdRevision": 31,
+      "createdAt": "2026-11-12T20:11:52.882793\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    },
+    {
+      "edgeId": "01a1d163-5e90-7d54-b112-4ce2ed14f55d",
+      "sourceId": "01a1d163-5dd7-75fe-ac3d-2ef785b13710",
+      "targetId": "01a1d163-5de0-7e4b-8f10-eda8a243d5f4",
+      "kind": "contradicts",
+      "reason": "F contradicts E",
+      "taskId": "platform-architecture",
+      "createdRevision": 26,
+      "createdAt": "2026-11-12T20:11:52.848041\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    },
+    {
+      "edgeId": "01a1d163-5e86-7eea-9188-5486c8ee3684",
+      "sourceId": "01a1d163-5dd7-75fe-ac3d-2ef785b13710",
+      "targetId": "01a1d163-5dc3-7b83-ad73-9c6ff80e9237",
+      "kind": "supports",
+      "reason": "E supports B",
+      "taskId": "platform-architecture",
+      "createdRevision": 25,
+      "createdAt": "2026-11-12T20:11:52.838901\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    },
+    {
+      "edgeId": "01a1d163-5eab-72c2-93e1-20e04f4c5ae1",
+      "sourceId": "01a1d163-5dd7-75fe-ac3d-2ef785b13710",
+      "targetId": "01a1d163-5dd1-78f3-a53b-9b6107b8de95",
+      "kind": "supports",
+      "reason": "E supports D",
+      "taskId": "platform-architecture",
+      "createdRevision": 30,
+      "createdAt": "2026-11-12T20:11:52.875176\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    },
+    {
+      "edgeId": "01a1d163-5e9c-7895-8df6-d47102bef6c5",
+      "sourceId": "01a1d163-5df2-7b2b-81e9-8a052b71ad95",
+      "targetId": "01a1d163-5db8-76b6-9a62-b44a9d760172",
+      "kind": "depends_on",
+      "reason": "H depends_on A",
+      "taskId": "storage-migration",
+      "createdRevision": 28,
+      "createdAt": "2026-11-12T20:11:52.860916\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    },
+    {
+      "edgeId": "01a1d163-5ea4-73cd-8e60-ce4a9ed5d893",
+      "sourceId": "01a1d163-5dfb-7891-bdb2-9b3830ccaeb7",
+      "targetId": "01a1d163-5db8-76b6-9a62-b44a9d760172",
+      "kind": "depends_on",
+      "reason": "H2 depends_on A",
+      "taskId": "storage-migration",
+      "createdRevision": 29,
+      "createdAt": "2026-11-12T20:11:52.869001\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    },
+    {
+      "edgeId": "01a1d163-5ee3-7845-b882-750fc181c411",
+      "sourceId": "01a1d163-5dfb-7891-bdb2-9b3830ccaeb7",
+      "targetId": "01a1d163-5df2-7b2b-81e9-8a052b71ad95",
+      "kind": "supersedes",
+      "reason": "log replaces snapshots",
+      "taskId": "storage-migration",
+      "createdRevision": 33,
+      "createdAt": "2026-11-12T20:11:52.931062\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    },
+    {
+      "edgeId": "01a1d163-5ebf-7c2f-8780-f278dab40ddb",
+      "sourceId": "01a1d163-5e03-77b6-979d-91a45d2322da",
+      "targetId": "01a1d163-5db8-76b6-9a62-b44a9d760172",
+      "kind": "depends_on",
+      "reason": "fresh",
+      "taskId": "storage-migration",
+      "createdRevision": 32,
+      "createdAt": "2026-11-12T20:11:52.895995\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": 35,
+      "removedAt": "2026-11-12T20:11:53.005664\u002B00:00",
+      "removalTaskId": "storage-migration",
+      "removalReason": "WAL decision deprecated",
+      "removalActor": "checklist-2.9.0",
+      "removalSessionId": "checklist-2.9.0"
+    },
+    {
+      "edgeId": "01a1d163-5f48-7df3-85bc-ba4f52d01f7c",
+      "sourceId": "01a1d163-5f3b-7e88-b91b-024714fd7592",
+      "targetId": "01a1d163-5f3e-7d9d-9428-6f19a4faa502",
+      "kind": "depends_on",
+      "reason": "chain",
+      "taskId": "bounds-chain",
+      "createdRevision": 39,
+      "createdAt": "2026-11-12T20:11:53.03243\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    },
+    {
+      "edgeId": "01a1d163-5f4e-798f-b270-8e15025949a2",
+      "sourceId": "01a1d163-5f3e-7d9d-9428-6f19a4faa502",
+      "targetId": "01a1d163-5f41-72a7-904a-214168910a2e",
+      "kind": "depends_on",
+      "reason": "chain",
+      "taskId": "bounds-chain",
+      "createdRevision": 40,
+      "createdAt": "2026-11-12T20:11:53.038313\u002B00:00",
+      "actor": "checklist-2.9.0",
+      "sessionId": "checklist-2.9.0",
+      "removedRevision": null,
+      "removedAt": null,
+      "removalTaskId": null,
+      "removalReason": null,
+      "removalActor": null,
+      "removalSessionId": null
+    }
+  ],
+  "boundaryNodes": [],
+  "referencedTasks": [],
+  "importRecords": [],
+  "counts": {
+    "tasks": 3,
+    "decisions": 15,
+    "versions": 23,
+    "edges": 15,
+    "boundaryNodes": 0,
+    "imports": 0
+  }
+}
