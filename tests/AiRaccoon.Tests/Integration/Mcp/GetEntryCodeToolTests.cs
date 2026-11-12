@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AiRaccoon.Access;
 using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Memory;
@@ -8,6 +9,7 @@ using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;
 using ModelContextProtocol;
+using ModelContextProtocol.Protocol;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using AiRaccoon.Infrastructure.Sqlite.Memory;
@@ -108,6 +110,36 @@ public sealed class GetEntryCodeToolTests : IAsyncLifetime
             _tools.GetEntry("", "hash-1", "code", TestContext.Current.CancellationToken));
 
         ex.Message.ShouldContain("projectId is required (no registered project's scope contains cwd");
+    }
+
+    [RetryFact]
+    public async Task GetEntry_SerializedEnvelope_CarriesCorpusIndependentOfEntryKind()
+    {
+        await SeedAsync(1, "acme", "Code.cs", "code value", 1, 2);
+        await SeedMemoryAsync("hash-1", "note.md", "memory value", "memory", "project", "acme");
+        await SeedMemoryAsync("hash-1", "file.md", "file value", "file", "shared", null);
+
+        var memory = await ReadDataAsync("memory");
+        var file = await ReadDataAsync("file");
+        var code = await ReadDataAsync("code");
+
+        memory.GetProperty("corpus").GetString().ShouldBe("memory");
+        memory.GetProperty("entryKind").GetString().ShouldBe("memory");
+        file.GetProperty("corpus").GetString().ShouldBe("memory");
+        file.GetProperty("entryKind").GetString().ShouldBe("file");
+        code.GetProperty("corpus").GetString().ShouldBe("code");
+        code.GetProperty("entryKind").GetString().ShouldBe("code");
+        foreach (var data in new[] { memory, file, code })
+        {
+            data.GetProperty("entryType").GetString().ShouldBe(data.GetProperty("corpus").GetString());
+        }
+    }
+
+    private async Task<JsonElement> ReadDataAsync(string entryType)
+    {
+        var envelope = await _tools.GetEntry("acme", "hash-1", entryType, TestContext.Current.CancellationToken);
+        var json = JsonSerializer.Serialize(envelope.Data, McpJsonUtilities.DefaultOptions);
+        return JsonDocument.Parse(json).RootElement.Clone();
     }
 
     [RetryFact]
