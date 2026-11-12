@@ -1,8 +1,5 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using AiRaccoon.Access;
-using AiRaccoon.Core.EventPump;
-using AiRaccoon.Infrastructure.Assets;
 using Shouldly;
 using Xunit;
 
@@ -16,21 +13,27 @@ namespace AiRaccoon.Tests.Unit.Layering;
 [Trait(TestCategories.Speed, TestCategories.Fast)]
 public sealed class RuntimeAsyncTests
 {
-    public static TheoryData<string, MethodInfo> AsyncMethods => new()
-    {
-        { "AiRaccoon", typeof(ForgettingPolicyService).GetMethod(nameof(ForgettingPolicyService.GetSweepThresholdAsync))! },
-        { "AiRaccoon.Core", typeof(EventPump<>).GetMethod(nameof(EventPump<object>.WaitForItemAsync))! },
-        { "AiRaccoon.Infrastructure", typeof(AssetDownloader).GetMethod(nameof(AssetDownloader.GetAsync))! }
-    };
+    private const BindingFlags Declared = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+                                          | BindingFlags.Static | BindingFlags.DeclaredOnly;
+
+    public static TheoryData<string> Assemblies => [.. ProductAssemblies.All().Select(a => a.GetName().Name!)];
+
+    [Fact]
+    public void ProductAssemblies_IncludeTheThreeProjects() =>
+        new[] { "AiRaccoon", "AiRaccoon.Core", "AiRaccoon.Infrastructure" }
+            .ShouldBeSubsetOf(ProductAssemblies.All().Select(a => a.GetName().Name!));
 
     [Theory]
-    [MemberData(nameof(AsyncMethods))]
-    public void AsyncProductionMethod_RunsAsRuntimeAsync(string assembly, MethodInfo method)
+    [MemberData(nameof(Assemblies))]
+    public void ProductAssembly_CompilesAsyncMethodsAsRuntimeAsync(string assemblyName)
     {
-        method.Module.Assembly.GetName().Name.ShouldBe(assembly);
-        method.GetMethodImplementationFlags().HasFlag(MethodImplAttributes.Async)
-            .ShouldBeTrue($"{assembly}: {method.Name} must carry the runtime-async flag (ADR-0145)");
-        method.GetCustomAttribute<AsyncStateMachineAttribute>()
-            .ShouldBeNull($"{assembly}: {method.Name} must not compile to a state machine (ADR-0145)");
+        var methods = ProductAssemblies.All().Single(a => a.GetName().Name == assemblyName)
+            .GetTypes().SelectMany(t => t.GetMethods(Declared)).ToList();
+
+        methods.Where(m => m.GetCustomAttribute<AsyncStateMachineAttribute>() is not null)
+            .Select(m => $"{m.DeclaringType}.{m.Name}")
+            .ShouldBeEmpty($"{assemblyName}: async methods compiled to a state machine (ADR-0145 switch lost)");
+        methods.ShouldContain(m => m.GetMethodImplementationFlags().HasFlag(MethodImplAttributes.Async),
+            $"{assemblyName}: no method carries the runtime-async flag (ADR-0145)");
     }
 }

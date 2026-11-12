@@ -33,7 +33,7 @@ public sealed class BundledModelTests
     {
         var root = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         var bundled = Path.Combine(root, "Models", BundledModel.DirectoryName);
-        var toolDir = Path.Combine(root, "tools", "net10.0");
+        var toolDir = Path.Combine(root, "tools", "net11.0");
         Directory.CreateDirectory(bundled);
         Directory.CreateDirectory(toolDir);
         try
