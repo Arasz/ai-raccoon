@@ -2894,7 +2894,6 @@ internal static class MemorySchema
 
     private sealed record VecGuardRow(string Kind, string Name, string? Detail);
 
-
     private sealed record TombstoneRow(string ProjectId, string Hash, string Scope, long DeletedAt);
 
     private sealed record WatchRow(string ProjectId, string Path, long CreatedAt);
