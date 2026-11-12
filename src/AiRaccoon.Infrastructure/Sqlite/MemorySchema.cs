@@ -177,7 +177,7 @@ internal static class MemorySchema
     ///     text — one definition, two roles, so the stored body and the intended body cannot drift
     ///     (ADR-0124, same reasoning as <see cref="PromotionQueueTriggerDdl" />).
     /// </summary>
-    private static readonly string VecEntriesUpdateTriggerDdl = $"""
+    internal static readonly string VecEntriesUpdateTriggerDdl = $"""
                                                                  CREATE TRIGGER IF NOT EXISTS vec_entries_au AFTER UPDATE OF embed_state ON entries
                                                                  WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
                                                                  BEGIN
@@ -187,7 +187,7 @@ internal static class MemorySchema
                                                                  """;
 
     /// <summary>The <c>vec_structure_au</c> twin of <see cref="VecEntriesUpdateTriggerDdl" />.</summary>
-    private static readonly string VecStructureUpdateTriggerDdl = $"""
+    internal static readonly string VecStructureUpdateTriggerDdl = $"""
                                                                    CREATE TRIGGER IF NOT EXISTS vec_structure_au AFTER UPDATE OF structure_embedding ON entries
                                                                    WHEN NEW.structure_embedding IS NOT NULL
                                                                    BEGIN
@@ -1551,13 +1551,7 @@ internal static class MemorySchema
     private static async Task MigrateToV21Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var rebuilds = new List<VecRebuild>();
-        foreach (var spec in new[]
-                 {
-                     new VecRebuild("vec_entries", "entries", MemorySql.ContextKeyExpression(""), "embedding",
-                         "embed_state = 'embedded' AND embedding IS NOT NULL"),
-                     new VecRebuild("vec_structure", "entries", MemorySql.ContextKeyExpression(""), "structure_embedding",
-                         "structure_embedding IS NOT NULL")
-                 })
+        foreach (var spec in MemoryVecTables.All)
         {
             var sql = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
                 "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = @table",
@@ -1567,10 +1561,9 @@ internal static class MemorySchema
                 continue;
             }
 
-            rebuilds.Add(spec with
-            {
-                Dimension = await ReadVecDimensionAsync(connection, spec.Table, cancellationToken)
-            });
+            rebuilds.Add(new VecRebuild(spec.Table, "entries", MemorySql.ContextKeyExpression(""),
+                spec.EmbeddingColumn, spec.RebuildWhere,
+                await ReadVecDimensionAsync(connection, spec.Table, cancellationToken)));
         }
 
         if (rebuilds.Count == 0)
@@ -1605,12 +1598,7 @@ internal static class MemorySchema
             // embedded.
             await connection.ExecuteAsync(new CommandDefinition(
                 $"""
-                 DROP TRIGGER IF EXISTS vec_entries_au;
-                 DROP TRIGGER IF EXISTS vec_structure_au;
-
-                 {VecEntriesUpdateTriggerDdl}
-
-                 {VecStructureUpdateTriggerDdl}
+                 {ReplaceVecUpdateTriggersSql()}
                  """,
                 cancellationToken: cancellationToken));
         }, cancellationToken);
@@ -2290,50 +2278,55 @@ internal static class MemorySchema
     private static async Task EnsureVecCtxTriggerBodiesAsync(SqliteConnection connection,
         CancellationToken cancellationToken)
     {
-        // One read covers the bodies and the tables they belong to: the typed body inserts the
-        // row's kind as the second partition key, so it belongs to the TYPED table. A bank below
-        // v21 still holds the untyped table and the untyped body: the ladder's v21 step rebuilds
-        // the table and installs the typed body together. Installing the typed body here instead
-        // would leave the bank holding a body that names a column its table does not have, and the
-        // next embedded row would fail.
-        var objects = (await connection.QueryAsync<ObjectSqlRow>(
+        // A bank below v21 still holds the untyped tables and the untyped bodies: the ladder's v21
+        // step rebuilds the tables and installs the typed bodies together. Installing the typed
+        // bodies here instead would leave a body naming a column its table does not have, and the
+        // next embedded row would fail. So the typed shape is read first, structurally: every spec
+        // table must expose the expected columns (pragma_table_xinfo lists vec0's partition keys).
+        // One statement covers the columns and the stored bodies: this runs on every open.
+        var rows = (await connection.QueryAsync<VecGuardRow>(
                 new CommandDefinition(
-                    "SELECT type AS Type, name AS Name, sql AS Sql FROM sqlite_master " +
-                    "WHERE name IN ('vec_entries_au', 'vec_structure_au', 'vec_entries', 'vec_structure')",
+                    """
+                    SELECT 'column' AS Kind, m.name AS Name, c.name AS Detail
+                    FROM sqlite_master m, pragma_table_xinfo(m.name) c
+                    WHERE m.type = 'table' AND m.name IN @tables
+                    UNION ALL
+                    SELECT 'trigger', name, sql FROM sqlite_master WHERE type = 'trigger' AND name IN @triggers
+                    """,
+                    new
+                    {
+                        tables = MemoryVecTables.Names.ToArray(),
+                        triggers = MemoryVecTables.All.Select(spec => spec.UpdateTrigger).ToArray()
+                    },
                     cancellationToken: cancellationToken)))
             .ToList();
 
-        var tables = objects.Where(o => o.Type == "table")
-            .ToDictionary(o => o.Name, o => o.Sql ?? "", StringComparer.Ordinal);
-        if (tables.Count != 2
-            || !tables["vec_entries"].Contains("type TEXT partition key", StringComparison.OrdinalIgnoreCase)
-            || !tables["vec_structure"].Contains("type TEXT partition key", StringComparison.OrdinalIgnoreCase))
+        var columnsByTable = rows.Where(r => r.Kind == "column")
+            .ToLookup(r => r.Name, r => r.Detail, StringComparer.Ordinal);
+        if (MemoryVecTables.All.Any(spec =>
+                !MemoryVecTables.ExpectedColumns.All(column =>
+                    columnsByTable[spec.Table].Contains(column, StringComparer.OrdinalIgnoreCase))))
         {
             return;
         }
 
-        var stored = objects.Where(o => o.Type == "trigger")
-            .ToDictionary(o => o.Name, o => o.Sql, StringComparer.Ordinal);
-
-        if (stored.Count == 2
-            && Normalize(stored["vec_entries_au"]!) == Normalize(VecEntriesUpdateTriggerDdl)
-            && Normalize(stored["vec_structure_au"]!) == Normalize(VecStructureUpdateTriggerDdl))
+        var stored = rows.Where(r => r.Kind == "trigger").ToDictionary(r => r.Name, r => r.Detail, StringComparer.Ordinal);
+        if (MemoryVecTables.All.All(spec =>
+                stored.TryGetValue(spec.UpdateTrigger, out var body)
+                && body is not null
+                && Normalize(body) == Normalize(spec.UpdateTriggerDdl)))
         {
             return;
         }
 
         await connection.ExecuteAsync(
-            new CommandDefinition(
-                $"""
-                 DROP TRIGGER IF EXISTS vec_entries_au;
-                 DROP TRIGGER IF EXISTS vec_structure_au;
-
-                 {VecEntriesUpdateTriggerDdl}
-
-                 {VecStructureUpdateTriggerDdl}
-                 """,
-                cancellationToken: cancellationToken));
+            new CommandDefinition(ReplaceVecUpdateTriggersSql(), cancellationToken: cancellationToken));
     }
+
+    /// <summary>Drops and recreates every spec'd <c>AFTER UPDATE</c> vec trigger from its declared body.</summary>
+    private static string ReplaceVecUpdateTriggersSql() =>
+        string.Join("\n\n", MemoryVecTables.All.Select(spec => $"DROP TRIGGER IF EXISTS {spec.UpdateTrigger};")
+            .Concat(MemoryVecTables.All.Select(spec => spec.UpdateTriggerDdl)));
 
     /// <summary>
     ///     Whitespace-insensitive comparison against what sqlite_master actually stores: the body as
@@ -2899,7 +2892,7 @@ internal static class MemorySchema
 
     private sealed record TriggerRow(string Name, string? Sql);
 
-    private sealed record ObjectSqlRow(string Type, string Name, string? Sql);
+    private sealed record VecGuardRow(string Kind, string Name, string? Detail);
 
     private sealed record TombstoneRow(string ProjectId, string Hash, string Scope, long DeletedAt);
 

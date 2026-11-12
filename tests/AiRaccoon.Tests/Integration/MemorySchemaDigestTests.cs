@@ -40,7 +40,7 @@ public sealed class MemorySchemaDigestTests
 
         statements.ShouldNotContain(sql => sql.Contains("CREATE TABLE", StringComparison.OrdinalIgnoreCase),
             "a digest-matched bank must not re-run the Ddl block");
-        statements.Count.ShouldBe(6,
+        statements.Count(s => !s.StartsWith("-- PRAGMA table_xinfo=", StringComparison.Ordinal)).ShouldBe(6,
             "the fast path is two header reads (user_version, application_id), the three unconditional repair probes "
             + "(ingest-scope keys, promotion-queue trigger, vec-ctx trigger bodies), and the S7 overlap-prune watches "
             + "read (the S2 column ensure moved inside the digest-gated Ddl branch)");

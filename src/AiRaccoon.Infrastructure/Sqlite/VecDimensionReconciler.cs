@@ -11,7 +11,7 @@ public static class VecDimensionReconcilerExtensions
     {
         /// <summary>Recreates the memory bank's two vec0 tables at <paramref name="targetDimension" />.</summary>
         public Task<bool> ReconcileMemoryAsync(SqliteConnection connection, int targetDimension, CancellationToken cancellationToken) =>
-            reconciler.ReconcileAsync(connection, null, targetDimension, VecDimensionReconciler.MemoryVecTables, cancellationToken);
+            reconciler.ReconcileAsync(connection, null, targetDimension, MemoryVecTables.Names, cancellationToken);
 
         /// <summary>Recreates the code corpus's vec0 table at <paramref name="targetDimension" />.</summary>
         public Task<bool> ReconcileCodeAsync(SqliteConnection connection,
@@ -48,9 +48,6 @@ public interface IVecDimensionReconciler
 /// </summary>
 public sealed partial class VecDimensionReconciler : IVecDimensionReconciler
 {
-    /// <summary>The memory bank's two vec0 tables.</summary>
-    public static readonly IReadOnlyCollection<string> MemoryVecTables = ["vec_entries", "vec_structure"];
-
     /// <summary>The code corpus's vec0 table.</summary>
     public static readonly IReadOnlyCollection<string> CodeVecTables = ["vec_code"];
 
@@ -122,7 +119,7 @@ public sealed partial class VecDimensionReconciler : IVecDimensionReconciler
         // The memory tables come back TYPED: the triggers insert the row's kind as the second
         // partition key, and a body that names a column its table does not have fails the moment a
         // row is embedded. The code corpus keeps its own layout - a code chunk carries no row kind.
-        var ddl = MemoryVecTables.Contains(table)
+        var ddl = MemoryVecTables.Names.Contains(table)
             ? MemorySchema.TypedVecTableDdl(table, targetDimension)
             : MemorySchema.VecTableDdl(table, targetDimension);
         await connection.ExecuteAsync(new CommandDefinition(
