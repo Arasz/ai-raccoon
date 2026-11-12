@@ -217,7 +217,7 @@ public sealed class WorkspaceIsolationTests : IDisposable
         // Create the workspace record first — FK requires it.
         await workspaceStore.BeginAsync(new Workspace("ws-1", "acme"), FixedNow, TestContext.Current.CancellationToken);
 
-        var service = new WorkspaceService(store, workspaceStore, new FakeTimeProvider(FixedNow), TestData.SharedScope);
+        var service = new WorkspaceService(store, workspaceStore, new FakeTimeProvider(FixedNow), TestData.SharedScope, new EntryKindClassifier());
 
         var e1 = await store.WriteAsync(
             new MemoryWriteRequest("acme", "durable fact", WorkspaceId: "ws-1"),

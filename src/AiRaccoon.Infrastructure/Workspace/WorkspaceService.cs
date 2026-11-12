@@ -13,7 +13,8 @@ public sealed class WorkspaceService(
     IMemoryStore store,
     IWorkspaceStore workspaceStore,
     TimeProvider timeProvider,
-    ISharedProjectScope scope) : IWorkspaceService
+    ISharedProjectScope scope,
+    IEntryKindClassifier classifier) : IWorkspaceService
 {
     private readonly ISharedProjectScope _scope = scope;
 
@@ -68,7 +69,7 @@ public sealed class WorkspaceService(
             // (docs/work/features-agent-memory/spec-issue-1.md §3.2); add_content, not add_text, to skip the global content-hash dedup.
             await store.AddContentAsync(
                 projectId, entry.Path, entry.Value, ContextNaming.ProjectContext(projectId),
-                cancellationToken: cancellationToken);
+                classifier.FromStoredValue(entry.EntryKind), cancellationToken: cancellationToken);
             // Consolidate counts per KEPT HASH, not per row created: the created/existing
             // distinction belongs to promotion accounting (PromoteAsync), not this loop.
             promoted++;

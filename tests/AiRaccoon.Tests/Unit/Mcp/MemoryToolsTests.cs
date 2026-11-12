@@ -46,7 +46,7 @@ public class MemoryToolsTests
     {
         _store.Settings[EmbeddingSettingsKeys.Provider] = "local";
         var access = new MemoryAccessGuard(_store);
-        var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow), TestData.SharedScope);
+        var workspaces = new WorkspaceService(_store, new FakeWorkspaceStore(), new FakeTimeProvider(FixedNow), TestData.SharedScope, new EntryKindClassifier());
         var sweeper = new SweepService(_store, new FakeTimeProvider(FixedNow));
         var gate = new ToolGate(access, _queue, new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck);
         _entries = new EntryTools(_store, new NoOpCodeSearchService(), gate, new EntryKindClassifier());

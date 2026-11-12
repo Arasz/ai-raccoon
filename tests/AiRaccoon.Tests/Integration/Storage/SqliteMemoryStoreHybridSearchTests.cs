@@ -219,10 +219,10 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
             "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken, _clock);
 
         var identical = await _store.AddContentAsync("acme", "a.md",
-            "semantic memory retrieval system", ContextNaming.ProjectContext("acme"),
+            "semantic memory retrieval system", ContextNaming.ProjectContext("acme"), EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
         var unrelated = await _store.AddContentAsync("acme", "b.md",
-            "raspberry cheesecake recipe", ContextNaming.ProjectContext("acme"),
+            "raspberry cheesecake recipe", ContextNaming.ProjectContext("acme"), EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
 
         var results = (await _store.SearchAsync(
@@ -242,7 +242,7 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
         // Per-modality candidate window K = max(limit*3, 100): a doc ranked second in both modalities
         // survives fusion for a limit-1 query even though neither per-modality top-1 is that doc.
         var a = await _store.AddContentAsync("acme", "a.md",
-            "the quick brown fox jumps over the lazy dog", ContextNaming.ProjectContext("acme"),
+            "the quick brown fox jumps over the lazy dog", ContextNaming.ProjectContext("acme"), EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
 
         await _store.SetSettingAsync(EmbeddingSettingsKeys.ApiKey, "test-key-123", TestContext.Current.CancellationToken);
@@ -250,10 +250,10 @@ public sealed class SqliteMemoryStoreHybridSearchTests : IAsyncLifetime
             "openai", "nomic-embed-text", _openAi.BaseUrl, TestContext.Current.CancellationToken, _clock);
 
         var c = await _store.AddContentAsync("acme", "c.md",
-            "quantum entanglement teleportation protocols", ContextNaming.ProjectContext("acme"),
+            "quantum entanglement teleportation protocols", ContextNaming.ProjectContext("acme"), EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
         var x = await _store.AddContentAsync("acme", "x.md",
-            "lazy dog sleeps on the warm rug", ContextNaming.ProjectContext("acme"),
+            "lazy dog sleeps on the warm rug", ContextNaming.ProjectContext("acme"), EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
 
         var results = (await _store.SearchAsync(

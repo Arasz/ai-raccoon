@@ -75,7 +75,7 @@ public sealed class MemoryScopeSiblingTtlTests : IDisposable
         // the same trait to promote into a fresh bucket) — reusing the project row's own
         // content-derived path builds the same-hash sibling this test needs.
         var customEntry = await _store.AddContentAsync(
-            ProjectId, projectEntry.Path, "the same doc note", "docs:api",
+            ProjectId, projectEntry.Path, "the same doc note", "docs:api", EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
         customEntry.Entry.Hash.ShouldBe(projectEntry.Hash,
             "the fixture this test needs: identical content, two scopes, one hash");

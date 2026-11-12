@@ -96,7 +96,7 @@ public class FakeMemoryStore : IMemoryStore, ISettingsStore
         throw NotOverridden(nameof(EmbedPendingAsync));
 
     public virtual Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content,
-        string? context, string? sourceFile = null, string? section = null,
+        string? context, EntryKind entryKind, string? sourceFile = null, string? section = null,
         CancellationToken cancellationToken = default) =>
         throw NotOverridden(nameof(AddContentAsync));
 

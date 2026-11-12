@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Tests.TestHelpers;
 using Dapper;
@@ -60,7 +61,7 @@ public sealed class MemoryStorePathCascadeEscapeTests : IDisposable
     }
 
     private async Task AddAsync(string path, string content) =>
-        await _store.AddContentAsync(ProjectId, path, content, null,
+        await _store.AddContentAsync(ProjectId, path, content, null, EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
 
     private async Task<List<string>> RemainingPathsAsync()
