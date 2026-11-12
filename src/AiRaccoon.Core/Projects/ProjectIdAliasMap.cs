@@ -176,14 +176,14 @@ public sealed class ProjectIdAliasMap
         Guard.IsNotNull(payload);
         if (payload.Aliases is null || payload.Canonicals is null || payload.Dropped is null)
         {
-            throw new ArgumentException("ai-raccoon: project-ids alias map holds a null aliases, canonicals, or dropped section.");
+            throw new JsonException("ai-raccoon: project-ids alias map holds a null aliases, canonicals, or dropped section.");
         }
 
         foreach (var entry in payload.Aliases)
         {
-            if (entry.Alias is null || entry.Canonical is null)
+            if (entry is null || entry.Alias is null || entry.Canonical is null)
             {
-                throw new ArgumentException("ai-raccoon: project-ids alias map holds a null alias entry or null alias/canonical spelling.");
+                throw new JsonException("ai-raccoon: project-ids alias map holds a null alias entry or null alias/canonical spelling.");
             }
         }
 
