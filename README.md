@@ -47,6 +47,7 @@ The full walkthrough, including indexing your code, is [Get started with AiRacco
 
 ## What's new
 
+- `get_entry` reports `corpus`, and workspace consolidation, `share_memory` and re-ingest keep each row's declared kind (2.9.0). [Release notes](docs/changelog/2.9.0-declared-kind-survives-copies.md)
 - `ai-raccoon decisions import-semantica` previews, then imports, a Semantica export into the decision graph (2.6.0). [Release notes](docs/changelog/2.6.0-semantica-import.md)
 - A watcher buffer overflow rescans within seconds, and `watch.buffer-size.global` sets the buffer size (2.5.0). [Release notes](docs/changelog/2.5.0-watcher-overflow-rescan.md)
 - Agents record decisions with versions, status and typed links, and `ai-raccoon decisions export|preview` reads them back (2.4.0). [Release notes](docs/changelog/2.4.0-native-decision-graph.md)
@@ -64,7 +65,7 @@ Older releases: [What's new history](docs/reference/whats-new-history.md). A rel
 
 ## Breaking changes
 
-Upgrading from an older version? Check [Breaking changes](docs/reference/breaking-changes.md) for what to do past each version. The latest one is 2.8.0.
+Upgrading from an older version? Check [Breaking changes](docs/reference/breaking-changes.md) for what to do past each version. The latest one is 2.9.0.
 
 ## Performance
 

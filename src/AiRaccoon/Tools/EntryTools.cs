@@ -11,9 +11,7 @@ namespace AiRaccoon.Tools;
 /// <summary>Reads one hash from the explicitly selected entry type.</summary>
 public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch, IToolGate gate, IEntryKindClassifier classifier)
 {
-    private const string TnGetEntry = "get_entry";
-
-    [McpServerTool(Name = TnGetEntry)]
+    [McpServerTool(Name = ToolNames.GetEntry)]
     [McpToolScope(ToolScope.All)]
     [Description("Reads one entry by hash from the required single entryType: memory, file, or code. A hash absent from the selected type is unknown-hash; other types are never used as fallback.")]
     public async Task<ApiEnvelope<GetEntryResult>> GetEntry(
@@ -25,7 +23,7 @@ public sealed class EntryTools(IMemoryStore store, ICodeSearchService codeSearch
         string entryType,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetEntry, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, ToolNames.GetEntry, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         EntryType requested;

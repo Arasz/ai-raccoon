@@ -19,12 +19,7 @@ public sealed class WorkspaceTools(
     IWorkspaceService workspaces,
     IToolGate gate)
 {
-    private const string TnInitializeWorkspace = "initialize_workspace";
-    private const string TnGetWorkspaceStatus = "get_workspace_status";
-    private const string TnCloseWorkspace = "close_workspace";
-    private const string TnDiscardWorkspace = "discard_workspace";
-
-    [McpServerTool(Name = TnInitializeWorkspace)]
+    [McpServerTool(Name = ToolNames.InitializeWorkspace)]
     [McpToolScope(ToolScope.Project)]
     [Description(
         "Begins a workspace sandbox: returns a workspace_id whose context is isolated by design. While it is active, write with that workspace_id so notes stay in the outbox.")]
@@ -36,7 +31,7 @@ public sealed class WorkspaceTools(
         string? name = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnInitializeWorkspace, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, ToolNames.InitializeWorkspace, cancellationToken);
 
         var workspace = await workspaces.BeginAsync(canonical, agentId, name, cancellationToken);
         var result = new WorkspaceBeginResult(workspace.Id, workspace.Context);
@@ -44,7 +39,7 @@ public sealed class WorkspaceTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnGetWorkspaceStatus)]
+    [McpServerTool(Name = ToolNames.GetWorkspaceStatus)]
     [McpToolScope(ToolScope.Project)]
     [Description("Lists the entries currently in a workspace's outbox.")]
     public async Task<ApiEnvelope<WorkspaceStatusResult>> WorkspaceStatus(
@@ -53,7 +48,7 @@ public sealed class WorkspaceTools(
         [Description("The workspace id.")] string workspaceId,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetWorkspaceStatus, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, ToolNames.GetWorkspaceStatus, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
         var outbox = await workspaces.GetStatusAsync(canonical, workspaceId, cancellationToken);
@@ -63,7 +58,7 @@ public sealed class WorkspaceTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnCloseWorkspace)]
+    [McpServerTool(Name = ToolNames.CloseWorkspace)]
     [McpToolScope(ToolScope.Project)]
     [Description(
         "Finishes a workspace: promotes the kept hashes (or ['all']) from the workspace outbox into the project's committed memory, then removes the workspace context.")]
@@ -75,7 +70,7 @@ public sealed class WorkspaceTools(
         string[] keep,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnCloseWorkspace, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, ToolNames.CloseWorkspace, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
         ArgumentNullException.ThrowIfNull(keep);
 
@@ -85,7 +80,7 @@ public sealed class WorkspaceTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnDiscardWorkspace)]
+    [McpServerTool(Name = ToolNames.DiscardWorkspace)]
     [McpToolScope(ToolScope.Project)]
     [Description("Discards a workspace without promoting anything: removes its outbox context and all its entries.")]
     public async Task<ApiEnvelope<WorkspaceDiscardResult>> WorkspaceDiscard(
@@ -94,7 +89,7 @@ public sealed class WorkspaceTools(
         [Description("The workspace id.")] string workspaceId,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnDiscardWorkspace, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, ToolNames.DiscardWorkspace, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(workspaceId);
 
         var discarded = await workspaces.DiscardAsync(canonical, workspaceId, cancellationToken);

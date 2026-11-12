@@ -11,11 +11,7 @@ public sealed class QualityTools(
     ISearchQualityService qualityService,
     IToolGate gate)
 {
-    private const string TnGetQualityReport = "get_quality_report";
-    private const string TnSetMemoryUsageRecord = "set_memory_usage_record";
-    private const string TnSetQueryResultGrade = "set_query_result_grade";
-
-    [McpServerTool(Name = TnSetMemoryUsageRecord)]
+    [McpServerTool(Name = ToolNames.SetMemoryUsageRecord)]
     [McpToolScope(ToolScope.All)]
     [Description(
         "Records that the agent read a file that appeared in a prior query result. " +
@@ -35,7 +31,7 @@ public sealed class QualityTools(
         int? servedRank = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnSetMemoryUsageRecord, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, ToolNames.SetMemoryUsageRecord, cancellationToken);
 
         var recorded = await qualityService.RecordFollowThroughAsync(canonical, correlationId, filePath, servedRank, cancellationToken);
         var envelope = await gate.WrapAsync(canonical, new FollowThroughResult(recorded), cancellationToken);
@@ -43,7 +39,7 @@ public sealed class QualityTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnSetQueryResultGrade)]
+    [McpServerTool(Name = ToolNames.SetQueryResultGrade)]
     [McpToolScope(ToolScope.All)]
     [Description(
         "Records a human usefulness grade (1-5) for a prior query call. " +
@@ -60,7 +56,7 @@ public sealed class QualityTools(
         string? note = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnSetQueryResultGrade, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, ToolNames.SetQueryResultGrade, cancellationToken);
 
         var recorded = await qualityService.RecordGradeAsync(canonical, correlationId, grade, note, cancellationToken);
         var envelope = await gate.WrapAsync(canonical, new GradeResult(recorded), cancellationToken);
@@ -68,7 +64,7 @@ public sealed class QualityTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnGetQualityReport)]
+    [McpServerTool(Name = ToolNames.GetQualityReport)]
     [McpToolScope(ToolScope.All)]
     [Description(
         "Aggregated search-quality metrics: total searches, follow-through searches, graded searches, average grade, coverage rate, searches/day. Window defaults to last 7 days (absolute DateTimeOffset). Project id defaults to working-directory project. Aggregate — no per-row grades included.")]
@@ -79,7 +75,7 @@ public sealed class QualityTools(
         DateTimeOffset? from = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetQualityReport, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, ToolNames.GetQualityReport, cancellationToken);
         var metrics = await qualityService.GetMetricsAsync(canonical, from, cancellationToken);
         return await gate.WrapAsync(canonical, metrics, cancellationToken);
     }

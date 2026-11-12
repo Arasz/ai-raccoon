@@ -14,16 +14,13 @@ public sealed class ProjectTools(
     IProjectDirectory directory,
     IToolGate gate)
 {
-    private const string TnSaveProjectIdToken = "save_project_id_token";
-    private const string TnGetProjectId = "get_project_id";
-
     private const string Instructions =
         "This id is where the project's memory lives from now on — not a secret and not access "
         + "control, just which project's memory a call reaches. Store it (e.g. in a local file kept "
         + "out of memory) and pass it as projectId on every later call for this project; losing it "
         + "means the project's memory becomes unreachable, not deleted.";
 
-    [McpServerTool(Name = TnSaveProjectIdToken)]
+    [McpServerTool(Name = ToolNames.SaveProjectIdToken)]
     [McpToolScope(ToolScope.All)]
     [Description(
         "Call get_project_id first; mint only when it finds nothing. Mints a new project id: a guidv7, registered so it is a real project from this call on. Call this once per project and keep the returned id — every other tool's projectId parameter takes it.")]
@@ -32,7 +29,7 @@ public sealed class ProjectTools(
         string? name = null,
         CancellationToken cancellationToken = default)
     {
-        await gate.RequireBankAvailableAsync(TnSaveProjectIdToken, cancellationToken);
+        await gate.RequireBankAvailableAsync(ToolNames.SaveProjectIdToken, cancellationToken);
 
         var projectId = Guid.CreateVersion7().ToString("D");
         await registry.RegisterAsync(projectId, name, cancellationToken);
@@ -41,7 +38,7 @@ public sealed class ProjectTools(
         return await gate.WrapAsync(projectId, result, cancellationToken);
     }
 
-    [McpServerTool(Name = TnGetProjectId)]
+    [McpServerTool(Name = ToolNames.GetProjectId)]
     [McpToolScope(ToolScope.All)]
     [Description(
         "Returns the project id registered under an exact, case-sensitive name, as stored. Call this before save_project_id_token. No match refuses with project-not-found (then mint one with save_project_id_token); several matches refuse with project-name-ambiguous, listing every id, so ask the user which one. Never registers anything.")]
@@ -51,7 +48,7 @@ public sealed class ProjectTools(
         CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(name);
-        await gate.RequireBankAvailableAsync(TnGetProjectId, cancellationToken);
+        await gate.RequireBankAvailableAsync(ToolNames.GetProjectId, cancellationToken);
 
         var ids = await directory.FindByNameAsync(name, cancellationToken);
         var projectId = ProjectNameMatch.Single(name, ids);

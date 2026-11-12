@@ -11,11 +11,7 @@ public sealed class WatchTools(
     IWatchService watch,
     IToolGate gate)
 {
-    internal const string TnAddWatch = "add_watch";
-    internal const string TnGetWatchStatus = "get_watch_status";
-    internal const string TnRemoveWatch = "remove_watch";
-
-    [McpServerTool(Name = TnAddWatch)]
+    [McpServerTool(Name = ToolNames.AddWatch)]
     [McpToolScope(ToolScope.All)]
     [Description(
         "Registers a file or directory to be mirrored into the project's memory. Pass projectId=shared explicitly for documents available to all projects in this bank; no ID minting or registration needed. Watching must be enabled and the path inside the scope allowlist — both configured via the CLI ('ai-raccoon settings watch enable' / 'settings ingest scope add'). No overlapping watches: a path already covered by an existing watch is refused (watch-overlap, naming the covering watch); registering a broader watch prunes every watch it contains (reported in `pruned`; already-ingested entries are kept and the broader watch re-scans them). An exact re-add of an already-watched path is a no-op (`absorbedBy` reports it). Returns immediately — the initial scan runs in the background (status reports scanning).")]
@@ -26,7 +22,7 @@ public sealed class WatchTools(
         string path,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnAddWatch, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, ToolNames.AddWatch, cancellationToken);
 
         var outcome = await watch.AddAsync(canonical, path, cancellationToken);
         var envelope = await gate.WrapAsync(canonical,
@@ -35,7 +31,7 @@ public sealed class WatchTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnGetWatchStatus)]
+    [McpServerTool(Name = ToolNames.GetWatchStatus)]
     [McpToolScope(ToolScope.All)]
     [Description(
         "Lists the project's registered watches with their live state (scanning/healthy/retrying/stopped), last error, last sync, and the files the watch could not index: skippedCount plus up to 20 skipped entries (path, reason unsupported-type/binary/unparseable). Empty list when none. Available in every access tier.")]
@@ -43,14 +39,14 @@ public sealed class WatchTools(
         [Description("The project id.")] string? projectId = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetWatchStatus, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, ToolNames.GetWatchStatus, cancellationToken);
 
         var states = await watch.StatusAsync(canonical, cancellationToken);
         var envelope = await gate.WrapAsync(canonical, new WatchStatusResult(states), cancellationToken);
         return envelope;
     }
 
-    [McpServerTool(Name = TnRemoveWatch)]
+    [McpServerTool(Name = ToolNames.RemoveWatch)]
     [McpToolScope(ToolScope.All)]
     [Description("Stops watching a path for the project and removes its registration; a non-existent watch is a no-op, reported as removed=false.")]
     public async Task<ApiEnvelope<WatchRemoveResult>> Remove(
@@ -60,7 +56,7 @@ public sealed class WatchTools(
         string path,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnRemoveWatch, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, ToolNames.RemoveWatch, cancellationToken);
 
         var removed = await watch.RemoveAsync(canonical, path, cancellationToken);
         var envelope = await gate.WrapAsync(canonical, new WatchRemoveResult(canonical, path, removed), cancellationToken);

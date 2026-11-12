@@ -2,6 +2,7 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Rating;
+using AiRaccoon.Tools;
 
 namespace AiRaccoon.Access;
 
@@ -18,7 +19,7 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
 
     /// <summary>
     ///     Reads the sweep threshold — a single bank-global setting, not scoped by project;
-    ///     unlike <see cref="SetSweepThresholdAsync" /> a read needs no caller to gate.
+    ///     a read needs no caller to gate.
     /// </summary>
     public async Task<double> GetSweepThresholdAsync(CancellationToken cancellationToken = default)
     {
@@ -26,25 +27,11 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
         return SweepThreshold.Parse(raw);
     }
 
-    /// <summary>
-    ///     Writes the sweep threshold — again a single bank-global setting: every project's
-    ///     sweep reads the same value. <paramref name="projectId" /> is not a scope, only the caller's
-    ///     proof of Destructive consent for changing a policy that affects every project's data.
-    /// </summary>
-    public async Task SetSweepThresholdAsync(string projectId, double threshold,
-        CancellationToken cancellationToken = default)
-    {
-        await access.EnsureAsync(projectId, AccessRequirement.Destructive, "trigger_memory_cleanup_threshold",
-            cancellationToken);
-        await store.SetSettingAsync(SweepThresholdSettingKey,
-            SweepThreshold.Format(threshold), cancellationToken);
-    }
-
     /// <summary>Sets or clears one entry's TTL, then reports it next to the rating gate a sweep also checks.</summary>
     public async Task<TtlResult> SetEntryTtlAsync(string projectId, string hash, int? ttlDays,
         CancellationToken cancellationToken = default)
     {
-        await access.EnsureAsync(projectId, AccessRequirement.Destructive, "set_memory_ttl",
+        await access.EnsureAsync(projectId, AccessRequirement.Destructive, ToolNames.SetMemoryTtl,
             cancellationToken);
         EntryTtl.EnsureValid(ttlDays);
 

@@ -14,9 +14,7 @@ public sealed class SyncTools(
     ISyncCloudStoreFactory syncFactory,
     IToolGate gate)
 {
-    private const string TnSyncToCloud = "sync_to_cloud";
-
-    [McpServerTool(Name = TnSyncToCloud)]
+    [McpServerTool(Name = ToolNames.SyncToCloud)]
     [McpToolScope(ToolScope.All)]
     [Description(
         "Syncs the bank's committed contexts (shared + project:<id>) to cloud object storage. " +
@@ -27,7 +25,7 @@ public sealed class SyncTools(
         [Description("The project id.")] string? projectId = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnSyncToCloud, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, ToolNames.SyncToCloud, cancellationToken);
 
         // Reads the configured objectKey override, if any — SyncService owns both the
         // IsConfigured decision and the default objectKey naming convention now.

@@ -11,7 +11,7 @@ using Xunit;
 namespace AiRaccoon.Tests.Unit.Mcp;
 
 /// <summary>
-///     WatchTools tool inventory: exactly the three spec tools, each named by a TN_* const.
+///     WatchTools tool inventory: exactly the three spec tools.
 ///     The existing ToolInventoryTests (18 MemoryTools tools) stays untouched — WatchTools
 ///     is a separate class with its own inventory test (docs/plans/file-watcher-implementation.md §6).
 /// </summary>
@@ -37,44 +37,6 @@ public sealed class WatchToolsInventoryTests : IDisposable
         tools.ShouldContain("add_watch");
         tools.ShouldContain("get_watch_status");
         tools.ShouldContain("remove_watch");
-    }
-
-    [Fact]
-    public void WatchToolNames_MatchConstStrings()
-    {
-        var constFields = typeof(WatchTools)
-            .GetFields(BindingFlags.NonPublic | BindingFlags.Static)
-            .Where(f => f.IsLiteral && f.Name.StartsWith("Tn"))
-            .ToList();
-
-        var constValues = new Dictionary<string, string>();
-        foreach (var f in constFields)
-        {
-            if (f.GetRawConstantValue() is string val)
-            {
-                constValues[val] = f.Name;
-            }
-        }
-
-        var toolMethods = typeof(WatchTools)
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .Select(m => new
-            {
-                Method = m,
-                Attr = m.GetCustomAttribute<McpServerToolAttribute>()
-            })
-            .Where(x => x.Attr is not null)
-            .ToList();
-
-        toolMethods.Count.ShouldBe(3);
-
-        foreach (var tm in toolMethods)
-        {
-            var toolName = tm.Attr!.Name!;
-            constValues.ShouldContainKey(toolName,
-                $"Missing const for tool '{toolName}' (method: {tm.Method.Name})");
-            constValues[toolName].ShouldStartWith("Tn");
-        }
     }
 
     /// <summary>DI smoke (docs/plans/file-watcher-implementation.md §S6): the composition root resolves IWatchService.</summary>

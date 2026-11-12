@@ -16,10 +16,7 @@ public sealed class ShareTools(
     IToolGate gate,
     IShareExtractService shareExtract)
 {
-    private const string TnShareMemory = "share_memory";
-    private const string TnTriggerMemorySharing = "trigger_memory_sharing";
-
-    [McpServerTool(Name = TnShareMemory)]
+    [McpServerTool(Name = ToolNames.ShareMemory)]
     [McpToolScope(ToolScope.Project)]
     [Description(
         "Promotes an existing project entry into the flat shared context — the curated, cross-project, sweep-exempt tier. Nothing is shared without this explicit promotion.")]
@@ -30,7 +27,7 @@ public sealed class ShareTools(
         string hash,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnShareMemory, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, ToolNames.ShareMemory, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
 
         var entry = await store.ShareAsync(canonical, hash, cancellationToken);
@@ -39,7 +36,7 @@ public sealed class ShareTools(
         return envelope;
     }
 
-    [McpServerTool(Name = TnTriggerMemorySharing)]
+    [McpServerTool(Name = ToolNames.TriggerMemorySharing)]
     [McpToolScope(ToolScope.Project)]
     [Description(
         "Checks committed project memories and extracts the ones worth sharing. propose (default) ranks candidates and PERSISTS them into the propose tier — the waiting queue the agent reviews with get_memories_sharing_ranking. promote shares the top queued candidates into the curated, sweep-exempt shared tier and drains them. autoPromote (disabled by default) promotes the top queued candidates in the same call — it shares data BETWEEN PROJECTS, so it requires confirm=true as an explicit enable gate. Sharing stays explicit: propose first, review, then promote.")]
@@ -76,7 +73,7 @@ public sealed class ShareTools(
         {
             canonicalIds.Add(await gate.RequireAsync(projectId,
                 request.Promotes ? AccessRequirement.Write : AccessRequirement.Read,
-                TnTriggerMemorySharing, cancellationToken));
+                ToolNames.TriggerMemorySharing, cancellationToken));
         }
 
         // Fragments of one project meet here (old-id + Old-Id both fold to old-id under an
