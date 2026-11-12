@@ -179,6 +179,7 @@ has every name; the records keep theirs, because a record is frozen.
 | [0142 — AiRaccoon owns a persistent project decision graph](0142-native-project-decision-graph.md) | Native decision records, typed links, task-scoped export and compact preview in the encrypted bank, shipped in 2.4.0 over MCP, HTTP and the CLI; Semantica import deferred to #924 | — |
 | [0143 — A watcher buffer overflow is one debounced rescan, and the buffer size is a setting](0143-watcher-overflow-is-one-debounced-rescan.md) | Repeated overflows of one watch collapse into one warning and one changed-files scan after a fixed 2 s window; the buffer size becomes the global setting `watch.buffer-size.global` (4096–65536, default 64 KB); per-directory non-recursive watchers are deferred | — |
 | [0144 — Measure the delay before MCP tool dispatch](0144-mcp-dispatch-delay-is-measured-from-the-http-request.md) | Persist the elapsed time from the HTTP request Activity start to MCP tool filter entry, then compare it with tool and search duration; the HTTP request Activity supplies the response-completion boundary | — |
+| [0148 — The bank guards memory-only TTL and the kind domain with triggers](0148-bank-guards-memory-only-ttl-and-the-kind-domain.md) | Schema v24 clears the TTL of every non-memory row, then adds a BEFORE INSERT and a BEFORE UPDATE trigger that abort on a non-memory TTL or an unknown `entry_type`; a trigger, not a CHECK, so no `entries` rebuild and dev banks without the column CHECK are covered; the doctor counts non-memory TTL rows | — |
 
 ## Numbers never used
 
