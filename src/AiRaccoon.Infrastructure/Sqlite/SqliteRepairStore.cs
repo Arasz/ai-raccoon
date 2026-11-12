@@ -66,7 +66,7 @@ public sealed class SqliteRepairStore(
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(MemorySql.RequestRepair,
-                new { kind = kind.ToKey(), requestedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds(), mapJson = projectIdsMapJson },
-                cancellationToken: cancellationToken));
+            new { kind = kind.ToKey(), requestedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds(), mapJson = projectIdsMapJson },
+            cancellationToken: cancellationToken));
     }
 }

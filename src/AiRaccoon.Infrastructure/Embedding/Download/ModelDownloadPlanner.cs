@@ -3,9 +3,11 @@ using AiRaccoon.Infrastructure.Embedding.Manifest;
 
 namespace AiRaccoon.Infrastructure.Embedding.Download;
 
-/// <summary>A file the download will fetch: repo-relative path, size (from the tree listing),
-/// and the SHA-256 pin when the file is an LFS object (lfs.oid captured before download, D8).
-/// A null sha means TOFU: pinned from the bytes actually downloaded and recorded in the manifest.</summary>
+/// <summary>
+///     A file the download will fetch: repo-relative path, size (from the tree listing),
+///     and the SHA-256 pin when the file is an LFS object (lfs.oid captured before download, D8).
+///     A null sha means TOFU: pinned from the bytes actually downloaded and recorded in the manifest.
+/// </summary>
 public sealed record PinnedFile(string Path, long Size, string? LfsSha256);
 
 /// <summary>
@@ -42,8 +44,10 @@ public sealed record ModelDownloadPlan(
     string? QueryInstruction = null,
     string? DocumentInstruction = null);
 
-/// <summary>A repo cannot be turned into a download plan: missing model file, unsupported
-/// tokenizer family, unpinnable special tokens, etc. Messages are actionable.</summary>
+/// <summary>
+///     A repo cannot be turned into a download plan: missing model file, unsupported
+///     tokenizer family, unpinnable special tokens, etc. Messages are actionable.
+/// </summary>
 public sealed class ModelDownloadPlanException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>Turns a resolved tree + fetched configs into a download plan (pure, no I/O).</summary>
@@ -174,23 +178,6 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             Prompt(rawFiles, "document"));
     }
 
-    /// <summary>A non-empty sentence-transformers prompt the model was trained with, else null.</summary>
-    private static string? Prompt(IReadOnlyDictionary<string, string> rawFiles, string name)
-    {
-        if (!rawFiles.TryGetValue(SentenceTransformersConfigFileName, out var json))
-        {
-            return null;
-        }
-
-        using var doc = JsonDocument.Parse(json);
-        return doc.RootElement.TryGetProperty("prompts", out var prompts) && prompts.ValueKind == JsonValueKind.Object
-                                                                          && prompts.TryGetProperty(name, out var prompt)
-                                                                          && prompt.ValueKind == JsonValueKind.String
-                                                                          && prompt.GetString() is { Length: > 0 } text
-            ? text
-            : null;
-    }
-
     public string SelectModelFilePath(IReadOnlyList<HfTreeEntry> tree, IReadOnlyList<string>? explicitFiles = null)
     {
         if (explicitFiles is { Count: > 0 })
@@ -221,9 +208,28 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             "Use --file to name a specific model file, or pick a repo with an ONNX export.");
     }
 
-    /// <summary>Model file + every external-data sibling: from the ONNX protobuf when available
-    /// (the honest source, D4 m6), glob <c>*.onnx_data*</c> in the same directory as fallback
-    /// (the bge-m3 case, plan §8.2 step 2).</summary>
+    /// <summary>A non-empty sentence-transformers prompt the model was trained with, else null.</summary>
+    private static string? Prompt(IReadOnlyDictionary<string, string> rawFiles, string name)
+    {
+        if (!rawFiles.TryGetValue(SentenceTransformersConfigFileName, out var json))
+        {
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(json);
+        return doc.RootElement.TryGetProperty("prompts", out var prompts) && prompts.ValueKind == JsonValueKind.Object
+                                                                          && prompts.TryGetProperty(name, out var prompt)
+                                                                          && prompt.ValueKind == JsonValueKind.String
+                                                                          && prompt.GetString() is { Length: > 0 } text
+            ? text
+            : null;
+    }
+
+    /// <summary>
+    ///     Model file + every external-data sibling: from the ONNX protobuf when available
+    ///     (the honest source, D4 m6), glob <c>*.onnx_data*</c> in the same directory as fallback
+    ///     (the bge-m3 case, plan §8.2 step 2).
+    /// </summary>
     private static List<PinnedFile> SelectModelFiles(
         IReadOnlyList<HfTreeEntry> tree, string modelFilePath, string modelDir, OnnxGraphProbe? probe)
     {
@@ -289,13 +295,12 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         }
 
         throw new ModelDownloadPlanException(
-            $"unsupported model_type '{modelType}' in config.json; supported model types: {string.Join(", ", SupportedModelTypes)}. " +
-            "Download a model with one of these types, or hand-place the model and write its manifest yourself.");
+            $"unsupported model_type '{modelType}' in config.json; supported model types: {string.Join(", ", SupportedModelTypes)}. Download a model with one of these types, or hand-place the model and write its manifest yourself.");
     }
 
     private static bool IsDecoderModelType(string modelType) =>
         DecoderModelTypes.Any(t => modelType.Equals(t, StringComparison.OrdinalIgnoreCase)
-                                   || modelType.StartsWith(t + "-", StringComparison.OrdinalIgnoreCase));
+                                   || modelType.StartsWith($"{t}-", StringComparison.OrdinalIgnoreCase));
 
     private static bool HasFile(IReadOnlyList<HfTreeEntry> tree, string modelDir, string fileName) =>
         TreeEntry(tree, JoinPath(modelDir, fileName)) is not null || TreeEntry(tree, fileName) is not null;
@@ -546,10 +551,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         }
 
         throw new ModelDownloadPlanException(
-            $"config.json vocab_size ({vocabSize}) and the sentencepiece model's own piece table ({pieceCount} pieces) "
-            + $"differ by {difference}, so this is a fairseq-offset tokenizer, and its tokenizer_config.json ships no "
-            + "added_tokens_decoder, so the special-token ids can only be guessed. Hand-write ai-raccoon.manifest.json "
-            + "for this model with its real special-token ids (docs/how-to/configure-embedding-engines.md, Recipe 4).");
+            $"config.json vocab_size ({vocabSize}) and the sentencepiece model's own piece table ({pieceCount} pieces) differ by {difference}, so this is a fairseq-offset tokenizer, and its tokenizer_config.json ships no added_tokens_decoder, so the special-token ids can only be guessed. Hand-write ai-raccoon.manifest.json for this model with its real special-token ids (docs/how-to/configure-embedding-engines.md, Recipe 4).");
     }
 
     /// <summary>
@@ -584,7 +586,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         var outputs = probe.OutputNames.Where(n => !n.StartsWith("present.", StringComparison.Ordinal)).ToList();
         if (outputs.Count <= 1)
         {
-            return new GraphOutputs(outputs.Count == 0 ? string.Empty : outputs[0], null);
+            return new GraphOutputs(outputs.Count == 0 ? "" : outputs[0], null);
         }
 
         var tokenCandidates = outputs.Where(n => RankOf(probe, n) == OnnxOutputRanks.TokenLevelRank).ToList();
@@ -598,9 +600,11 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
         return new GraphOutputs(tokenByName, SelectEmbeddingOutput(outputs, tokenByName));
     }
 
-    /// <summary>The first name a role's own recognized-names list matches, else the first
-    /// candidate — candidates are already partitioned by rank, so no exclusion is needed here the
-    /// way the pure name heuristic below needs one.</summary>
+    /// <summary>
+    ///     The first name a role's own recognized-names list matches, else the first
+    ///     candidate — candidates are already partitioned by rank, so no exclusion is needed here the
+    ///     way the pure name heuristic below needs one.
+    /// </summary>
     private static string PreferRecognizedName(IReadOnlyList<string> candidates, Func<string, bool> isRecognized) => candidates.FirstOrDefault(isRecognized) ?? candidates[0];
 
     private static bool IsTokenEmbeddingsName(string name) => name is "token_embeddings" or "last_hidden_state";
@@ -629,12 +633,14 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
             }
         }
 
-        return outputs.FirstOrDefault() ?? string.Empty;
+        return outputs.FirstOrDefault() ?? "";
     }
 
-    /// <summary>The graph's pooled-embedding output name, distinct from
-    /// <paramref name="tokenEmbeddingsOutput" /> — a sole output serving both roles (the #470/#475
-    /// shape) is never returned here, even when it is literally named "sentence_embedding".</summary>
+    /// <summary>
+    ///     The graph's pooled-embedding output name, distinct from
+    ///     <paramref name="tokenEmbeddingsOutput" /> — a sole output serving both roles (the #470/#475
+    ///     shape) is never returned here, even when it is literally named "sentence_embedding".
+    /// </summary>
     private static string? SelectEmbeddingOutput(IReadOnlyList<string> outputs, string? tokenEmbeddingsOutput)
     {
         var recognized = outputs.FirstOrDefault(n => n != tokenEmbeddingsOutput && IsEmbeddingName(n));
@@ -712,7 +718,7 @@ public sealed class ModelDownloadPlanner : IModelDownloadPlanner
     private static string DirectoryOf(string path)
     {
         var slash = path.LastIndexOf('/');
-        return slash < 0 ? string.Empty : path[..slash];
+        return slash < 0 ? "" : path[..slash];
     }
 
     private static string JoinPath(string dir, string file) => dir.Length == 0 ? file : $"{dir}/{file}";

@@ -23,7 +23,7 @@ public class StructuralNoiseFeaturesTests
     [Fact]
     public void Extract_WithEmptyString_ReturnsAllZeros()
     {
-        var result = StructuralNoiseFeatures.Extract(string.Empty);
+        var result = StructuralNoiseFeatures.Extract("");
 
         result.Length.ShouldBe(StructuralNoiseFeatures.FeatureCount);
         result.ShouldAllBe(v => v == 0.0);

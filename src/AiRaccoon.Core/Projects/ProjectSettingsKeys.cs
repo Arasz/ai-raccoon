@@ -14,11 +14,11 @@ public static class ProjectSettingsKeys
     /// <summary>Every per-project prefix, in the order the repair pairs a loser's keys with its winner's.</summary>
     public static IReadOnlyList<ProjectSettingsPrefix> Prefixes { get; } =
     [
-        new("ingest.scope.", ExcludesGlobal: true),
-        new("watch.scope.", ExcludesGlobal: false),
-        new("watch.enabled.", ExcludesGlobal: true),
-        new("watch.concurrency.", ExcludesGlobal: true),
-        new("access.mode.project:", ExcludesGlobal: false)
+        new("ingest.scope.", true),
+        new("watch.scope.", false),
+        new("watch.enabled.", true),
+        new("watch.concurrency.", true),
+        new("access.mode.project:", false)
     ];
 
     /// <summary>True and the owner when <paramref name="key" /> is a per-project key; the owner may be blank.</summary>
@@ -67,6 +67,5 @@ public static class ProjectSettingsKeys
     }
 
     /// <summary>Every per-project key of <paramref name="projectId" />, in <see cref="Prefixes" /> order.</summary>
-    public static IReadOnlyList<string> KeysFor(string projectId) =>
-        [.. Prefixes.Where(p => !p.ExcludesGlobal || projectId != GlobalOwner).Select(p => p.Prefix + projectId)];
+    public static IReadOnlyList<string> KeysFor(string projectId) => [.. Prefixes.Where(p => !p.ExcludesGlobal || projectId != GlobalOwner).Select(p => p.Prefix + projectId)];
 }

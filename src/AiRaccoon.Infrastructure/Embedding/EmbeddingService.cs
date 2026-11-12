@@ -1,17 +1,16 @@
+using System.ClientModel;
+using System.Collections.Concurrent;
+using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Embedding.NeuralEngine;
 using AiRaccoon.Infrastructure.Options;
-using System.ClientModel;
-using System.Collections.Concurrent;
-using System.Globalization;
-using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.ML.OnnxRuntime;
 using OpenAI;
 using OpenAI.Embeddings;
 
@@ -56,24 +55,24 @@ public sealed partial class EmbeddingService(
     /// <summary>The directory under the data root that holds the compiled CoreML models (ADR-0118).</summary>
     public const string CoreMlCacheDirectoryName = "coreml-cache";
 
-    private readonly ILogger<EmbeddingService> _logger = logger;
+    // D1 cost note: Load() now hashes every pinned file's bytes (the ~90 MB ONNX weights
+    // included). ManifestDescriptorFor/ManifestContentBudget sit on the write hot path
+    // (FileIngestor, SqliteMemoryStore's ChunkToBudgetAsync) — caching the descriptor per engine
+    // fingerprint keeps that hash to once per process per engine, never per call (plan D1).
+    private readonly ConcurrentDictionary<string, EngineDescriptor> _descriptors =
+        new(StringComparer.Ordinal);
 
     // The service owns generator lifetimes: an ONNX session (23 MB model) and an OpenAI client
     // are expensive to build, so engines are cached per fingerprint and never disposed by callers.
     private readonly ConcurrentDictionary<string, IEmbeddingGenerator<string, Embedding<float>>> _engines =
         new(StringComparer.Ordinal);
 
+    private readonly ILogger<EmbeddingService> _logger = logger;
+
     // Tokenizers are cached per engine fingerprint and SHARED with the generator built for the
     // same fingerprint — the ADR-0036 invariant (the counter and the embedder are the same object)
     // holds by construction.
     private readonly ConcurrentDictionary<string, IEmbeddingTokenizer> _tokenizers =
-        new(StringComparer.Ordinal);
-
-    // D1 cost note: Load() now hashes every pinned file's bytes (the ~90 MB ONNX weights
-    // included). ManifestDescriptorFor/ManifestContentBudget sit on the write hot path
-    // (FileIngestor, SqliteMemoryStore's ChunkToBudgetAsync) — caching the descriptor per engine
-    // fingerprint keeps that hash to once per process per engine, never per call (plan D1).
-    private readonly ConcurrentDictionary<string, EngineDescriptor> _descriptors =
         new(StringComparer.Ordinal);
 
     /// <summary>
@@ -110,24 +109,6 @@ public sealed partial class EmbeddingService(
                 _ => provider == "local" ? CreateLocal(settings) : CreateOpenAi(settings)),
             _ => throw new ArgumentOutOfRangeException(nameof(settings), settings.Provider,
                 "Unknown embedding provider; expected 'local' or 'openai'.")
-        };
-    }
-
-
-    /// <summary>
-    ///     Maximum input tokens the configured engine accepts, so chunk sizes can be clamped to
-    ///     the model's window (see docs/work/archive/2026-08-03-native-memory-plan.md §8); unknown engines default conservatively.
-    ///     Static and manifest-blind (bundled defaults) — manifest-aware resolution goes through
-    ///     <see cref="ResolveChunkBudgetFor" />.
-    /// </summary>
-    public static int ContextTokensFor(string provider, string? model)
-    {
-        ArgumentNullException.ThrowIfNull(provider);
-        return provider.ToLowerInvariant() switch
-        {
-            "local" => BundledModelContextTokens,
-            "openai" => OpenAiEmbeddingContextTokens,
-            _ => BundledModelContextTokens
         };
     }
 
@@ -180,29 +161,6 @@ public sealed partial class EmbeddingService(
     }
 
     /// <summary>
-    ///     WP11 (log-values-as-metrics): EventId 426's "tokens exceeded the window" value, recorded
-    ///     beside the log line above — same values, not a second computation. Bank-wide (like
-    ///     job.*/drain.*): TrimQueryToWindow has no project id to record under (see
-    ///     <see cref="EntryEmbedder.EmbedQueryAsync" />/<see cref="ICodeEmbedder.EmbedQueryAsync" />).
-    /// </summary>
-    private void RecordQueryTruncationMetric(int tokens, int maxTokens) =>
-        measurements.Record(new Measurement(MetricsConfigKeys.QueryTruncatedTokensMetricName,
-            MeasurementKind.Histogram, tokens - maxTokens, "count", timeProvider.GetUtcNow(),
-            MetricsConfigKeys.SelfMetricsProjectId));
-
-    /// <summary>
-    ///     Static legacy budget (254 local / context window for others), kept for legacy callers —
-    ///     NOT the bundled engine's live budget, which its manifest's chunkTokens sets (1022 since
-    ///     config D). Manifest-aware resolution: <see cref="ResolveChunkBudgetFor" />.
-    /// </summary>
-    public static int SafeChunkBudgetFor(string provider, string? model) =>
-        provider.ToLowerInvariant() switch
-        {
-            "local" => OnnxEmbeddingGenerator.MaxContentTokens,
-            _ => ContextTokensFor(provider, model)
-        };
-
-    /// <summary>
     ///     The engine's real content-token chunk budget, resolved per engine (D6/D9, ADR-0125): the
     ///     bundled engine follows its manifest's chunkTokens (1022 since config D); legacy local
     ///     .onnx files stay 254; a manifest model without chunkTokens gets min(510, ctx − 2); and
@@ -237,24 +195,6 @@ public sealed partial class EmbeddingService(
 
         return ManifestDescriptorFor(settings.Model)?.Dimensions ?? BundledDescriptor.Dimensions;
     }
-
-    /// <summary>A local model setting as a path: the bundled engine's directory when it names the bundled engine.</summary>
-    private static string LocalModelPath(string? model) =>
-        BundledModel.IsBundled(model) ? BundledModel.ResolveDirectory() : Path.GetFullPath(model!);
-
-    /// <summary>The manifest descriptor for a local model directory (the bundled engine included), or null for a legacy .onnx file.</summary>
-    private EngineDescriptor? ManifestDescriptorFor(string? model)
-    {
-        model = LocalModelPath(model);
-
-        var full = Path.GetFullPath(model);
-        return Directory.Exists(full) ? LoadManifestDescriptorCached(model, full) : null;
-    }
-
-    /// <summary>Loads (and caches per engine fingerprint) the manifest descriptor for a directory
-    /// already confirmed to exist. Not cached on throw — a missing/invalid manifest keeps
-    /// re-throwing its own actionable message on every call, same as before this cache existed.</summary>
-    private EngineDescriptor LoadManifestDescriptorCached(string model, string full) => _descriptors.GetOrAdd(EngineFingerprint("local", model, null), _ => manifestDescriptor.Load(full));
 
     /// <summary>
     ///     The tokenizer the configured LOCAL engine will embed with (D9): the manifest tokenizer
@@ -331,6 +271,66 @@ public sealed partial class EmbeddingService(
             var other => other
         };
     }
+
+
+    /// <summary>
+    ///     Maximum input tokens the configured engine accepts, so chunk sizes can be clamped to
+    ///     the model's window (see docs/work/archive/2026-08-03-native-memory-plan.md §8); unknown engines default conservatively.
+    ///     Static and manifest-blind (bundled defaults) — manifest-aware resolution goes through
+    ///     <see cref="ResolveChunkBudgetFor" />.
+    /// </summary>
+    public static int ContextTokensFor(string provider, string? model)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        return provider.ToLowerInvariant() switch
+        {
+            "local" => BundledModelContextTokens,
+            "openai" => OpenAiEmbeddingContextTokens,
+            _ => BundledModelContextTokens
+        };
+    }
+
+    /// <summary>
+    ///     WP11 (log-values-as-metrics): EventId 426's "tokens exceeded the window" value, recorded
+    ///     beside the log line above — same values, not a second computation. Bank-wide (like
+    ///     job.*/drain.*): TrimQueryToWindow has no project id to record under (see
+    ///     <see cref="EntryEmbedder.EmbedQueryAsync" />/<see cref="ICodeEmbedder.EmbedQueryAsync" />).
+    /// </summary>
+    private void RecordQueryTruncationMetric(int tokens, int maxTokens) =>
+        measurements.Record(new Measurement(MetricsConfigKeys.QueryTruncatedTokensMetricName,
+            MeasurementKind.Histogram, tokens - maxTokens, "count", timeProvider.GetUtcNow(),
+            MetricsConfigKeys.SelfMetricsProjectId));
+
+    /// <summary>
+    ///     Static legacy budget (254 local / context window for others), kept for legacy callers —
+    ///     NOT the bundled engine's live budget, which its manifest's chunkTokens sets (1022 since
+    ///     config D). Manifest-aware resolution: <see cref="ResolveChunkBudgetFor" />.
+    /// </summary>
+    public static int SafeChunkBudgetFor(string provider, string? model) =>
+        provider.ToLowerInvariant() switch
+        {
+            "local" => OnnxEmbeddingGenerator.MaxContentTokens,
+            _ => ContextTokensFor(provider, model)
+        };
+
+    /// <summary>A local model setting as a path: the bundled engine's directory when it names the bundled engine.</summary>
+    private static string LocalModelPath(string? model) => BundledModel.IsBundled(model) ? BundledModel.ResolveDirectory() : Path.GetFullPath(model!);
+
+    /// <summary>The manifest descriptor for a local model directory (the bundled engine included), or null for a legacy .onnx file.</summary>
+    private EngineDescriptor? ManifestDescriptorFor(string? model)
+    {
+        model = LocalModelPath(model);
+
+        var full = Path.GetFullPath(model);
+        return Directory.Exists(full) ? LoadManifestDescriptorCached(model, full) : null;
+    }
+
+    /// <summary>
+    ///     Loads (and caches per engine fingerprint) the manifest descriptor for a directory
+    ///     already confirmed to exist. Not cached on throw — a missing/invalid manifest keeps
+    ///     re-throwing its own actionable message on every call, same as before this cache existed.
+    /// </summary>
+    private EngineDescriptor LoadManifestDescriptorCached(string model, string full) => _descriptors.GetOrAdd(EngineFingerprint("local", model, null), _ => manifestDescriptor.Load(full));
 
     /// <summary>
     ///     WP11-A/G16: an unset setting halves the core count (never below 1); "0" means ORT's own
@@ -413,8 +413,7 @@ public sealed partial class EmbeddingService(
             if (!File.Exists(modelPath))
             {
                 throw new InvalidOperationException(
-                    $"Configured embedding model '{modelPath}' does not exist (it may be a model name, not a path; ~ is not expanded). " +
-                    $"Run '{EmbeddingEngineSetup.DefaultModelCommand}' for the bundled model, or '{EmbeddingEngineSetup.DefaultModelCommand} <path-to-onnx>' for a custom path.");
+                    $"Configured embedding model '{modelPath}' does not exist (it may be a model name, not a path; ~ is not expanded). Run '{EmbeddingEngineSetup.DefaultModelCommand}' for the bundled model, or '{EmbeddingEngineSetup.DefaultModelCommand} <path-to-onnx>' for a custom path.");
             }
 
             var bundledTokenizer = _tokenizers.GetOrAdd("bundled",

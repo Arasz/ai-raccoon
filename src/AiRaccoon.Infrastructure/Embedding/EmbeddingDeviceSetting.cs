@@ -64,8 +64,7 @@ public static class EmbeddingDeviceSetting
     ///     The platform, plugin-file and graph-file checks that gate the actual attempt are the
     ///     caller's concern; this is only the setting's own decision.
     /// </summary>
-    public static bool PrefersMlx(EmbeddingDevice device, bool isBundledEngine) =>
-        device == EmbeddingDevice.Mlx && isBundledEngine;
+    public static bool PrefersMlx(EmbeddingDevice device, bool isBundledEngine) => device == EmbeddingDevice.Mlx && isBundledEngine;
 
     /// <summary>
     ///     CoreML is opt-in and only wired to the bundled engine's ANE-layout export (ADR-0118) — a
@@ -73,14 +72,12 @@ public static class EmbeddingDeviceSetting
     ///     The platform, plugin and graph-file checks that gate the actual attempt are the caller's
     ///     concern; this is only the setting's own decision.
     /// </summary>
-    public static bool PrefersCoreMl(EmbeddingDevice device, bool isBundledEngine) =>
-        device == EmbeddingDevice.CoreMl && isBundledEngine;
+    public static bool PrefersCoreMl(EmbeddingDevice device, bool isBundledEngine) => device == EmbeddingDevice.CoreMl && isBundledEngine;
 
     /// <summary>
     ///     The CUDA provider library a session should try: the stored path under device cuda ("" when unset,
     ///     which the session refuses with a hint), otherwise null — a path left over from cuda stays inert.
     ///     Cuda applies to every local model, so a failed attempt falls back to WebGPU for each of them.
     /// </summary>
-    public static string? CudaLibraryFor(EmbeddingDevice device, string? stored) =>
-        device == EmbeddingDevice.Cuda ? stored ?? "" : null;
+    public static string? CudaLibraryFor(EmbeddingDevice device, string? stored) => device == EmbeddingDevice.Cuda ? stored ?? "" : null;
 }

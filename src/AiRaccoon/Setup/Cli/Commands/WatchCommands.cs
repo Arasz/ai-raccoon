@@ -2,17 +2,19 @@ using System.CommandLine;
 using System.Globalization;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
 
-
 namespace AiRaccoon.Setup.Cli.Commands;
 
-/// <summary>One-shot watch-config verb handlers; the only family with a ctor dependency. Takes the
-/// narrow <see cref="IWatchRegisteredStore" /> (ADR-0075 amendment) rather than the full
-/// <see cref="IWatchStore" /> — the CLI graph swaps it for a server-backed store; the
-/// add/remove/fingerprint members of the full interface are server-side only and never belong on a
-/// CLI command's own constructor.</summary>
+/// <summary>
+///     One-shot watch-config verb handlers; the only family with a ctor dependency. Takes the
+///     narrow <see cref="IWatchRegisteredStore" /> (ADR-0075 amendment) rather than the full
+///     <see cref="IWatchStore" /> — the CLI graph swaps it for a server-backed store; the
+///     add/remove/fingerprint members of the full interface are server-side only and never belong on a
+///     CLI command's own constructor.
+/// </summary>
 public sealed class WatchCommands
 {
     private readonly IWatchRegisteredStore _watchStore;
@@ -146,7 +148,7 @@ public sealed class WatchCommands
         var filter = parseResult.GetValue<string?>("project-id");
         // P4 boundary fold: a loser spelling lists its winner's registrations (the stored rows are
         // canonical post-repair; the fold is idempotent on canonical spellings).
-        var wanted = filter is null ? null : Core.Projects.ProjectIdAliasMap.Default.Fold(filter);
+        var wanted = filter is null ? null : ProjectIdAliasMap.Default.Fold(filter);
         var watches = await _watchStore.ListWatchesAsync(cancellationToken);
         var rows = watches
             .Where(w => wanted is null || w.ProjectId == wanted)

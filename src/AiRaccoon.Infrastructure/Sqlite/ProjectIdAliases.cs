@@ -43,13 +43,13 @@ public static partial class ProjectIdAliases
     ///     step executes it for v13-stamped banks — one definition, two call sites, never a copy.
     /// </summary>
     internal const string TableDdl = """
-        CREATE TABLE IF NOT EXISTS project_id_aliases (
-            alias      TEXT PRIMARY KEY,
-            winner     TEXT NULL,
-            kind       TEXT NOT NULL CHECK(kind IN ('alias','drop')),
-            applied_at INTEGER NOT NULL
-        )
-        """;
+                                     CREATE TABLE IF NOT EXISTS project_id_aliases (
+                                         alias      TEXT PRIMARY KEY,
+                                         winner     TEXT NULL,
+                                         kind       TEXT NOT NULL CHECK(kind IN ('alias','drop')),
+                                         applied_at INTEGER NOT NULL
+                                     )
+                                     """;
 
     /// <summary>
     ///     Appends the applied one-shot map: one row per alias entry plus one row per dropped id.
@@ -65,15 +65,15 @@ public static partial class ProjectIdAliases
         foreach (var entry in map.Aliases)
         {
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.InsertProjectIdAlias,
-                    new { alias = entry.Alias, winner = (string?)entry.Canonical, kind = KindAlias, appliedAt },
-                    cancellationToken: cancellationToken));
+                new { alias = entry.Alias, winner = (string?)entry.Canonical, kind = KindAlias, appliedAt },
+                cancellationToken: cancellationToken));
         }
 
         foreach (var dropped in map.Dropped)
         {
             await connection.ExecuteAsync(new CommandDefinition(MemorySql.InsertProjectIdAlias,
-                    new { alias = dropped, winner = (string?)null, kind = KindDrop, appliedAt },
-                    cancellationToken: cancellationToken));
+                new { alias = dropped, winner = (string?)null, kind = KindDrop, appliedAt },
+                cancellationToken: cancellationToken));
         }
     }
 
@@ -87,7 +87,7 @@ public static partial class ProjectIdAliases
     {
         Guard.IsNotNull(connection);
         var rows = await connection.QueryAsync<AliasRow>(
-                new CommandDefinition(MemorySql.SelectProjectIdAliases, cancellationToken: cancellationToken));
+            new CommandDefinition(MemorySql.SelectProjectIdAliases, cancellationToken: cancellationToken));
         var aliases = rows
             .Where(row => row.Kind == KindAlias && row.Winner is not null)
             .Select(row => new ProjectIdAliasEntry(row.Alias, row.Winner!))
@@ -111,7 +111,7 @@ public static partial class ProjectIdAliases
         Guard.IsNotNull(connection);
         Guard.IsNotNull(logger);
         var rows = (await connection.QueryAsync<AliasRow>(
-                new CommandDefinition(MemorySql.SelectProjectIdAliases, cancellationToken: cancellationToken))).ToList();
+            new CommandDefinition(MemorySql.SelectProjectIdAliases, cancellationToken: cancellationToken))).ToList();
         var skipped = rows.Count(row => row.Kind == KindAlias && row.Winner is null);
         if (skipped > 0)
         {

@@ -113,7 +113,7 @@ public sealed class ReservedNameTests
 
         public Task<string> RequireAsync(string? projectId, AccessRequirement requirement, string toolName,
             CancellationToken cancellationToken) =>
-            Task.FromResult(projectId ?? string.Empty);
+            Task.FromResult(projectId ?? "");
 
         public Task<ApiEnvelope<T>> WrapAsync<T>(string? projectId, T data, CancellationToken cancellationToken) =>
             Task.FromResult(new ApiEnvelope<T>(data, new PromotionMeta(0, null)));

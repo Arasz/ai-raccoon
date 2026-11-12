@@ -83,7 +83,7 @@ public sealed class SqliteMemoryStoreCodeDeleteTests : IDisposable
 
         await _store.DeleteSourcePathAsync("acme", file, TestContext.Current.CancellationToken);
 
-        (await CountCodeAsync(file, "acme")).ShouldBe(0);
+        (await CountCodeAsync(file)).ShouldBe(0);
         (await CountCodeAsync(file, "other-project")).ShouldBeGreaterThan(0);
     }
 

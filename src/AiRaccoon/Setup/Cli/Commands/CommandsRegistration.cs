@@ -1,10 +1,10 @@
 using AiRaccoon.Decisions.Client;
-using AiRaccoon.Settings;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Encryption;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
+using AiRaccoon.Settings;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 

@@ -1,19 +1,25 @@
-using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Ingestion;
 using Dapper;
+using JetBrains.Annotations;
 using Microsoft.Data.Sqlite;
-using static AiRaccoon.Infrastructure.Sqlite.Sql;
 using Microsoft.Extensions.Logging;
+using static AiRaccoon.Infrastructure.Sqlite.Sql;
 
 namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
-/// <summary>Replace-by-path: the watch digest's fingerprint-gated <see cref="ReplaceIfFileChangedAsync" />
-/// and a repair's unconditional <see cref="ReplaceAsync" />, both over one shared transactional core.</summary>
+/// <summary>
+///     Replace-by-path: the watch digest's fingerprint-gated <see cref="ReplaceIfFileChangedAsync" />
+///     and a repair's unconditional <see cref="ReplaceAsync" />, both over one shared transactional core.
+/// </summary>
 public sealed partial class SqliteMemoryStore
 {
+    /// <summary>A stale claim (its holder crashed mid-chunk and never released it) can be reclaimed after this long.</summary>
+    internal static readonly TimeSpan ClaimStaleAfter = TimeSpan.FromMinutes(5);
+
     /// <summary>
     ///     Watch-digest replace-by-path: skips when the stored fingerprint already equals
     ///     <paramref name="fileHash" />, else runs the same replace <see cref="ReplaceAsync" /> does.
@@ -22,34 +28,21 @@ public sealed partial class SqliteMemoryStore
     ///     digests racing the same stale-to-new transition still chunk and embed exactly once.
     /// </summary>
     public Task<ReplaceResult> ReplaceIfFileChangedAsync(string projectId, string path, string fileHash,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        ArgumentException.ThrowIfNullOrWhiteSpace(fileHash);
-
-        return ReplaceIfChangedCoreAsync(projectId, path, fileHash,
+        CancellationToken cancellationToken = default) =>
+        ReplaceIfChangedCoreAsync(projectId, path, fileHash,
             async connection =>
             {
-                var stored = await connection.ExecuteScalarAsync<string?>(
-                        Def(MemorySql.SelectWatchFile, new { projectId, path }, cancellationToken));
+                var stored = await connection.ExecuteScalarAsync<string?>(Def(MemorySql.SelectWatchFile, new { projectId, path }, cancellationToken));
                 return !string.Equals(stored, fileHash, StringComparison.Ordinal);
             }, null, cancellationToken);
-    }
 
     /// <summary>
     ///     Unconditional replace-by-path: runs <see cref="ReplaceCoreAsync" /> regardless of the
     ///     stored fingerprint — for a repair re-chunking a file whose content has not changed.
     /// </summary>
-    public async Task ReplaceAsync(string projectId, string path, string fileHash,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        ArgumentException.ThrowIfNullOrWhiteSpace(fileHash);
-
-        await ReplaceIfChangedCoreAsync(projectId, path, fileHash, null, null, cancellationToken);
-    }
+    public Task ReplaceAsync(string projectId, string path, string fileHash,
+        CancellationToken cancellationToken = default) =>
+        ReplaceIfChangedCoreAsync(projectId, path, fileHash, null, null, cancellationToken);
 
     /// <summary>
     ///     Context-preserving unconditional replace-by-path (config-D F1/F2): the same re-ingest as
@@ -58,15 +51,9 @@ public sealed partial class SqliteMemoryStore
     ///     in two contexts keeps both instead of one replace deleting the other. A null context
     ///     behaves as the plain replace.
     /// </summary>
-    public async Task ReplaceAsync(string projectId, string path, string fileHash, string? context,
-        CancellationToken cancellationToken = default, bool preserveMemoryMetadata = false)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        ArgumentException.ThrowIfNullOrWhiteSpace(fileHash);
-
-        await ReplaceIfChangedCoreAsync(projectId, path, fileHash, null, context, cancellationToken, preserveMemoryMetadata);
-    }
+    public Task ReplaceAsync(string projectId, string path, string fileHash, string? context,
+        CancellationToken cancellationToken = default, bool preserveMemoryMetadata = false) =>
+        ReplaceIfChangedCoreAsync(projectId, path, fileHash, null, context, cancellationToken, preserveMemoryMetadata);
 
     /// <summary>
     ///     Direct-tool ingest that replaces the path's chunk set (Defect B). Ingest runs first and
@@ -81,7 +68,7 @@ public sealed partial class SqliteMemoryStore
     ///     <para>
     ///         The ingest leaves its row(s) `embed_state = 'pending'` and deliberately does NOT run
     ///         inside the prune's transaction — each insert autocommits, so by the time this method
-    ///         enqueues the embed-drain signal below, the rows it is signalling for already exist.
+    ///         enqueues the embed-drain signal below, the rows it is signaling for already exist.
     ///         Only the prune takes the write lock, and only for one DELETE. A crash between the two
     ///         leaves the stale rows exactly where today's code leaves them, so the window costs
     ///         nothing that is not already the status quo.
@@ -89,16 +76,14 @@ public sealed partial class SqliteMemoryStore
     ///     No watch fingerprint is written: a direct ingest of a file nobody watches must not claim
     ///     one.
     /// </summary>
-    internal async Task<int> ReplaceForDirectIngestAsync(string projectId, string path, string? context,
-        CancellationToken cancellationToken)
+    internal async Task<int> ReplaceForDirectIngestAsync(string projectId, string path, string? context, CancellationToken cancellationToken)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
 
-        var ingestResult = await fileIngestor
-            .IngestFileAsync(connection, projectId, path, context, cancellationToken);
+        var ingestResult = await fileIngestor.IngestFileAsync(connection, projectId, path, context, cancellationToken);
 
         await PruneChunksNotIn(connection, projectId, path, ingestResult.ChunkHashes ?? [],
-                ingestResult.CodeChunkHashes, cancellationToken);
+            ingestResult.CodeChunkHashes, cancellationToken);
 
         embedDrainPump.SignalWritten(ingestResult.WrittenCorpus);
         return ingestResult.RowsInserted;
@@ -112,13 +97,8 @@ public sealed partial class SqliteMemoryStore
     ///     since it has more to do (guard re-check, fingerprint) under the same lock.
     /// </summary>
     private async Task PruneChunksNotIn(SqliteConnection connection, string projectId, string path,
-        IReadOnlyList<string> keep, IReadOnlyList<string>? keepCode, CancellationToken cancellationToken)
-    {
-        await connection.InWriteTransactionAsync(async () =>
-        {
-            await PruneAsync(connection, projectId, path, keep, keepCode, null, cancellationToken);
-        }, cancellationToken);
-    }
+        IReadOnlyList<string> keep, IReadOnlyList<string>? keepCode, CancellationToken cancellationToken) =>
+        await connection.InWriteTransactionAsync(async () => { await PruneAsync(connection, projectId, path, keep, keepCode, null, cancellationToken); }, cancellationToken);
 
     /// <summary>
     ///     Deletes what the ingest did not account for. The caller holds the write lock for this
@@ -150,15 +130,13 @@ public sealed partial class SqliteMemoryStore
     {
         await connection.ExecuteAsync(Def(MemorySql.CreateQueueRestoreTable, null, cancellationToken));
         await connection.ExecuteAsync(
-                Def(MemorySql.CaptureQueueRowsForSourcePath,
-                    new { projectId, path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path) }, cancellationToken));
+            Def(MemorySql.CaptureQueueRowsForSourcePath,
+                new { projectId, path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path) }, cancellationToken));
         await connection.ExecuteAsync(
-                Def(MemorySql.DeleteDiscardedQueueRowsForSourcePath,
-                    new { projectId, path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path) }, cancellationToken));
+            Def(MemorySql.DeleteDiscardedQueueRowsForSourcePath,
+                new { projectId, path, subtreeLow = PathSubtree.Low(path), subtreeHigh = PathSubtree.High(path) }, cancellationToken));
 
         var deletedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-        // A context-preserving replace prunes only its own bucket; the legacy path (null context)
-        // keeps the unscoped predicates it has always used.
         var ctx = pruneContext is null ? null : MemorySql.ContextKeyFor(pruneContext, projectId);
         var deleteAllPredicate = pruneContext is null
             ? MemorySql.DeleteAllChunksForPathPredicate
@@ -173,18 +151,18 @@ public sealed partial class SqliteMemoryStore
         if (keep.Count == 0)
         {
             await connection.ExecuteAsync(
-                    Def(MemorySql.TombstoneFromPredicate(deleteAllPredicate),
-                        new { projectId, path, deletedAt, ctx }, cancellationToken));
+                Def(MemorySql.TombstoneFromPredicate(deleteAllPredicate),
+                    new { projectId, path, deletedAt, ctx }, cancellationToken));
             await connection.ExecuteAsync(
-                    Def(deleteAll, new { projectId, path, ctx }, cancellationToken));
+                Def(deleteAll, new { projectId, path, ctx }, cancellationToken));
         }
         else
         {
             await connection.ExecuteAsync(
-                    Def(MemorySql.TombstoneFromPredicate(deleteExceptPredicate),
-                        new { projectId, path, keep, deletedAt, ctx }, cancellationToken));
+                Def(MemorySql.TombstoneFromPredicate(deleteExceptPredicate),
+                    new { projectId, path, keep, deletedAt, ctx }, cancellationToken));
             await connection.ExecuteAsync(
-                    Def(deleteExcept, new { projectId, path, keep, ctx }, cancellationToken));
+                Def(deleteExcept, new { projectId, path, keep, ctx }, cancellationToken));
         }
 
         if (keepCode is not null)
@@ -198,8 +176,8 @@ public sealed partial class SqliteMemoryStore
                 keep = keepCode
             };
             await connection.ExecuteAsync(keepCode.Count == 0
-                    ? Def(MemorySql.DeleteAllCodeChunksForPath, codeParams, cancellationToken)
-                    : Def(MemorySql.DeleteCodeChunksForPathExcept, codeParams, cancellationToken));
+                ? Def(MemorySql.DeleteAllCodeChunksForPath, codeParams, cancellationToken)
+                : Def(MemorySql.DeleteCodeChunksForPathExcept, codeParams, cancellationToken));
         }
 
         await connection.ExecuteAsync(Def(MemorySql.RestoreQueueRowsStillBacked, null, cancellationToken));
@@ -209,13 +187,9 @@ public sealed partial class SqliteMemoryStore
         Func<SqliteConnection, Task<bool>>? guard, string? context, CancellationToken cancellationToken,
         bool preserveMemoryMetadata = false)
     {
-        var result = await ReplaceCoreAsync(projectId, path, fileHash, guard, context,
-            true, cancellationToken, preserveMemoryMetadata);
+        var result = await ReplaceCoreAsync(projectId, path, fileHash, guard, context, true, cancellationToken, preserveMemoryMetadata);
         return new ReplaceResult(result.Ran, result.Corpus, result.Skipped);
     }
-
-    /// <summary>A stale claim (its holder crashed mid-chunk and never released it) can be reclaimed after this long.</summary>
-    internal static readonly TimeSpan ClaimStaleAfter = TimeSpan.FromMinutes(5);
 
     /// <summary>
     ///     Replace-by-path (WP12 Fix A): the chunker runs OUTSIDE the write lock (ingest-then-prune,
@@ -231,100 +205,48 @@ public sealed partial class SqliteMemoryStore
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
 
-        await connection.ActivateSharedAsync(projectId, _scope, cancellationToken);
+        await connection.ActivateSharedAsync(projectId, scope, cancellationToken);
 
-        // Unlocked pre-check: the common case (an unrelated concurrent replace never raced this
-        // path) declines here without ever touching the write lock.
         if (guard is not null && !await guard(connection))
         {
             return new ReplaceCoreResult(false, 0, CorpusKind.Neither);
         }
 
-        // Tracked explicitly, not re-derived from `guard is not null`: the catch below must
-        // release only a claim THIS call actually won, never one still held by whichever call did.
         var ownsClaim = false;
         if (guard is not null)
         {
             ownsClaim = await TryClaimChunkerAsync(connection, projectId, path, guard, cancellationToken);
             if (!ownsClaim)
             {
-                // Another replace on this exact path already owns the chunk — its own commit
-                // (fingerprint + released claim) will make the target state durable. Chunking here
-                // too would defeat the claim's whole point: chunk this path exactly once.
                 return new ReplaceCoreResult(false, 0, CorpusKind.Neither);
             }
         }
 
         try
         {
-            // fileIngestor self-filters by extension and, when the path is a code file, dispatches to
-            // ICodeIngestor internally (FileIngestor.IngestFileAsync) — one call covers both corpora.
-            // Autocommit, outside any lock: this is the chunker the write lock used to be held through.
-            var ingestResult = await fileIngestor
-                .IngestFileAsync(connection, projectId, path, context, cancellationToken, preserveMemoryMetadata);
+            var ingestResult = await fileIngestor.IngestFileAsync(connection, projectId, path, context, cancellationToken, preserveMemoryMetadata);
 
             var waitFrom = timeProvider.GetTimestamp();
-            await connection.ExecuteAsync(
-                    new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
+            await BeginTransaction(connection, cancellationToken);
             var waitMs = timeProvider.GetElapsedTime(waitFrom).TotalMilliseconds;
             var heldFrom = timeProvider.GetTimestamp();
+
             try
             {
-                await PruneAsync(connection, projectId, path, ingestResult.ChunkHashes ?? [],
-                        ingestResult.CodeChunkHashes, context, cancellationToken);
-                if (ownsClaim)
-                {
-                    await connection.ExecuteAsync(Def(MemorySql.ReleaseWatchDigestClaim,
-                            new { projectId, path }, cancellationToken));
-                }
-
-                // A zero-row stand-in chunk or a skipped file must NOT be fingerprinted: a
-                // fingerprint would hash-skip it forever, even once its content becomes ingestable.
-                // The prune above removed the old chunks, so the old fingerprint goes with them —
-                // else restoring the old content would hash-skip and leave the file chunkless.
-                if (fingerprint && ingestResult.FingerprintEligible)
-                {
-                    await connection.ExecuteAsync(
-                            Def(MemorySql.UpsertWatchFile,
-                                new
-                                {
-                                    projectId,
-                                    path,
-                                    fileHash,
-                                    updatedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
-                                }, cancellationToken));
-                }
-                else if (fingerprint)
-                {
-                    await connection.ExecuteAsync(
-                            Def(MemorySql.DeleteWatchFile, new { projectId, path }, cancellationToken));
-                }
-
-                await connection.ExecuteAsync(
-                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
-                var heldMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
-                Log.TransactionHeld(logger, waitMs, heldMs, ingestResult.RowsInserted);
-                RecordReplaceLockMetrics(projectId, waitMs, heldMs, ingestResult.RowsInserted);
-                return new ReplaceCoreResult(true, ingestResult.RowsInserted, ingestResult.WrittenCorpus,
-                    ingestResult.Skipped);
+                return await ExecuteReplacementAsync(connection, ingestResult, projectId, path, fileHash, context, fingerprint, ownsClaim, heldFrom, waitMs, cancellationToken);
             }
             catch
             {
-                // Uncancellable: a cancelled token would skip the ROLLBACK and return the pooled connection mid-transaction.
-                await connection.ExecuteAsync(
-                        new CommandDefinition("ROLLBACK", cancellationToken: CancellationToken.None));
+                await RollbackTransaction(connection);
                 throw;
             }
         }
         catch when (ownsClaim)
         {
-            // Best-effort: the ORIGINAL failure below must propagate, never one from this cleanup
-            // (e.g. a release that itself hits BUSY) — ClaimStaleAfter reclaims a leaked claim later.
             try
             {
-                await using var release = await factory.OpenBankAsync(CancellationToken.None);
-                await release.ExecuteAsync(Def(MemorySql.ReleaseWatchDigestClaim, new { projectId, path },
-                        CancellationToken.None));
+                await using var releaseConnection = await factory.OpenBankAsync(CancellationToken.None);
+                await releaseConnection.ExecuteAsync(Def(MemorySql.ReleaseWatchDigestClaim, new { projectId, path }, CancellationToken.None));
             }
             catch (Exception releaseEx)
             {
@@ -333,6 +255,47 @@ public sealed partial class SqliteMemoryStore
 
             throw;
         }
+    }
+
+    private static async Task RollbackTransaction(SqliteConnection connection) => await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: CancellationToken.None));
+
+    private async Task<ReplaceCoreResult> ExecuteReplacementAsync(SqliteConnection connection, FileIngestResult ingestResult, string projectId, string path, string? fileHash, string? context,
+        bool fingerprint, bool ownsClaim,
+        long heldFrom, double waitMs, CancellationToken cancellationToken)
+    {
+        await PruneAsync(connection, projectId, path, ingestResult.ChunkHashes ?? [], ingestResult.CodeChunkHashes, context, cancellationToken);
+
+        if (ownsClaim)
+        {
+            await connection.ExecuteAsync(Def(MemorySql.ReleaseWatchDigestClaim, new { projectId, path }, cancellationToken));
+        }
+
+        switch (fingerprint)
+        {
+            case true when ingestResult.FingerprintEligible:
+                await connection.ExecuteAsync(
+                    Def(MemorySql.UpsertWatchFile,
+                        new
+                        {
+                            projectId,
+                            path,
+                            fileHash,
+                            updatedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
+                        }, cancellationToken));
+                break;
+            case true:
+                await connection.ExecuteAsync(Def(MemorySql.DeleteWatchFile, new { projectId, path }, cancellationToken));
+                break;
+        }
+
+        await CommitTransaction(connection, cancellationToken);
+
+        var heldMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
+        Log.TransactionHeld(logger, waitMs, heldMs, ingestResult.RowsInserted);
+
+        RecordReplaceLockMetrics(projectId, waitMs, heldMs, ingestResult.RowsInserted);
+
+        return new ReplaceCoreResult(true, ingestResult.RowsInserted, ingestResult.WrittenCorpus, ingestResult.Skipped);
     }
 
     /// <summary>
@@ -346,16 +309,14 @@ public sealed partial class SqliteMemoryStore
         Func<SqliteConnection, Task<bool>> guard, CancellationToken cancellationToken)
     {
         var waitFrom = timeProvider.GetTimestamp();
-        await connection.ExecuteAsync(
-                new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
+        await BeginTransaction(connection, cancellationToken);
         var waitMs = timeProvider.GetElapsedTime(waitFrom).TotalMilliseconds;
         var heldFrom = timeProvider.GetTimestamp();
         try
         {
             if (!await guard(connection))
             {
-                await connection.ExecuteAsync(
-                        new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
+                await CommitTransaction(connection, cancellationToken);
                 var declinedHeldMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
                 Log.TransactionHeld(logger, waitMs, declinedHeldMs, 0);
                 RecordReplaceLockMetrics(projectId, waitMs, declinedHeldMs, 0);
@@ -364,28 +325,36 @@ public sealed partial class SqliteMemoryStore
 
             var now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
             var claimed = await connection.ExecuteAsync(
-                    Def(MemorySql.TryClaimWatchDigest,
-                        new { projectId, path, claimedAt = now, staleAfterSeconds = (long)ClaimStaleAfter.TotalSeconds },
-                        cancellationToken)) > 0;
-            await connection.ExecuteAsync(
-                    new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
-            if (!claimed)
+                Def(MemorySql.TryClaimWatchDigest,
+                    new { projectId, path, claimedAt = now, staleAfterSeconds = (long)ClaimStaleAfter.TotalSeconds },
+                    cancellationToken)) > 0;
+
+            await CommitTransaction(connection, cancellationToken);
+
+            if (claimed)
             {
-                var heldMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
-                Log.TransactionHeld(logger, waitMs, heldMs, 0);
-                RecordReplaceLockMetrics(projectId, waitMs, heldMs, 0);
+                return claimed;
             }
+
+            var heldMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
+            Log.TransactionHeld(logger, waitMs, heldMs, 0);
+            RecordReplaceLockMetrics(projectId, waitMs, heldMs, 0);
 
             return claimed;
         }
         catch
         {
             // Uncancellable: a cancelled token would skip the ROLLBACK and return the pooled connection mid-transaction.
-            await connection.ExecuteAsync(
-                    new CommandDefinition("ROLLBACK", cancellationToken: CancellationToken.None));
+            await RollbackTransaction(connection);
             throw;
         }
     }
+
+    private static async Task BeginTransaction(SqliteConnection connection, CancellationToken cancellationToken) =>
+        await connection.ExecuteAsync(new CommandDefinition("BEGIN IMMEDIATE", cancellationToken: cancellationToken));
+
+    private static async Task CommitTransaction(SqliteConnection connection, CancellationToken cancellationToken) =>
+        await connection.ExecuteAsync(new CommandDefinition("COMMIT", cancellationToken: cancellationToken));
 
     /// <summary>
     ///     WP11 (log-values-as-metrics) + WP12 (wait/held split): EventId 899's wait/held ms and row
@@ -410,11 +379,11 @@ public sealed partial class SqliteMemoryStore
         public static partial void ClaimReleaseFailed(ILogger logger, string path, Exception exception);
 
         [LoggerMessage(EventId = 899, Level = LogLevel.Information,
-            Message = "Replace-by-path waited {WaitMs:F1} ms for the write lock and held it {HeldMs:F1} ms "
-                      + "({Rows} row(s) written)")]
+            Message = "Replace-by-path waited {WaitMs:F1} ms for the write lock and held it {HeldMs:F1} ms ({Rows} row(s) written)")]
         public static partial void TransactionHeld(ILogger logger, double waitMs, double heldMs, int rows);
     }
 
     /// <summary><see cref="ReplaceCoreAsync" />'s outcome: whether it ran at all, the rows it wrote, and which corpus.</summary>
+    [UsedImplicitly]
     private readonly record struct ReplaceCoreResult(bool Ran, int Rows, CorpusKind Corpus, SkipReason? Skipped = null);
 }

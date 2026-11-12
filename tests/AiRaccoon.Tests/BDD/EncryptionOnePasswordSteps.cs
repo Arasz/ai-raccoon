@@ -15,7 +15,7 @@ public sealed class EncryptionOnePasswordSteps(ScenarioContext scenarioContext)
 {
     private const string Token = "ops_test_token_0123";
 
-    private EncryptionOnePasswordFeatureContext.CliOutcome _lastCli = new(0, string.Empty, string.Empty);
+    private EncryptionOnePasswordFeatureContext.CliOutcome _lastCli = new(0, "", "");
 
     private string? _startError;
 
@@ -46,7 +46,7 @@ public sealed class EncryptionOnePasswordSteps(ScenarioContext scenarioContext)
         _lastCli = await Ctx.RunCliAsync($"{reference}\n", "encryption", "1password");
 
     [When("^the user shows the encryption source$")]
-    public async Task WhenUserShowsTheEncryptionSource() => _lastCli = await Ctx.RunCliAsync(string.Empty, "encryption", "show");
+    public async Task WhenUserShowsTheEncryptionSource() => _lastCli = await Ctx.RunCliAsync("", "encryption", "show");
 
     [When("^the server opens the bank through op$")]
     public async Task WhenServerOpensTheBankThroughOp() => _startError = await Ctx.StartServerErrorAsync();
@@ -92,7 +92,7 @@ public sealed class EncryptionOnePasswordSteps(ScenarioContext scenarioContext)
     [Then("^op was not asked to read anything$")]
     public async Task ThenOpNotAskedToRead()
     {
-        var calls = File.Exists(Ctx.CallsLogPath) ? await File.ReadAllTextAsync(Ctx.CallsLogPath) : string.Empty;
+        var calls = File.Exists(Ctx.CallsLogPath) ? await File.ReadAllTextAsync(Ctx.CallsLogPath) : "";
         calls.ShouldNotContain("read ");
     }
 

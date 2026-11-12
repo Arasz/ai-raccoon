@@ -18,23 +18,30 @@ public static class NoteTextOrder
     /// <summary>Rotations tried of each base order: a writer's opening-last layout needs one, a re-chunked head a few.</summary>
     internal const int MaxShifts = 4;
 
-    /// <summary>Work one <see cref="Find(string, IReadOnlyList{NoteRow})" /> call may spend: one unit per overlay
-    /// tried at a junction, one per row for each joined body hashed. Past it the note is unprovable.</summary>
+    /// <summary>
+    ///     Work one <see cref="Find(string, IReadOnlyList{NoteRow})" /> call may spend: one unit per overlay
+    ///     tried at a junction, one per row for each joined body hashed. Past it the note is unprovable.
+    /// </summary>
     internal const int MaxWork = 100_000;
 
-    /// <summary>The path hashes the body as written, but rows hold it with \n endings; a body that used one other
-    /// ending throughout is restored and checked too. Mixed endings cannot be restored without guessing.</summary>
+    /// <summary>
+    ///     The path hashes the body as written, but rows hold it with \n endings; a body that used one other
+    ///     ending throughout is restored and checked too. Mixed endings cannot be restored without guessing.
+    /// </summary>
     private static readonly string[] BodyLineEndings = ["\n", "\r\n", "\r"];
 
-    /// <summary>The rows in text order, or null when no candidate order joins back into the body the path names
-    /// within the work budget.</summary>
+    /// <summary>
+    ///     The rows in text order, or null when no candidate order joins back into the body the path names
+    ///     within the work budget.
+    /// </summary>
     public static IReadOnlyList<NoteRow>? Find(string path, IReadOnlyList<NoteRow> rows) => Find(path, rows, out _);
 
-    internal static IReadOnlyList<NoteRow>? Find(string path, IReadOnlyList<NoteRow> rows, out int work) =>
-        FindCore(path, rows, out work, out _);
+    internal static IReadOnlyList<NoteRow>? Find(string path, IReadOnlyList<NoteRow> rows, out int work) => FindCore(path, rows, out work, out _);
 
-    /// <summary>The body the rows join back into — the exact text its path's stem hashes, line endings restored —
-    /// or null when no candidate order proves one within the work budget.</summary>
+    /// <summary>
+    ///     The body the rows join back into — the exact text its path's stem hashes, line endings restored —
+    ///     or null when no candidate order proves one within the work budget.
+    /// </summary>
     internal static string? FindMerged(string path, IReadOnlyList<NoteRow> rows) => FindMerged(path, rows, out _);
 
     internal static string? FindMerged(string path, IReadOnlyList<NoteRow> rows, out int work)
@@ -94,9 +101,11 @@ public static class NoteTextOrder
         ];
     }
 
-    /// <summary>The id order and the position order, each with up to <see cref="MaxShifts" /> of its last rows moved to
-    /// the front. Writers append a note's rows as one run, in text order or with the opening last; a re-chunk keeps a
-    /// run's place and its pieces at the run's slot.</summary>
+    /// <summary>
+    ///     The id order and the position order, each with up to <see cref="MaxShifts" /> of its last rows moved to
+    ///     the front. Writers append a note's rows as one run, in text order or with the opening last; a re-chunk keeps a
+    ///     run's place and its pieces at the run's slot.
+    /// </summary>
     private static IEnumerable<List<NoteRow>> Candidates(IReadOnlyList<NoteRow> rows)
     {
         List<NoteRow> byId = [.. rows.OrderBy(row => row.Id)];
@@ -114,12 +123,13 @@ public static class NoteTextOrder
     }
 
     /// <summary>The list with its last <paramref name="shift" /> items moved to the front.</summary>
-    private static List<NoteRow> Rotated(List<NoteRow> rows, int shift) =>
-        [.. rows.Skip(rows.Count - shift), .. rows.Take(rows.Count - shift)];
+    private static List<NoteRow> Rotated(List<NoteRow> rows, int shift) => [.. rows.Skip(rows.Count - shift), .. rows.Take(rows.Count - shift)];
 
-    /// <summary>Searches the overlay choices at every junction depth first, with an explicit stack so a long note
-    /// cannot exhaust the thread's stack, and gives up once <paramref name="work" /> would pass <paramref name="limit" />:
-    /// each candidate order gets an equal share, so a wrong one cannot starve the rest.</summary>
+    /// <summary>
+    ///     Searches the overlay choices at every junction depth first, with an explicit stack so a long note
+    ///     cannot exhaust the thread's stack, and gives up once <paramref name="work" /> would pass <paramref name="limit" />:
+    ///     each candidate order gets an equal share, so a wrong one cannot starve the rest.
+    /// </summary>
     private static bool Joins(List<NoteRow> order, string bodyHash, ref int work, int limit, out string? joined)
     {
         joined = null;
@@ -182,9 +192,11 @@ public static class NoteTextOrder
         return false;
     }
 
-    /// <summary>Overlay lengths the next row may start with, longest first: whole lines that open it and also close the
-    /// row before, or none. The chunker's overlay is whole units, and a unit that starts mid-line (a later piece of a cut
-    /// line) never shares a row with the piece before it.</summary>
+    /// <summary>
+    ///     Overlay lengths the next row may start with, longest first: whole lines that open it and also close the
+    ///     row before, or none. The chunker's overlay is whole units, and a unit that starts mid-line (a later piece of a cut
+    ///     line) never shares a row with the piece before it.
+    /// </summary>
     private static List<int> Overlays(string before, string value, ref int work, int limit)
     {
         List<int> overlays = [];
@@ -206,8 +218,10 @@ public static class NoteTextOrder
         return overlays;
     }
 
-    /// <summary>True when one line-ending variant of <paramref name="joined" /> hashes to <paramref name="bodyHash" />;
-    /// <paramref name="matched" /> is the variant that did — the body exactly as sent.</summary>
+    /// <summary>
+    ///     True when one line-ending variant of <paramref name="joined" /> hashes to <paramref name="bodyHash" />;
+    ///     <paramref name="matched" /> is the variant that did — the body exactly as sent.
+    /// </summary>
     private static bool TryMatch(string joined, string bodyHash, out string matched)
     {
         foreach (var ending in BodyLineEndings)

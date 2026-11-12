@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Json;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
-using AiRaccoon.Hosting.Proxy;
 using AiRaccoon.Observability;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;

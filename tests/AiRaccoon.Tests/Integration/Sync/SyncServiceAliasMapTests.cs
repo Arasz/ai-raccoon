@@ -2,7 +2,6 @@ using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Sync;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
-using AiRaccoon.Tests;
 using AiRaccoon.Tests.Unit.Projects;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;

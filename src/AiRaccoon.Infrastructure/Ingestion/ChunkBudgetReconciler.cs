@@ -18,11 +18,15 @@ namespace AiRaccoon.Infrastructure.Ingestion;
 /// <param name="MirrorGroupsRechunked">File-row groups re-ingested from their source file on disk.</param>
 /// <param name="GroupsUnchanged">Groups whose rows already reproduce at the resolved budget.</param>
 /// <param name="RetryableSkipped">Note groups no join proves — untouched, retried on a later pass.</param>
-/// <param name="UnprovableSkipped">Note groups that stayed unprovable through the retry bound — untouched,
-/// terminal for this budget.</param>
+/// <param name="UnprovableSkipped">
+///     Note groups that stayed unprovable through the retry bound — untouched,
+///     terminal for this budget.
+/// </param>
 /// <param name="TerminalSkipped">Mirror groups whose source file is gone — nothing re-chunkable exists.</param>
-/// <param name="Elapsed">The phase's wall-clock duration, measured from its first read to its stamp
-/// write — the number event 448 carries.</param>
+/// <param name="Elapsed">
+///     The phase's wall-clock duration, measured from its first read to its stamp
+///     write — the number event 448 carries.
+/// </param>
 public sealed record ChunkRebudgetReport(
     int Budget,
     int NoteGroupsRechunked,
@@ -50,8 +54,10 @@ public interface IChunkBudgetReconciler
     /// <summary>Read-only drift check: how the stored stamp compares to the resolved budget.</summary>
     Task<ChunkBudgetState> CheckAsync(SqliteConnection connection, CancellationToken cancellationToken = default);
 
-    /// <summary>Re-chunks every group at the resolved budget; the <c>embedding.chunkBudget</c> stamp is written
-    /// at zero retryable skips and cleared otherwise, so it exists only for a bank a run converged.</summary>
+    /// <summary>
+    ///     Re-chunks every group at the resolved budget; the <c>embedding.chunkBudget</c> stamp is written
+    ///     at zero retryable skips and cleared otherwise, so it exists only for a bank a run converged.
+    /// </summary>
     Task<ChunkRebudgetReport> RunAsync(SqliteConnection connection, CancellationToken cancellationToken = default);
 }
 
@@ -76,8 +82,10 @@ public sealed partial class ChunkBudgetReconciler(
     ILogger<ChunkBudgetReconciler> logger,
     IEntryKindClassifier entryTypeClassifier) : IChunkBudgetReconciler
 {
-    /// <summary>How many server starts a permanently-unprovable group may withhold the stamp before it is
-    /// left terminal for this budget (config-D F5) — the bound that stops the migration re-opening forever.</summary>
+    /// <summary>
+    ///     How many server starts a permanently-unprovable group may withhold the stamp before it is
+    ///     left terminal for this budget (config-D F5) — the bound that stops the migration re-opening forever.
+    /// </summary>
     internal const int MaxRetryAttempts = 3;
 
     /// <summary>The persisted retry budget, keyed by the resolved budget so a new budget starts fresh.</summary>
@@ -216,7 +224,7 @@ public sealed partial class ChunkBudgetReconciler(
             // same file stored under two contexts keeps both and never silently relabels to project.
             await memoryStore().ReplaceAsync(group.ProjectId, group.SourceFile,
                 WatchDigestExecutor.ComputeHash(group.SourceFile, scan.Content), MirrorContext(group), cancellationToken,
-                preserveMemoryMetadata: true);
+                true);
             mirrorsRechunked++;
         }
 
@@ -282,8 +290,10 @@ public sealed partial class ChunkBudgetReconciler(
         return report;
     }
 
-    /// <summary>The context string that maps back to a mirror group's own bucket — so a replace
-    /// re-ingests under the scope/context/workspace the rows were stored under, never the project default.</summary>
+    /// <summary>
+    ///     The context string that maps back to a mirror group's own bucket — so a replace
+    ///     re-ingests under the scope/context/workspace the rows were stored under, never the project default.
+    /// </summary>
     private static string MirrorContext(MirrorGroup group) =>
         group.WorkspaceId is not null
             ? ContextNaming.WorkspaceContext(group.WorkspaceId)
@@ -370,7 +380,7 @@ public sealed partial class ChunkBudgetReconciler(
                         updatedAt = now,
                         sourceId = template.SourceId,
                         ttlDays = entryType == EntryKindWireNames.Memory ? template.TtlDays : null,
-                        entryType = entryType,
+                        entryType,
                         // Plain notes keep WriteChunks' sentinel; the phase-end repair positions citing notes.
                         chunkIndex = -1,
                         totalChunks = 0
@@ -379,25 +389,49 @@ public sealed partial class ChunkBudgetReconciler(
         }, cancellationToken);
     }
 
-    private sealed record NoteGroup(string? Scope, string? ProjectId, string? ContextLabel, string? WorkspaceId,
+    private sealed record NoteGroup(
+        string? Scope,
+        string? ProjectId,
+        string? ContextLabel,
+        string? WorkspaceId,
         string? Path);
 
-    private sealed record GroupRow(long Id, string Hash, string Value, string? SourceFile, string? Section,
-        string? Scope, string? ProjectId, string? ContextLabel, string? WorkspaceId, string? AgentId,
-        long CreatedAt, long? SourceId, long ChunkIndex, long? TtlDays, string? EntryType);
+    private sealed record GroupRow(
+        long Id,
+        string Hash,
+        string Value,
+        string? SourceFile,
+        string? Section,
+        string? Scope,
+        string? ProjectId,
+        string? ContextLabel,
+        string? WorkspaceId,
+        string? AgentId,
+        long CreatedAt,
+        long? SourceId,
+        long ChunkIndex,
+        long? TtlDays,
+        string? EntryType);
 
-    private sealed record MirrorGroup(string? Scope, string ProjectId, string? ContextLabel, string? WorkspaceId,
+    private sealed record MirrorGroup(
+        string? Scope,
+        string ProjectId,
+        string? ContextLabel,
+        string? WorkspaceId,
         string SourceFile);
 
     private sealed record MirrorRow(long Id, string Hash);
 
-    /// <summary>Event 448 (config-D F4): one line per phase run with the report's counts and its
-    /// wall-clock duration, so a partial migration is visible in production — re-chunked, unchanged,
-    /// retryable, unprovable, terminal, and how long the phase took.</summary>
+    /// <summary>
+    ///     Event 448 (config-D F4): one line per phase run with the report's counts and its
+    ///     wall-clock duration, so a partial migration is visible in production — re-chunked, unchanged,
+    ///     retryable, unprovable, terminal, and how long the phase took.
+    /// </summary>
     private static partial class Log
     {
         [LoggerMessage(EventId = 448, Level = LogLevel.Information,
-            Message = "Chunk-budget rebudget at {Budget} tokens: {NoteGroupsRechunked} note group(s) and {MirrorGroupsRechunked} mirror group(s) re-chunked, {GroupsUnchanged} unchanged, {RetryableSkipped} retryable, {UnprovableSkipped} unprovable, {TerminalSkipped} terminal in {Elapsed}")]
+            Message =
+                "Chunk-budget rebudget at {Budget} tokens: {NoteGroupsRechunked} note group(s) and {MirrorGroupsRechunked} mirror group(s) re-chunked, {GroupsUnchanged} unchanged, {RetryableSkipped} retryable, {UnprovableSkipped} unprovable, {TerminalSkipped} terminal in {Elapsed}")]
         public static partial void RebudgetCompleted(ILogger logger, int budget, int noteGroupsRechunked,
             int mirrorGroupsRechunked, int groupsUnchanged, int retryableSkipped, int unprovableSkipped,
             int terminalSkipped, TimeSpan elapsed);

@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Projects;
+using AiRaccoon.Infrastructure.Sqlite.Decisions;
 using CommunityToolkit.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -35,11 +36,14 @@ public sealed record ProjectIdsRepairResult(
         MetricsMoved + NoiseMoved;
 }
 
-/// <summary>Atomically folds, drops or retires project IDs across owned surfaces.
-/// Native graph owners refuse before any mutation; failures leave the bank unchanged.</summary>
+/// <summary>
+///     Atomically folds, drops or retires project IDs across owned surfaces.
+///     Native graph owners refuse before any mutation; failures leave the bank unchanged.
+/// </summary>
 public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectScope scope)
 {
     private readonly ISharedProjectScope _scope = scope;
+
     /// <summary>Checks ownership and applies every surface under one write lock; returns per-surface counts.</summary>
     public async Task<ProjectIdsRepairResult> ApplyAsync(SqliteConnection connection, ProjectIdsFoldPlan plan,
         CancellationToken cancellationToken = default)
@@ -105,8 +109,8 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
 
         var tables = await connection.QueryAsync<string>(new CommandDefinition(
             "SELECT name FROM sqlite_master WHERE type='table' AND name IN @names",
-            new { names = Decisions.DecisionSchema.ProjectTableNames.ToArray() }, cancellationToken: cancellationToken));
-        var owners = new List<Decisions.DecisionGraphOwner>();
+            new { names = DecisionSchema.ProjectTableNames.ToArray() }, cancellationToken: cancellationToken));
+        var owners = new List<DecisionGraphOwner>();
         foreach (var project in projects)
         {
             var occupied = new List<string>();
@@ -123,13 +127,13 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
 
             if (occupied.Count > 0)
             {
-                owners.Add(new Decisions.DecisionGraphOwner(project, occupied));
+                owners.Add(new DecisionGraphOwner(project, occupied));
             }
         }
 
         if (owners.Count > 0)
         {
-            throw new Decisions.DecisionGraphRepairException(owners);
+            throw new DecisionGraphRepairException(owners);
         }
     }
 
@@ -151,12 +155,12 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
             total += await connection.InWriteTransactionAsync(() => connection.ExecuteAsync(
                     new CommandDefinition(
                         $"""
-                        UPDATE entries
-                        SET embed_state = 'pending', embedding = NULL,
-                            structure_embedding = NULL, heading_path = NULL
-                        WHERE embed_state = 'embedded'
-                          AND {ProjectRows.CommittedScope("", "loser")}
-                        """,
+                         UPDATE entries
+                         SET embed_state = 'pending', embedding = NULL,
+                             structure_embedding = NULL, heading_path = NULL
+                         WHERE embed_state = 'embedded'
+                           AND {ProjectRows.CommittedScope("", "loser")}
+                         """,
                         new { loser = fold.Loser }, cancellationToken: cancellationToken)),
                 cancellationToken);
         }
@@ -204,20 +208,20 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
                 // the queue legs are winner-keyed and promotion_queue_entries_ad (which matches
                 // OLD.project_id = loser) never touches the merged candidates.
                 var stepMoved = await connection.ExecuteAsync(new CommandDefinition(
-                        $"""
-                        UPDATE entries SET project_id = @winner
-                        WHERE {ProjectRows.CommittedScope("", "loser")}
-                          AND NOT EXISTS (
-                              SELECT 1 FROM entries w
-                              WHERE {ProjectRows.CommittedScope("w.", "winner")}
-                                AND w.path = entries.path AND w.hash = entries.hash
-                                AND w.scope = entries.scope
-                                AND COALESCE(w.context_label, '') = COALESCE(entries.context_label, ''))
-                        """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
+                    $"""
+                     UPDATE entries SET project_id = @winner
+                     WHERE {ProjectRows.CommittedScope("", "loser")}
+                       AND NOT EXISTS (
+                           SELECT 1 FROM entries w
+                           WHERE {ProjectRows.CommittedScope("w.", "winner")}
+                             AND w.path = entries.path AND w.hash = entries.hash
+                             AND w.scope = entries.scope
+                             AND COALESCE(w.context_label, '') = COALESCE(entries.context_label, ''))
+                     """,
+                    new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepDeleted = await connection.ExecuteAsync(new CommandDefinition(
-                        "DELETE FROM entries WHERE " + ProjectRows.CommittedScope("", "loser"),
-                        new { loser = fold.Loser }, cancellationToken: cancellationToken));
+                    $"DELETE FROM entries WHERE {ProjectRows.CommittedScope("", "loser")}",
+                    new { loser = fold.Loser }, cancellationToken: cancellationToken));
                 return (Moved: stepMoved, Deleted: stepDeleted);
             }, cancellationToken);
             moved += step.Moved;
@@ -229,15 +233,15 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
             var step = await connection.InWriteTransactionAsync(async () =>
             {
                 var stepTombstoned = await connection.ExecuteAsync(new CommandDefinition(
-                        """
-                        INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at)
-                        SELECT project_id, hash, scope, context_label, @now FROM entries
-                        WHERE project_id = @dropped AND scope IN ('project', 'custom', 'shared')
-                        """,
-                        new { dropped, now }, cancellationToken: cancellationToken));
+                    """
+                    INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at)
+                    SELECT project_id, hash, scope, context_label, @now FROM entries
+                    WHERE project_id = @dropped AND scope IN ('project', 'custom', 'shared')
+                    """,
+                    new { dropped, now }, cancellationToken: cancellationToken));
                 var stepDeleted = await connection.ExecuteAsync(new CommandDefinition(
-                        "DELETE FROM entries WHERE project_id = @dropped AND scope IN ('project', 'custom', 'shared')",
-                        new { dropped }, cancellationToken: cancellationToken));
+                    "DELETE FROM entries WHERE project_id = @dropped AND scope IN ('project', 'custom', 'shared')",
+                    new { dropped }, cancellationToken: cancellationToken));
                 return (Tombstoned: stepTombstoned, Deleted: stepDeleted);
             }, cancellationToken);
             tombstoned += step.Tombstoned;
@@ -260,18 +264,18 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
                 // row — dropped outright, no tombstone. code_fts/code-vec shadows are rowid-keyed:
                 // the UPDATE is a trigger no-op for them, the DELETE cleans them via code_fts_ad.
                 var stepMoved = await connection.ExecuteAsync(new CommandDefinition(
-                        """
-                        UPDATE code_entries SET project_id = @winner
-                        WHERE project_id = @loser
-                          AND NOT EXISTS (
-                              SELECT 1 FROM code_entries w
-                              WHERE w.project_id = @winner
-                                AND w.path = code_entries.path AND w.hash = code_entries.hash)
-                        """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
+                    """
+                    UPDATE code_entries SET project_id = @winner
+                    WHERE project_id = @loser
+                      AND NOT EXISTS (
+                          SELECT 1 FROM code_entries w
+                          WHERE w.project_id = @winner
+                            AND w.path = code_entries.path AND w.hash = code_entries.hash)
+                    """,
+                    new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepDeleted = await connection.ExecuteAsync(new CommandDefinition(
-                        "DELETE FROM code_entries WHERE project_id = @loser",
-                        new { loser = fold.Loser }, cancellationToken: cancellationToken));
+                    "DELETE FROM code_entries WHERE project_id = @loser",
+                    new { loser = fold.Loser }, cancellationToken: cancellationToken));
                 return (Moved: stepMoved, Deduped: stepDeleted);
             }, cancellationToken);
             moved += step.Moved;
@@ -305,30 +309,30 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
             var step = await connection.InWriteTransactionAsync(async () =>
             {
                 var stepMerged = await connection.ExecuteAsync(new CommandDefinition(
-                        """
-                        UPDATE promotion_queue AS w
-                        SET score = MAX(w.score, (SELECT l.score FROM promotion_queue l
-                                                 WHERE l.project_id = @loser AND l.hash = w.hash)),
-                            created_at = MIN(w.created_at, (SELECT l.created_at FROM promotion_queue l
-                                                            WHERE l.project_id = @loser AND l.hash = w.hash)),
-                            updated_at = MAX(w.updated_at, (SELECT l.updated_at FROM promotion_queue l
-                                                            WHERE l.project_id = @loser AND l.hash = w.hash))
-                        WHERE w.project_id = @winner
-                          AND EXISTS (SELECT 1 FROM promotion_queue l
-                                      WHERE l.project_id = @loser AND l.hash = w.hash)
-                        """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
+                    """
+                    UPDATE promotion_queue AS w
+                    SET score = MAX(w.score, (SELECT l.score FROM promotion_queue l
+                                             WHERE l.project_id = @loser AND l.hash = w.hash)),
+                        created_at = MIN(w.created_at, (SELECT l.created_at FROM promotion_queue l
+                                                        WHERE l.project_id = @loser AND l.hash = w.hash)),
+                        updated_at = MAX(w.updated_at, (SELECT l.updated_at FROM promotion_queue l
+                                                        WHERE l.project_id = @loser AND l.hash = w.hash))
+                    WHERE w.project_id = @winner
+                      AND EXISTS (SELECT 1 FROM promotion_queue l
+                                  WHERE l.project_id = @loser AND l.hash = w.hash)
+                    """,
+                    new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepMoved = await connection.ExecuteAsync(new CommandDefinition(
-                        """
-                        UPDATE promotion_queue SET project_id = @winner
-                        WHERE project_id = @loser
-                          AND NOT EXISTS (SELECT 1 FROM promotion_queue w
-                                          WHERE w.project_id = @winner AND w.hash = promotion_queue.hash)
-                        """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
+                    """
+                    UPDATE promotion_queue SET project_id = @winner
+                    WHERE project_id = @loser
+                      AND NOT EXISTS (SELECT 1 FROM promotion_queue w
+                                      WHERE w.project_id = @winner AND w.hash = promotion_queue.hash)
+                    """,
+                    new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepRemoved = await connection.ExecuteAsync(new CommandDefinition(
-                        "DELETE FROM promotion_queue WHERE project_id = @loser",
-                        new { loser = fold.Loser }, cancellationToken: cancellationToken));
+                    "DELETE FROM promotion_queue WHERE project_id = @loser",
+                    new { loser = fold.Loser }, cancellationToken: cancellationToken));
                 return (Merged: stepMerged, Moved: stepMoved, Removed: stepRemoved);
             }, cancellationToken);
             merged += step.Merged;
@@ -361,14 +365,14 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
             total += await connection.InWriteTransactionAsync(async () =>
             {
                 await connection.ExecuteAsync(new CommandDefinition(
-                        """
-                        INSERT OR IGNORE INTO promotion_discards (project_id, hash, discarded_at)
-                        SELECT @winner, hash, discarded_at FROM promotion_discards WHERE project_id = @loser
-                        """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
+                    """
+                    INSERT OR IGNORE INTO promotion_discards (project_id, hash, discarded_at)
+                    SELECT @winner, hash, discarded_at FROM promotion_discards WHERE project_id = @loser
+                    """,
+                    new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 return await connection.ExecuteAsync(new CommandDefinition(
-                        "DELETE FROM promotion_discards WHERE project_id = @loser",
-                        new { loser = fold.Loser }, cancellationToken: cancellationToken));
+                    "DELETE FROM promotion_discards WHERE project_id = @loser",
+                    new { loser = fold.Loser }, cancellationToken: cancellationToken));
             }, cancellationToken);
         }
 
@@ -425,11 +429,11 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
             var step = await connection.InWriteTransactionAsync(async () =>
             {
                 var stepMetrics = await connection.ExecuteAsync(new CommandDefinition(
-                        "UPDATE metrics SET project_id = @winner WHERE project_id = @loser",
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
+                    "UPDATE metrics SET project_id = @winner WHERE project_id = @loser",
+                    new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepNoise = await connection.ExecuteAsync(new CommandDefinition(
-                        "UPDATE noise_entries SET project_id = @winner WHERE project_id = @loser",
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
+                    "UPDATE noise_entries SET project_id = @winner WHERE project_id = @loser",
+                    new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 return (Metrics: stepMetrics, Noise: stepNoise);
             }, cancellationToken);
             metrics += step.Metrics;
@@ -461,12 +465,11 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
                     // UPDATE-first preserves the row (and its scan lease) in the common case;
                     // a same-path leftover means the winner already holds that path, so it deletes.
                     var stepMoved = await connection.ExecuteAsync(new CommandDefinition(
-                            $"UPDATE {table} SET project_id = @winner WHERE project_id = @loser " +
-                            $"AND NOT EXISTS (SELECT 1 FROM {table} w WHERE w.project_id = @winner AND w.path = {table}.path)",
-                            new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
+                        $"UPDATE {table} SET project_id = @winner WHERE project_id = @loser AND NOT EXISTS (SELECT 1 FROM {table} w WHERE w.project_id = @winner AND w.path = {table}.path)",
+                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                     var stepRemoved = await connection.ExecuteAsync(new CommandDefinition(
-                            $"DELETE FROM {table} WHERE project_id = @loser",
-                            new { loser = fold.Loser }, cancellationToken: cancellationToken));
+                        $"DELETE FROM {table} WHERE project_id = @loser",
+                        new { loser = fold.Loser }, cancellationToken: cancellationToken));
                     return stepMoved + stepRemoved;
                 }, cancellationToken);
             }
@@ -501,27 +504,27 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
                 foreach (var (loserKey, winnerKey) in pairs)
                 {
                     var loserExists = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                            "SELECT count(*) FROM settings WHERE key = @key",
-                            new { key = loserKey }, cancellationToken: cancellationToken)) > 0;
+                        "SELECT count(*) FROM settings WHERE key = @key",
+                        new { key = loserKey }, cancellationToken: cancellationToken)) > 0;
                     if (!loserExists)
                     {
                         continue;
                     }
 
                     var winnerExists = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                            "SELECT count(*) FROM settings WHERE key = @key",
-                            new { key = winnerKey }, cancellationToken: cancellationToken)) > 0;
+                        "SELECT count(*) FROM settings WHERE key = @key",
+                        new { key = winnerKey }, cancellationToken: cancellationToken)) > 0;
                     if (winnerExists)
                     {
                         handled += await connection.ExecuteAsync(new CommandDefinition(
-                                "DELETE FROM settings WHERE key = @key",
-                                new { key = loserKey }, cancellationToken: cancellationToken));
+                            "DELETE FROM settings WHERE key = @key",
+                            new { key = loserKey }, cancellationToken: cancellationToken));
                     }
                     else
                     {
                         handled += await connection.ExecuteAsync(new CommandDefinition(
-                                "UPDATE settings SET key = @winnerKey WHERE key = @loserKey",
-                                new { winnerKey, loserKey }, cancellationToken: cancellationToken));
+                            "UPDATE settings SET key = @winnerKey WHERE key = @loserKey",
+                            new { winnerKey, loserKey }, cancellationToken: cancellationToken));
                     }
                 }
 
@@ -544,7 +547,7 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
     private static IEnumerable<SettingsKeyPair> SettingsKeyPairs(string loser, string winner) =>
         ProjectSettingsKeys.Prefixes
             .Where(prefix => ProjectSettingsKeys.TryGetProjectId(prefix.Prefix + loser, out _)
-                && ProjectSettingsKeys.TryGetProjectId(prefix.Prefix + winner, out _))
+                             && ProjectSettingsKeys.TryGetProjectId(prefix.Prefix + winner, out _))
             .Select(prefix => new SettingsKeyPair(prefix.Prefix + loser, prefix.Prefix + winner));
 
     /// <summary>
@@ -569,8 +572,8 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
                 foreach (var winner in winners)
                 {
                     count += await connection.ExecuteAsync(new CommandDefinition(
-                            "INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (@winner, @winner, @now)",
-                            new { winner, now }, cancellationToken: cancellationToken));
+                        "INSERT OR IGNORE INTO projects (id, name, created_at) VALUES (@winner, @winner, @now)",
+                        new { winner, now }, cancellationToken: cancellationToken));
                 }
 
                 return count;
@@ -609,29 +612,29 @@ public sealed class ProjectIdsRepair(TimeProvider timeProvider, ISharedProjectSc
             rewritten += await connection.InWriteTransactionAsync(async () =>
             {
                 await connection.ExecuteAsync(new CommandDefinition(
-                        """
-                        UPDATE sync_tombstones AS w
-                        SET deleted_at = MAX(w.deleted_at, (SELECT l.deleted_at FROM sync_tombstones l
-                                                            WHERE l.project_id = @loser
-                                                              AND l.hash = w.hash AND l.scope = w.scope))
-                        WHERE w.project_id = @winner
-                          AND EXISTS (SELECT 1 FROM sync_tombstones l
-                                      WHERE l.project_id = @loser AND l.hash = w.hash AND l.scope = w.scope)
-                        """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
+                    """
+                    UPDATE sync_tombstones AS w
+                    SET deleted_at = MAX(w.deleted_at, (SELECT l.deleted_at FROM sync_tombstones l
+                                                        WHERE l.project_id = @loser
+                                                          AND l.hash = w.hash AND l.scope = w.scope))
+                    WHERE w.project_id = @winner
+                      AND EXISTS (SELECT 1 FROM sync_tombstones l
+                                  WHERE l.project_id = @loser AND l.hash = w.hash AND l.scope = w.scope)
+                    """,
+                    new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepMoved = await connection.ExecuteAsync(new CommandDefinition(
-                        """
-                        UPDATE sync_tombstones SET project_id = @winner
-                        WHERE project_id = @loser
-                          AND NOT EXISTS (
-                              SELECT 1 FROM sync_tombstones w
-                              WHERE w.project_id = @winner
-                                AND w.hash = sync_tombstones.hash AND w.scope = sync_tombstones.scope)
-                        """,
-                        new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
+                    """
+                    UPDATE sync_tombstones SET project_id = @winner
+                    WHERE project_id = @loser
+                      AND NOT EXISTS (
+                          SELECT 1 FROM sync_tombstones w
+                          WHERE w.project_id = @winner
+                            AND w.hash = sync_tombstones.hash AND w.scope = sync_tombstones.scope)
+                    """,
+                    new { winner = fold.Winner, loser = fold.Loser }, cancellationToken: cancellationToken));
                 var stepMerged = await connection.ExecuteAsync(new CommandDefinition(
-                        "DELETE FROM sync_tombstones WHERE project_id = @loser",
-                        new { loser = fold.Loser }, cancellationToken: cancellationToken));
+                    "DELETE FROM sync_tombstones WHERE project_id = @loser",
+                    new { loser = fold.Loser }, cancellationToken: cancellationToken));
                 return stepMoved + stepMerged;
             }, cancellationToken);
         }

@@ -67,6 +67,33 @@ public sealed class MetricsReportServiceTests : IDisposable
         report.Series.ShouldAllBe(s => s.Count == 0);
     }
 
+    [RetryFact]
+    public async Task GetReportAsync_IncludesMcpDispatchDelayInternalSeries()
+    {
+        await SeedAsync("mcp.dispatch.delay_ms", 125, FixedNow - TimeSpan.FromMinutes(1), "acme");
+
+        var report = await _service.GetReportAsync("acme", [], TimeSpan.FromHours(1), TimeSpan.FromMinutes(1),
+            TestContext.Current.CancellationToken);
+
+        var series = report.Series.Single(s => s.Tool == "mcp.dispatch.delay_ms");
+        series.Count.ShouldBe(1);
+        series.Max.ShouldBe(125);
+    }
+
+    [RetryFact]
+    public async Task GetReportAsync_IncludesBankWideMcpRequestDurationInternalSeries()
+    {
+        await SeedAsync("mcp.request.duration_ms", 250, FixedNow - TimeSpan.FromMinutes(1),
+            MetricsConfigKeys.SelfMetricsProjectId);
+
+        var report = await _service.GetReportAsync(MetricsConfigKeys.SelfMetricsProjectId, [],
+            TimeSpan.FromHours(1), TimeSpan.FromMinutes(1), TestContext.Current.CancellationToken);
+
+        var series = report.Series.Single(s => s.Tool == "mcp.request.duration_ms");
+        series.Count.ShouldBe(1);
+        series.Max.ShouldBe(250);
+    }
+
     /// <summary>Project-scope gate: a second project's rows must never appear in the caller's report.</summary>
     [RetryFact]
     public async Task GetReportAsync_TwoProjects_ReportShowsOnlyTheCallingProject()

@@ -2,9 +2,9 @@ using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
-using static AiRaccoon.Infrastructure.Sqlite.Sql;
 using Dapper;
 using Microsoft.Data.Sqlite;
+using static AiRaccoon.Infrastructure.Sqlite.Sql;
 
 namespace AiRaccoon.Infrastructure.Ingestion;
 
@@ -61,50 +61,50 @@ public sealed class CodeIngestor(
             var hash = ContentHash.Of(normalizedPath, chunk.Text);
             hashes.Add(hash);
             var existingId = await connection.ExecuteScalarAsync<long?>(
-                    Def(MemorySql.SelectCodeChunkIdByPathAndHash,
-                        new { projectId, path = normalizedPath, hash }, cancellationToken));
+                Def(MemorySql.SelectCodeChunkIdByPathAndHash,
+                    new { projectId, path = normalizedPath, hash }, cancellationToken));
 
             if (existingId is not null)
             {
                 // D-E11: refresh the full position (line range + ordinal), not just the ordinal —
                 // for code, the line range IS the retrieval payload.
                 await connection.ExecuteAsync(
-                        Def(MemorySql.UpdateCodeChunkPosition,
-                            new
-                            {
-                                id = existingId.Value,
-                                lineStart = chunk.LineStart,
-                                lineEnd = chunk.LineEnd,
-                                chunkIndex = ordinal,
-                                totalChunks = chunks.Count,
-                                updatedAt = now
-                            }, cancellationToken));
+                    Def(MemorySql.UpdateCodeChunkPosition,
+                        new
+                        {
+                            id = existingId.Value,
+                            lineStart = chunk.LineStart,
+                            lineEnd = chunk.LineEnd,
+                            chunkIndex = ordinal,
+                            totalChunks = chunks.Count,
+                            updatedAt = now
+                        }, cancellationToken));
                 continue;
             }
 
             await connection.ExecuteAsync(
-                    Def(MemorySql.InsertCodeEntry,
-                        new
-                        {
-                            hash,
-                            path = normalizedPath,
-                            value = chunk.Text,
-                            sourceFile = normalizedPath,
-                            lineStart = chunk.LineStart,
-                            lineEnd = chunk.LineEnd,
-                            projectId,
-                            createdAt = now,
-                            updatedAt = now,
-                            chunkIndex = ordinal,
-                            totalChunks = chunks.Count,
-                            identifiers = IdentifierSplitter.Identifiers(chunk.Text)
-                        }, cancellationToken));
+                Def(MemorySql.InsertCodeEntry,
+                    new
+                    {
+                        hash,
+                        path = normalizedPath,
+                        value = chunk.Text,
+                        sourceFile = normalizedPath,
+                        lineStart = chunk.LineStart,
+                        lineEnd = chunk.LineEnd,
+                        projectId,
+                        createdAt = now,
+                        updatedAt = now,
+                        chunkIndex = ordinal,
+                        totalChunks = chunks.Count,
+                        identifiers = IdentifierSplitter.Identifiers(chunk.Text)
+                    }, cancellationToken));
 
             // Post-conflict re-read (FileIngestor.cs ~167-184's shape): a concurrent ingest may
             // have won the ON CONFLICT DO NOTHING race, so re-read rather than trust the insert.
             var newId = await connection.ExecuteScalarAsync<long?>(
-                    Def(MemorySql.SelectCodeChunkIdByPathAndHash,
-                        new { projectId, path = normalizedPath, hash }, cancellationToken));
+                Def(MemorySql.SelectCodeChunkIdByPathAndHash,
+                    new { projectId, path = normalizedPath, hash }, cancellationToken));
             if (newId is null)
             {
                 continue;

@@ -1,5 +1,5 @@
-using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Isolation;
+using AiRaccoon.Core.Projects;
 using CommunityToolkit.Diagnostics;
 using Dapper;
 using WorkspaceRecord = AiRaccoon.Core.Isolation.Workspace;
@@ -41,8 +41,10 @@ public sealed class SqliteWorkspaceStore(ISqliteConnectionFactory factory, IShar
         CancellationToken cancellationToken = default) =>
         await TryCloseAsync(projectId, workspaceId, status, closedAt, cancellationToken);
 
-    /// <summary>The real compare-and-swap (WP5b/A-F7): conditional on the row still being Active,
-    /// so a concurrent consolidate and discard on the same workspace can never both succeed.</summary>
+    /// <summary>
+    ///     The real compare-and-swap (WP5b/A-F7): conditional on the row still being Active,
+    ///     so a concurrent consolidate and discard on the same workspace can never both succeed.
+    /// </summary>
     public async Task<bool> TryCloseAsync(string projectId, string workspaceId, WorkspaceStatus status,
         DateTimeOffset closedAt, CancellationToken cancellationToken = default)
     {
@@ -78,8 +80,8 @@ public sealed class SqliteWorkspaceStore(ISqliteConnectionFactory factory, IShar
         await using var connection = await factory.OpenBankAsync(cancellationToken);
 
         var row = await connection.QueryFirstOrDefaultAsync<Row>(
-                new CommandDefinition(MemorySql.SelectWorkspace, new { workspaceId, projectId },
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(MemorySql.SelectWorkspace, new { workspaceId, projectId },
+                cancellationToken: cancellationToken));
         if (row?.Status != WorkspaceStatus.Active.ToString())
         {
             throw new UnknownWorkspaceException(workspaceId, projectId);

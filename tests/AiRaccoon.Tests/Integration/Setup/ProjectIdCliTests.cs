@@ -4,7 +4,6 @@ using System.Net.Sockets;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Hosting.Node;
-using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 using AiRaccoon.Tests.TestHelpers;
@@ -187,7 +186,7 @@ public sealed class ProjectIdCliTests : IAsyncLifetime
 
         var check = await RunAsync(["--quiet", "project", "id", "check", Fresh]);
         check.ExitCode.ShouldBe(0, check.Stderr);
-        check.Stdout.ShouldBe("known " + Fresh + Environment.NewLine);
+        check.Stdout.ShouldBe($"known {Fresh}{Environment.NewLine}");
         check.Stderr.ShouldBeEmpty();
     }
 

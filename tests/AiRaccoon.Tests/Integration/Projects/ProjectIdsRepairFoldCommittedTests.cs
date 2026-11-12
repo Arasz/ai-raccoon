@@ -1,7 +1,6 @@
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests.TestHelpers;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
@@ -45,11 +44,11 @@ public sealed class ProjectIdsRepairFoldCommittedTests : IDisposable
         foreach (var prefix in ProjectSettingsKeys.Prefixes)
         {
             await connection.ExecuteAsync("INSERT INTO settings (key, value) VALUES (@key, @value)",
-                new { key = prefix.Prefix + loser, value = "source:" + prefix.Prefix });
+                new { key = prefix.Prefix + loser, value = $"source:{prefix.Prefix}" });
             if (loser != "global" && prefix.ExcludesGlobal)
             {
                 await connection.ExecuteAsync("INSERT INTO settings (key, value) VALUES (@key, 'machine')",
-                    new { key = prefix.Prefix + "global" });
+                    new { key = $"{prefix.Prefix}global" });
             }
         }
 
@@ -61,12 +60,12 @@ public sealed class ProjectIdsRepairFoldCommittedTests : IDisposable
             if (prefix.ExcludesGlobal)
             {
                 (await connection.ExecuteScalarAsync<string>("SELECT value FROM settings WHERE key = @key",
-                    new { key = prefix.Prefix + "global" })).ShouldBe(loser == "global" ? "source:" + prefix.Prefix : "machine");
+                    new { key = $"{prefix.Prefix}global" })).ShouldBe(loser == "global" ? $"source:{prefix.Prefix}" : "machine");
             }
             else
             {
                 (await connection.ExecuteScalarAsync<string>("SELECT value FROM settings WHERE key = @key",
-                    new { key = prefix.Prefix + winner })).ShouldBe("source:" + prefix.Prefix);
+                    new { key = prefix.Prefix + winner })).ShouldBe($"source:{prefix.Prefix}");
                 (await connection.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM settings WHERE key = @key",
                     new { key = prefix.Prefix + loser })).ShouldBe(0);
             }
@@ -81,7 +80,7 @@ public sealed class ProjectIdsRepairFoldCommittedTests : IDisposable
         foreach (var prefix in ProjectSettingsKeys.Prefixes)
         {
             await connection.ExecuteAsync("INSERT INTO settings (key, value) VALUES (@key, 'value')",
-                new { key = prefix.Prefix + "global" });
+                new { key = $"{prefix.Prefix}global" });
         }
 
         await new ProjectIdsRepair(new FakeTimeProvider(FixedNow), TestData.SharedScope).ApplyAsync(connection,

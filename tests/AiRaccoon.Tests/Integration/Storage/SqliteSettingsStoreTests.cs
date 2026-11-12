@@ -95,9 +95,9 @@ public sealed class SqliteSettingsStoreTests : IAsyncLifetime
     [RetryFact]
     public async Task SetSettingAsync_WithAnEmptyString_IsDistinctFromAnAbsentKey()
     {
-        await _store.SetSettingAsync("scratch.empty", string.Empty, TestContext.Current.CancellationToken);
+        await _store.SetSettingAsync("scratch.empty", "", TestContext.Current.CancellationToken);
 
-        (await _store.GetSettingAsync("scratch.empty", TestContext.Current.CancellationToken)).ShouldBe(string.Empty);
+        (await _store.GetSettingAsync("scratch.empty", TestContext.Current.CancellationToken)).ShouldBe("");
         (await _store.GetSettingAsync("scratch.never-set", TestContext.Current.CancellationToken)).ShouldBeNull();
     }
 

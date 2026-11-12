@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Chunking;
-using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -61,7 +60,7 @@ public static class ChunkSizeReader
         {
             var size = await connection.ReadChunkSizeAsync(embeddingService, cancellationToken);
             return new ChunkBudget(size.MaxTokens, size.OverlayTokens,
-                size.CountTokens ?? new TokenCount(new O200kTokenizer().CountTokens));
+                size.CountTokens ?? new O200kTokenizer().CountTokens);
         }
     }
 }

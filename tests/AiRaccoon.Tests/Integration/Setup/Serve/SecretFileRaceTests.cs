@@ -1,5 +1,4 @@
 using AiRaccoon.Hosting.Common;
-using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
@@ -50,7 +49,7 @@ public sealed class SecretFileRaceTests : IDisposable
     {
         var healAfter = TimeSpan.FromMilliseconds(200);
         var keyPath = NewKeyFile().Path;
-        await SeedOwnerOnlyAsync(keyPath, string.Empty);
+        await SeedOwnerOnlyAsync(keyPath, "");
         File.SetLastWriteTimeUtc(keyPath, DateTime.UtcNow - healAfter - TimeSpan.FromSeconds(1));
         var healed = new string?[Racers];
 
@@ -71,7 +70,7 @@ public sealed class SecretFileRaceTests : IDisposable
         var time = new FakeTimeProvider();
         var keyFile = new IdentityKeyFile(TestData.CreateProjectOptions(_dataRoot), time);
         var writers = await MintKeyElsewhereAsync();
-        await SeedOwnerOnlyAsync(keyFile.Path, string.Empty);
+        await SeedOwnerOnlyAsync(keyFile.Path, "");
         File.SetLastWriteTimeUtc(keyFile.Path, time.GetUtcNow().UtcDateTime + TimeSpan.FromMinutes(5));
 
         var healing = keyFile.EnsureAsync(TestContext.Current.CancellationToken);

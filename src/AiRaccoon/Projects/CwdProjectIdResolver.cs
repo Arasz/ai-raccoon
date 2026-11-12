@@ -26,9 +26,8 @@ public sealed class CwdProjectIdResolver(
     ICwdProbe cwdProbe,
     ISharedProjectScope scope) : IProjectIdResolver
 {
+    private static readonly string ScopePrefix = IngestScopeKeys.ScopeProject("");
     private readonly ISharedProjectScope _scope = scope;
-
-    private static readonly string ScopePrefix = IngestScopeKeys.ScopeProject(string.Empty);
 
     public async Task<ProjectIdResolution> ResolveAsync(CancellationToken cancellationToken = default)
     {
@@ -69,7 +68,7 @@ public sealed class CwdProjectIdResolver(
         {
             0 => new ProjectIdResolution.None(),
             1 => new ProjectIdResolution.Resolved(candidates.Single().Value),
-            _ => new ProjectIdResolution.Ambiguous([.. candidates.Values.Order(StringComparer.Ordinal)]),
+            _ => new ProjectIdResolution.Ambiguous([.. candidates.Values.Order(StringComparer.Ordinal)])
         };
     }
 

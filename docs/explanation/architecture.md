@@ -568,12 +568,20 @@ against `query`'s own reported duration — see
 against `query` cannot be built at all. The report is project-scoped only; the whole-bank
 scope is deferred (D6, docs/plans/2026-08-15-performance-metrics-implementation.md §5).
 
-**Buffer pressure moves with phase count.** Phase rows per search go 6 → 10: each `query`
-call now enqueues nine phase measurements (`search.adjustment` added, #483) plus `search.total`,
-alongside the one tool-level `query` duration `ToolExecutionActivity` already records.
+The report also discovers `mcp.dispatch.delay_ms` and `mcp.request.duration_ms` by the `mcp.`
+prefix. Dispatch delay uses a monotonic timestamp from the `/mcp` middleware to MCP tool filter
+entry. Request duration is recorded after the middleware returns from the full endpoint pipeline.
+The dispatch series uses the tool's project id. Request duration uses `__self_metrics__` because
+the middleware does not own a project id. Traces retain the ASP.NET Core request span when tracing
+is enabled.
+
+**Buffer pressure moves with phase count.** Search phase rows go from 6 to 10: each `query`
+call enqueues nine phase measurements (`search.adjustment` added, #483) plus `search.total`.
+An HTTP search call also records tool duration, `mcp.dispatch.delay_ms`, and
+`mcp.request.duration_ms`, for 13 rows in total.
 Against `DefaultBufferCapacity` (1000, `MetricsConfigKeys.cs:8`) and the default 30 s flush
 (`DefaultFlushIntervalSeconds`, `MetricsConfigKeys.cs:18`), the searches-per-flush-window before
-the buffer starts dropping moves from roughly 142 to roughly 91. Not a risk at any realistic search
+the buffer starts dropping moves from roughly 142 to roughly 77. Not a risk at any realistic search
 rate — recorded here so a
 future `metrics.dropped` uptick has an explanation on hand rather than a fresh investigation.
 

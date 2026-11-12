@@ -1,6 +1,6 @@
-using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using WorkspaceRecord = AiRaccoon.Core.Isolation.Workspace;
 
 namespace AiRaccoon.Infrastructure.Workspace;
@@ -9,7 +9,10 @@ namespace AiRaccoon.Infrastructure.Workspace;
 ///     Workspace lifecycle orchestration over IMemoryStore: begin, status, consolidate (outbox → project inbox),
 ///     discard (see docs/work/features-agent-memory/spec-issue-1.md §3.2).
 /// </summary>
-public sealed class WorkspaceService(IMemoryStore store, IWorkspaceStore workspaceStore, TimeProvider timeProvider,
+public sealed class WorkspaceService(
+    IMemoryStore store,
+    IWorkspaceStore workspaceStore,
+    TimeProvider timeProvider,
     ISharedProjectScope scope) : IWorkspaceService
 {
     private readonly ISharedProjectScope _scope = scope;

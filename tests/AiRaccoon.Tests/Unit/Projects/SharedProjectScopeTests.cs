@@ -72,7 +72,7 @@ public sealed class SharedProjectScopeTests
     {
         var error = Record.Exception(() => _scope.EnsureCanExecuteInSharedScope("shared", "note writes"));
         error.ShouldNotBeNull();
-        error!.Message.ShouldContain("shared-project-unsupported");
+        error.Message.ShouldContain("shared-project-unsupported");
         error.Message.ShouldContain("note writes");
     }
 

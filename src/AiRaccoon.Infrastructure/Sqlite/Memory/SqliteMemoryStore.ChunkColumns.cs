@@ -17,7 +17,7 @@ public sealed partial class SqliteMemoryStore
     {
         var ctx = MemorySql.ContextKeyFor(context, projectId);
         await connection.ExecuteAsync(
-                Def(MemorySql.RecomputeChunkColumnsForContext, new { ctx, sourceFile }, cancellationToken));
+            Def(MemorySql.RecomputeChunkColumnsForContext, new { ctx, sourceFile }, cancellationToken));
     }
 
     /// <summary>
@@ -30,6 +30,6 @@ public sealed partial class SqliteMemoryStore
     {
         var ctx = MemorySql.ContextKeyFor(context, projectId);
         await connection.ExecuteAsync(
-                Def(MemorySql.CompactChunkColumnsAfterDelete, new { ctx, sourceFile, deletedIndex }, cancellationToken));
+            Def(MemorySql.CompactChunkColumnsAfterDelete, new { ctx, sourceFile, deletedIndex }, cancellationToken));
     }
 }

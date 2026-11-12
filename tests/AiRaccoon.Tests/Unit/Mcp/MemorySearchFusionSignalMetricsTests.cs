@@ -4,7 +4,6 @@ using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Metrics;
-using AiRaccoon.Core.Projects;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -184,7 +183,7 @@ public sealed class MemorySearchFusionSignalMetricsTests
         public IReadOnlyList<CodeSearchResult> StubResults { get; set; } = [];
 
         public Task<CodeSearchResults> SearchAsync(CodeSearchQuery query, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new CodeSearchResults(StubResults, null));
+            Task.FromResult(new CodeSearchResults(StubResults));
 
         public Task<CodeEntry?> GetAsync(string projectId, string hash, CancellationToken cancellationToken = default) =>
             Task.FromResult<CodeEntry?>(null);

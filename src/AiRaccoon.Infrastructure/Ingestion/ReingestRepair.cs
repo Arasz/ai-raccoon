@@ -53,11 +53,11 @@ public sealed class ReingestRepair(ChunkPositionScanner scanner)
         // DeleteBySourcePath predicate would touch — the digest owns mirror rows, never workspace
         // scratch and never an add_memory row that merely cites the path (MemorySql.cs:188-190).
         var groups = (await connection.QueryAsync<GroupKey>(new CommandDefinition(
-                """
-                SELECT DISTINCT project_id AS ProjectId, source_file AS SourceFile
-                FROM entries
-                WHERE source_file IS NOT NULL AND workspace_id IS NULL AND path = source_file
-                """, cancellationToken: cancellationToken))).ToList();
+            """
+            SELECT DISTINCT project_id AS ProjectId, source_file AS SourceFile
+            FROM entries
+            WHERE source_file IS NOT NULL AND workspace_id IS NULL AND path = source_file
+            """, cancellationToken: cancellationToken))).ToList();
 
         var filesToReingest = 0;
         var rowsAffected = 0;
@@ -68,13 +68,13 @@ public sealed class ReingestRepair(ChunkPositionScanner scanner)
             cancellationToken.ThrowIfCancellationRequested();
 
             var rows = (await connection.QueryAsync<GroupRow>(new CommandDefinition(
-                    """
-                    SELECT id AS Id, hash AS Hash
-                    FROM entries
-                    WHERE project_id = @projectId AND source_file = @sourceFile AND path = @sourceFile
-                      AND workspace_id IS NULL
-                    """, new { projectId = group.ProjectId, sourceFile = group.SourceFile },
-                    cancellationToken: cancellationToken))).ToList();
+                """
+                SELECT id AS Id, hash AS Hash
+                FROM entries
+                WHERE project_id = @projectId AND source_file = @sourceFile AND path = @sourceFile
+                  AND workspace_id IS NULL
+                """, new { projectId = group.ProjectId, sourceFile = group.SourceFile },
+                cancellationToken: cancellationToken))).ToList();
 
             if (rows.Count == 0)
             {

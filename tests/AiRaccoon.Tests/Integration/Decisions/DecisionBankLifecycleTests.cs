@@ -1,6 +1,4 @@
-using AiRaccoon.Core.Decisions;
 using AiRaccoon.Core.Encryption;
-using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Decisions;

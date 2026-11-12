@@ -14,15 +14,14 @@ namespace AiRaccoon.Generators;
 public sealed class ToolScopeAnalyzer : DiagnosticAnalyzer
 {
     /// <inheritdoc />
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-        [ToolScopeFacts.MissingScope];
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [ToolScopeFacts.MissingScope];
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterCompilationStartAction(start => start.RegisterSymbolAction(
+        context.RegisterCompilationStartAction(static start => start.RegisterSymbolAction(
             AnalyzeType,
             SymbolKind.NamedType));
     }

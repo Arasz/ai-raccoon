@@ -1,7 +1,7 @@
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Observability;
+using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Infrastructure.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Hosting;
@@ -29,6 +29,19 @@ public sealed partial class BankMaintenanceHostedService(
 
     /// <summary>Span name and `operation` tag of one maintenance pass.</summary>
     internal const string OperationName = "bank.maintenance";
+
+    /// <summary>
+    ///     How often the on-demand poll checks whether any job has outstanding work
+    ///     (<see cref="IMaintenanceJob.HasWorkAsync" />, ADR-0076) — independent of, and much
+    ///     shorter than, the heavy checkpoint/vacuum/purge pass's own cadence
+    ///     (<see cref="BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal" />, default 60
+    ///     minutes). Without this split, an on-demand job's real latency was bounded by that hourly
+    ///     cadence — a model migration could sit undrained for up to an hour absent a restart. 15
+    ///     seconds is cheap: one indexed `maintenance_jobs` read per cadence-based job plus one
+    ///     indexed outbox read for the on-demand one, and nothing in this loop opens a transaction
+    ///     or writes unless a job is actually due.
+    /// </summary>
+    internal static readonly TimeSpan OnDemandPollInterval = TimeSpan.FromSeconds(15);
 
     // Same shape the store uses for its noise ports: the primary constructor above stays the
     // narrow one the tests build, and production DI resolves the wider constructor below. A service
@@ -64,19 +77,6 @@ public sealed partial class BankMaintenanceHostedService(
 
     /// <summary>Completed after each on-demand poll; test seam (ADR-0076).</summary>
     internal TickSignal OnDemandPolls { get; } = new();
-
-    /// <summary>
-    ///     How often the on-demand poll checks whether any job has outstanding work
-    ///     (<see cref="IMaintenanceJob.HasWorkAsync" />, ADR-0076) — independent of, and much
-    ///     shorter than, the heavy checkpoint/vacuum/purge pass's own cadence
-    ///     (<see cref="BankMaintenanceConfigKeys.CheckpointIntervalMinutesGlobal" />, default 60
-    ///     minutes). Without this split, an on-demand job's real latency was bounded by that hourly
-    ///     cadence — a model migration could sit undrained for up to an hour absent a restart. 15
-    ///     seconds is cheap: one indexed `maintenance_jobs` read per cadence-based job plus one
-    ///     indexed outbox read for the on-demand one, and nothing in this loop opens a transaction
-    ///     or writes unless a job is actually due.
-    /// </summary>
-    internal static readonly TimeSpan OnDemandPollInterval = TimeSpan.FromSeconds(15);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -114,11 +114,9 @@ public sealed partial class BankMaintenanceHostedService(
             RunOnDemandPollLoopAsync(stoppingToken));
     }
 
-    private async Task RunHeavyPassLoopAsync(PeriodicTimer timer, CancellationToken stoppingToken)
-    {
+    private async Task RunHeavyPassLoopAsync(PeriodicTimer timer, CancellationToken stoppingToken) =>
         await timer.RunTicksAsync(RunOnceAsync, ex => Log.RunFailed(logger, ex), stoppingToken,
             Ticks.Increment, ReadCheckpointIntervalSafeAsync, IntervalReReads.Increment);
-    }
 
     /// <summary>
     ///     Wakes every <see cref="OnDemandPollInterval" /> and asks the job runner whether anything
@@ -170,10 +168,7 @@ public sealed partial class BankMaintenanceHostedService(
     }
 
     /// <summary>One maintenance pass: WAL checkpoint, then vacuum+analyze if due. Test seam.</summary>
-    internal async Task RunOnceAsync(CancellationToken cancellationToken)
-    {
-        await telemetry.RunPassAsync(OperationName, RunPassAsync, cancellationToken);
-    }
+    internal async Task RunOnceAsync(CancellationToken cancellationToken) => await telemetry.RunPassAsync(OperationName, RunPassAsync, cancellationToken);
 
     private async Task RunPassAsync(IOperationScope pass, CancellationToken cancellationToken)
     {

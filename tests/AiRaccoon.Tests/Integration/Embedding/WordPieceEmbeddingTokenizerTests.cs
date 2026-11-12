@@ -85,7 +85,7 @@ public sealed class WordPieceEmbeddingTokenizerTests
         var filler = string.Join(' ', Enumerable.Repeat(
             "how does the retrieval pipeline weigh full text against vectors when the corpus is large", 40)); // > 254 content tokens
         var atLimit = TokenBudget.Trim(filler, OnnxEmbeddingGenerator.MaxContentTokens,
-            new TokenCount(text => reference.CountTokens(text)));
+            text => reference.CountTokens(text));
 
         tokenizer.CountTokens(atLimit).ShouldBe(OnnxEmbeddingGenerator.MaxContentTokens);
         tokenizer.EncodeToIds(atLimit, addSpecialTokens: true).Count.ShouldBe(OnnxEmbeddingGenerator.MaxContentTokens + 2);

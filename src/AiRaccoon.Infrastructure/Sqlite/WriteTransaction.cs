@@ -1,7 +1,7 @@
-using Dapper;
 using System.Data;
-using SQLitePCL;
+using Dapper;
 using Microsoft.Data.Sqlite;
+using SQLitePCL;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 

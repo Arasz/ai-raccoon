@@ -60,7 +60,7 @@ internal sealed class WatchRegistrationCommands
         {
             if (i > 0)
             {
-                await streams.WriteOutputLineAsync(string.Empty);
+                await streams.WriteOutputLineAsync("");
             }
 
             foreach (var line in WatchStatusFormat.Render(statuses[i]))

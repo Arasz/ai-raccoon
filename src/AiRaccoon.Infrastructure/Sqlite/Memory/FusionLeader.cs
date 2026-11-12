@@ -1,5 +1,3 @@
-using AiRaccoon.Core.Memory;
-
 namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>

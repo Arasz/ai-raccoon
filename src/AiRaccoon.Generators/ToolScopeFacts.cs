@@ -25,7 +25,7 @@ internal static class ToolScopeFacts
         "MCP tool method '{0}' must declare its scope: [McpToolScope(ToolScope.All)], [McpToolScope(ToolScope.Shared)] or [McpToolScope(ToolScope.Project)]",
         "McpToolInventory",
         DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
+        true);
 
     /// <summary>True when the method is an MCP tool the surface registers.</summary>
     internal static bool IsToolMethod(IMethodSymbol method) =>
@@ -71,7 +71,7 @@ internal static class ToolScopeFacts
                 return null;
             }
 
-            var scopeType = attributeClass.Constructors.FirstOrDefault(c => c.Parameters.Length > 0)
+            var scopeType = attributeClass.Constructors.FirstOrDefault(static c => c.Parameters.Length > 0)
                 ?.Parameters[0].Type;
             if (scopeType is null)
             {

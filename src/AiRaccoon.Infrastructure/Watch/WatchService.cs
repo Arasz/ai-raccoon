@@ -109,6 +109,14 @@ public sealed class WatchService(
 
     public async Task<bool> IsEnabledAsync(string projectId, CancellationToken cancellationToken = default) => (await ResolveConfigAsync(projectId, cancellationToken)).Enabled;
 
+    public async Task<bool> IsPathAllowedAsync(string projectId, string path,
+        CancellationToken cancellationToken = default)
+    {
+        var config = await ResolveConfigAsync(projectId, cancellationToken);
+        var normalized = IngestPath.Normalize(path);
+        return config.Scope.Any(entry => IngestPath.IsWithinScope(normalized, entry));
+    }
+
     /// <summary>
     ///     d-425 MUST-1: the watch-create boundary folds through the same alias table as the
     ///     <c>ToolGate</c> choke, gated on the same migration marker. Post-migration a loser create
@@ -122,14 +130,6 @@ public sealed class WatchService(
         await migrationGate.IsMigratedAsync(cancellationToken)
             ? ProjectIdAliasMap.Default.Fold(projectId)
             : projectId;
-
-    public async Task<bool> IsPathAllowedAsync(string projectId, string path,
-        CancellationToken cancellationToken = default)
-    {
-        var config = await ResolveConfigAsync(projectId, cancellationToken);
-        var normalized = IngestPath.Normalize(path);
-        return config.Scope.Any(entry => IngestPath.IsWithinScope(normalized, entry));
-    }
 
     private async Task<WatchConfig> ResolveConfigAsync(string projectId, CancellationToken cancellationToken)
     {

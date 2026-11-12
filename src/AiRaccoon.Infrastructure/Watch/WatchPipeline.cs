@@ -66,8 +66,8 @@ public sealed partial class WatchPipeline(
     private readonly Lock _gate = new();
     private readonly Dictionary<WatchKey, WatchEvent> _pending = new();
     private readonly Dictionary<WatchKey, WatchRuntimeState> _runtime = new();
-    private readonly Dictionary<string, List<string>> _watchPathsByProject = new(StringComparer.Ordinal);
     private readonly Dictionary<WatchKey, SortedDictionary<string, SkipReason>> _skipped = new();
+    private readonly Dictionary<string, List<string>> _watchPathsByProject = new(StringComparer.Ordinal);
     public static TimeSpan TickInterval { get; } = TimeSpan.FromSeconds(1);
 
     /// <summary>
@@ -81,8 +81,7 @@ public sealed partial class WatchPipeline(
     public event Action<string, string>? Recovered;
 
     /// <inheritdoc />
-    public bool IsStopped(string projectId, string path) =>
-        retryPolicy.IsStopped(projectId, IngestPath.Normalize(path));
+    public bool IsStopped(string projectId, string path) => retryPolicy.IsStopped(projectId, IngestPath.Normalize(path));
 
     /// <summary>Thread-safe entry point for the event source (docs/plans/file-watcher-implementation.md S5): writes into the single channel.</summary>
     public void Enqueue(WatchEvent evt)
@@ -143,6 +142,53 @@ public sealed partial class WatchPipeline(
         Unregistered?.Invoke(projectId, normalized);
     }
 
+    /// <summary>Marks a watch scanning (docs/plans/file-watcher-implementation.md S5's initial scan) — clears the last error.</summary>
+    public void MarkScanning(string projectId, string path)
+    {
+        var normalized = IngestPath.Normalize(path);
+        lock (_gate)
+        {
+            if (_runtime.TryGetValue(new WatchKey(projectId, normalized), out var current))
+            {
+                _runtime[new WatchKey(projectId, normalized)] = current with { State = WatchState.Scanning, LastError = null };
+            }
+        }
+    }
+
+    public IReadOnlyList<WatchStatus> GetStatuses(string projectId)
+    {
+        lock (_gate)
+        {
+            return
+            [
+                .. _runtime
+                    .Where(kv => kv.Key.ProjectId == projectId)
+                    .Select(kv => ToStatus(kv.Key, kv.Value))
+                    .OrderBy(s => s.Path, IngestPath.PathComparer)
+            ];
+        }
+    }
+
+    /// <summary>Loop: tick every second until cancelled; a failing iteration never kills the loop.</summary>
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TickInterval, timeProvider, cancellationToken);
+                await TickOnceAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception ex)
+            {
+                Log.PipelineLoopError(logger, ex);
+            }
+        }
+    }
+
     /// <summary>
     ///     Forgets a watch's skipped files ahead of a full scan, which re-reports whatever is still
     ///     skipped; a file the scan now filters out (an ignore edit) is otherwise never digested again.
@@ -180,59 +226,12 @@ public sealed partial class WatchPipeline(
         }
     }
 
-    /// <summary>Marks a watch scanning (docs/plans/file-watcher-implementation.md S5's initial scan) — clears the last error.</summary>
-    public void MarkScanning(string projectId, string path)
-    {
-        var normalized = IngestPath.Normalize(path);
-        lock (_gate)
-        {
-            if (_runtime.TryGetValue(new WatchKey(projectId, normalized), out var current))
-            {
-                _runtime[new WatchKey(projectId, normalized)] = current with { State = WatchState.Scanning, LastError = null };
-            }
-        }
-    }
-
-    public IReadOnlyList<WatchStatus> GetStatuses(string projectId)
-    {
-        lock (_gate)
-        {
-            return
-            [
-                .. _runtime
-                    .Where(kv => kv.Key.ProjectId == projectId)
-                    .Select(kv => ToStatus(kv.Key, kv.Value))
-                    .OrderBy(s => s.Path, IngestPath.PathComparer)
-            ];
-        }
-    }
-
     private WatchStatus ToStatus(WatchKey key, WatchRuntimeState state)
     {
         var skipped = _skipped.GetValueOrDefault(key);
         return new WatchStatus(key.ProjectId, key.Path, state.State, state.LastError, state.LastSync,
             skipped?.Count ?? 0,
             skipped?.Take(WatchStatus.MaxListedSkips).Select(kv => new SkippedFile(kv.Key, kv.Value)).ToArray());
-    }
-
-    /// <summary>Loop: tick every second until cancelled; a failing iteration never kills the loop.</summary>
-    public async Task RunAsync(CancellationToken cancellationToken)
-    {
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            try
-            {
-                await Task.Delay(TickInterval, timeProvider, cancellationToken);
-                await TickOnceAsync(cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-            }
-            catch (Exception ex)
-            {
-                Log.PipelineLoopError(logger, ex);
-            }
-        }
     }
 
     /// <summary>One tick: fold channel events into pending, drain due paths to the scheduler, await the batch.</summary>
@@ -289,7 +288,7 @@ public sealed partial class WatchPipeline(
         try
         {
             var skip = await executor.DigestAsync(evt.ProjectId, job.WatchPath, evt.Path, evt.Kind, evt.OldPath,
-                    cancellationToken);
+                cancellationToken);
             retryPolicy.RecordSuccess(evt.ProjectId, job.WatchPath);
             var recovered = false;
             lock (_gate)
@@ -333,8 +332,10 @@ public sealed partial class WatchPipeline(
         }
     }
 
-    /// <summary>Lists a skipped file under its watch; a digest that indexed, removed or excluded it takes
-    /// it off the list, with a renamed-away old path and anything under a vanished directory. Caller holds the gate.</summary>
+    /// <summary>
+    ///     Lists a skipped file under its watch; a digest that indexed, removed or excluded it takes
+    ///     it off the list, with a renamed-away old path and anything under a vanished directory. Caller holds the gate.
+    /// </summary>
     private void RecordSkip(WatchKey key, WatchEvent evt, SkipReason? skip)
     {
         if (!_skipped.TryGetValue(key, out var files))
@@ -403,7 +404,7 @@ public sealed partial class WatchPipeline(
             {
                 [WatchConfigKeys.ConcurrencyProject(projectId)] =
                     await memoryStore.GetSettingAsync(WatchConfigKeys.ConcurrencyProject(projectId),
-                            cancellationToken),
+                        cancellationToken),
                 [WatchConfigKeys.ConcurrencyGlobal] =
                     await memoryStore.GetSettingAsync(WatchConfigKeys.ConcurrencyGlobal, cancellationToken)
             };

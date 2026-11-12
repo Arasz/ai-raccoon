@@ -1,5 +1,4 @@
 using System.Net;
-using AiRaccoon.Core.Memory;
 using AiRaccoon.Settings;
 using Shouldly;
 using Xunit;

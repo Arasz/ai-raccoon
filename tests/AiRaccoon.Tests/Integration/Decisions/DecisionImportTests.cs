@@ -223,9 +223,9 @@ public sealed class DecisionImportTests : IAsyncLifetime
         var links = inner.GetProperty("relationships").EnumerateArray().Select(link => link.GetRawText()).ToList();
         entities.Add("""{"id":"newest","text":"Newest","type":"decision","properties":{"category":"c","scenario":"s","outcome":"o","reasoning":"r"}}""");
         links.Add($$"""{"id":"newest-link","source_id":"newest","target_id":"{{Db05}}","type":"supports"}""");
-        var data = "{\"entities\":[" + string.Join(",", entities) + "],\"relationships\":[" + string.Join(",", links)
-            + "],\"statistics\":{\"entity_count\":" + entities.Count + ",\"relationship_count\":" + links.Count + "}}";
-        var source = Encoding.UTF8.GetBytes("{\"format\":\"json\",\"data\":" + JsonSerializer.Serialize(data) + "}");
+        var data =
+            $"{{\"entities\":[{string.Join(",", entities)}],\"relationships\":[{string.Join(",", links)}],\"statistics\":{{\"entity_count\":{entities.Count},\"relationship_count\":{links.Count}}}}}";
+        var source = Encoding.UTF8.GetBytes($"{{\"format\":\"json\",\"data\":{JsonSerializer.Serialize(data)}}}");
         var map = System.Text.Json.Nodes.JsonNode.Parse(_mapping)!.AsObject();
         map["records"]!["newest"] = System.Text.Json.Nodes.JsonNode.Parse("""{"externalId":"newest","status":"proposed"}""");
         map["records"]!["newest-link"] = System.Text.Json.Nodes.JsonNode.Parse("""{"externalId":"newest-link"}""");

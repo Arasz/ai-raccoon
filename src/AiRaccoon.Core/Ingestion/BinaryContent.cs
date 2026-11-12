@@ -8,6 +8,5 @@ public static class BinaryContent
 {
     public const int InspectedLength = 8000;
 
-    public static bool IsBinary(string content) =>
-        content.AsSpan(0, Math.Min(content.Length, InspectedLength)).Contains('\0');
+    public static bool IsBinary(string content) => content.AsSpan(0, Math.Min(content.Length, InspectedLength)).Contains('\0');
 }

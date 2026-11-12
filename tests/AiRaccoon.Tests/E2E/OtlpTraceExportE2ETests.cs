@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AiRaccoon.Observability;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using OpenTelemetry;
 using OpenTelemetry.Trace;
 using Shouldly;
@@ -24,6 +25,7 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
     private const string ProtocolVar = "OTEL_EXPORTER_OTLP_PROTOCOL";
     private const string SamplerVar = "OTEL_TRACES_SAMPLER";
     private const string SamplerProbeSource = "AiRaccoon.Tests.SamplerProbe";
+    private const string McpSdkActivitySource = "Experimental.ModelContextProtocol";
 
     /// <summary>How long a late span gets to reach the listener before the test calls it missing.</summary>
     private static readonly TimeSpan SpanSettleTimeout = TimeSpan.FromSeconds(30);
@@ -79,6 +81,35 @@ public sealed class OtlpTraceExportE2ETests : IAsyncLifetime
             await _collector.WaitForRequestAsync("/v1/traces", TestContext.Current.CancellationToken);
 
             _collector.RequestedPaths.ShouldContain(path => path == "/v1/traces");
+        }
+        finally
+        {
+            await client.DisposeAsync();
+        }
+    }
+
+    [RetryFact]
+    public async Task ToolCallMetric_RecordsDispatchDelayWithTheOtlpSdkEnabled()
+    {
+        var sdkActivities = new List<Activity>();
+        using var sdkProvider = Sdk.CreateTracerProviderBuilder()
+            .AddSource(McpSdkActivitySource)
+            .SetSampler(new AlwaysOnSampler())
+            .AddInMemoryExporter(sdkActivities)
+            .Build();
+        var client = await _factory.CreateClientAsync();
+        try
+        {
+            var metrics = _factory.Services.GetRequiredService<ToolCallMetrics>();
+            metrics.ActivitySource.HasListeners().ShouldBeTrue();
+            using var collector = new MetricCollector<double>(metrics.Meter, OtlpNames.McpDispatchDelay);
+
+            await client.CallToolAsync("get_store_statistics", new Dictionary<string, object?> { ["projectId"] = "acme" },
+                null, null, TestContext.Current.CancellationToken);
+
+            sdkProvider.ForceFlush();
+            sdkActivities.ShouldNotBeEmpty();
+            collector.GetMeasurementSnapshot().ShouldHaveSingleItem().Value.ShouldBeGreaterThan(0);
         }
         finally
         {

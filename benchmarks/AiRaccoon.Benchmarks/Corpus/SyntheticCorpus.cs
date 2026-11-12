@@ -124,7 +124,7 @@ public static class SyntheticCorpus
     private static void AddQuery(List<CorpusQuery> queries, string id, string text, string topicId)
     {
         var relevant = Documents
-            .Where(d => d.Id.StartsWith(topicId + "-", StringComparison.Ordinal))
+            .Where(d => d.Id.StartsWith($"{topicId}-", StringComparison.Ordinal))
             .Select(d => d.Id)
             .ToList();
         queries.Add(new CorpusQuery(id, text, relevant));

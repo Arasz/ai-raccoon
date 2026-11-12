@@ -10,13 +10,9 @@ public static class MetricsConfigKeys
     /// <summary>Ceiling the CLI enforces on write: buffer capacity is otherwise an allocation an operator could set arbitrarily large.</summary>
     public const int MaxBufferCapacity = 1_000_000;
 
-    public static int ParseBufferCapacity(string? value) => int.TryParse(value, out var capacity) && capacity > 0 ? capacity : DefaultBufferCapacity;
-
     public const string FlushIntervalSecondsGlobal = "metrics.flush-interval-seconds.global";
 
     public const int DefaultFlushIntervalSeconds = 30;
-
-    public static int ParseFlushIntervalSeconds(string? value) => int.TryParse(value, out var seconds) && seconds > 0 ? seconds : DefaultFlushIntervalSeconds;
 
     /// <summary>Best-effort retention for the hot `metrics` table (docs/plans/2026-08-15-performance-metrics-implementation.md, WP4).</summary>
     public const string RetentionDaysGlobal = "metrics.retention-days.global";
@@ -26,8 +22,6 @@ public static class MetricsConfigKeys
     /// <summary>Ceiling the CLI enforces on write: MetricsRetentionJob computes DateTimeOffset.AddDays(-days), which throws beyond a bound far smaller than int.MaxValue.</summary>
     public const int MaxRetentionDays = 36500;
 
-    public static int ParseRetentionDays(string? value) => int.TryParse(value, out var days) && days > 0 ? days : DefaultRetentionDays;
-
     /// <summary>
     ///     The sentinel project id self-metrics (flush duration/batch size, drop count) are tagged
     ///     with — they are bank-wide, not scoped to any one project, so no real project id fits.
@@ -35,10 +29,6 @@ public static class MetricsConfigKeys
     ///     leaking into an ordinary project's report (review-fixes finding 5).
     /// </summary>
     public const string SelfMetricsProjectId = "__self_metrics__";
-
-    /// <summary>The measurement names MetricsFlusher writes directly to the store on every flush pass.</summary>
-    public static readonly IReadOnlyList<string> SelfMetricNames =
-        ["metrics.flush.duration_ms", "metrics.flush.batch_size", "metrics.dropped"];
 
     /// <summary>
     ///     Prefix for maintenance-job series (WP3, #477): <c>job.&lt;name&gt;.duration_ms</c> on every
@@ -49,17 +39,13 @@ public static class MetricsConfigKeys
     /// </summary>
     public const string JobMetricPrefix = "job.";
 
-    /// <summary>The <c>job.&lt;name&gt;.duration_ms</c> series name for one maintenance job.</summary>
-    public static string JobDurationMetricName(string jobName) => $"{JobMetricPrefix}{jobName}.duration_ms";
-
-    /// <summary>The <c>job.&lt;name&gt;.rows</c> series name for one maintenance job.</summary>
-    public static string JobRowsMetricName(string jobName) => $"{JobMetricPrefix}{jobName}.rows";
-
     /// <summary>Prefix for embed-drain pass series (WP11): <c>drain.&lt;corpus&gt;.rows</c> and <c>drain.&lt;corpus&gt;.duration_ms</c>, bank-wide self-metrics like job.*.</summary>
     public const string DrainMetricPrefix = "drain.";
 
-    /// <summary>Prefix for write-path series (WP11/WP12): <c>write.replace.wait_ms</c>,
-    /// <c>write.replace.held_ms</c> and <c>write.replace.rows</c>.</summary>
+    /// <summary>
+    ///     Prefix for write-path series (WP11/WP12): <c>write.replace.wait_ms</c>,
+    ///     <c>write.replace.held_ms</c> and <c>write.replace.rows</c>.
+    /// </summary>
     public const string WriteMetricPrefix = "write.";
 
     /// <summary>Prefix for query-time series (WP11): today just <c>search.query.truncated_tokens</c>.</summary>
@@ -68,29 +54,26 @@ public static class MetricsConfigKeys
     /// <summary>Prefix for Stage-1 fusion-signal series (#601): <c>search.fusion.top_strength</c>, <c>search.fusion.top_margin</c>, <c>search.fusion.legs_fired</c> (FusionStats.MetricNames).</summary>
     public const string SearchFusionMetricPrefix = "search.fusion.";
 
-    /// <summary>Prefix for the migration drain's re-chunk phase series: one duration_ms and
-    /// one groups histogram per rebudget pass, bank-wide like the drain family.</summary>
+    /// <summary>
+    ///     Prefix for the migration drain's re-chunk phase series: one duration_ms and
+    ///     one groups histogram per rebudget pass, bank-wide like the drain family.
+    /// </summary>
     public const string RechunkMetricPrefix = "chunk.rechunk.";
+
+    /// <summary>Prefix for MCP dispatch timing recorded by the tool filter.</summary>
+    public const string McpMetricPrefix = "mcp.";
+
+    /// <summary>HTTP request start to MCP call-filter entry, in milliseconds.</summary>
+    public const string McpDispatchDelayMetricName = $"{McpMetricPrefix}dispatch.delay_ms";
+
+    /// <summary>HTTP /mcp POST duration through response completion, in milliseconds.</summary>
+    public const string McpRequestDurationMetricName = $"{McpMetricPrefix}request.duration_ms";
 
     /// <summary>The re-chunk phase's wall-clock duration in milliseconds, per rebudget pass.</summary>
     public const string RechunkDurationMetricName = $"{RechunkMetricPrefix}duration_ms";
 
     /// <summary>Groups the re-chunk phase replaced, per rebudget pass.</summary>
     public const string RechunkGroupsMetricName = $"{RechunkMetricPrefix}groups";
-
-    /// <summary>
-    ///     Every internal-series prefix MetricsReportService's discovery and the internal recorders'
-    ///     own naming both consume — one constant set, so another family cannot be added on one side
-    ///     only (derive-or-delete).
-    /// </summary>
-    public static readonly IReadOnlyList<string> InternalSeriesPrefixes =
-        [JobMetricPrefix, DrainMetricPrefix, WriteMetricPrefix, SearchQueryMetricPrefix, SearchFusionMetricPrefix, RechunkMetricPrefix];
-
-    /// <summary>The <c>drain.&lt;corpus&gt;.rows</c> series name for one embed-drain pass.</summary>
-    public static string DrainRowsMetricName(string corpus) => $"{DrainMetricPrefix}{corpus}.rows";
-
-    /// <summary>The <c>drain.&lt;corpus&gt;.duration_ms</c> series name for one embed-drain pass.</summary>
-    public static string DrainDurationMetricName(string corpus) => $"{DrainMetricPrefix}{corpus}.duration_ms";
 
     /// <summary>Replace-by-path's time spent waiting for the write lock, per transaction (WP12; EventId 899 recorded as a measurement).</summary>
     public const string ReplaceWaitMsMetricName = $"{WriteMetricPrefix}replace.wait_ms";
@@ -103,4 +86,34 @@ public static class MetricsConfigKeys
 
     /// <summary>Tokens a search query exceeded the embedding window by, per truncated query (EventId 426 recorded as a measurement).</summary>
     public const string QueryTruncatedTokensMetricName = $"{SearchQueryMetricPrefix}truncated_tokens";
+
+    /// <summary>The measurement names MetricsFlusher writes directly to the store on every flush pass.</summary>
+    public static readonly IReadOnlyList<string> SelfMetricNames =
+        ["metrics.flush.duration_ms", "metrics.flush.batch_size", "metrics.dropped"];
+
+    /// <summary>
+    ///     Every internal-series prefix MetricsReportService's discovery and the internal recorders'
+    ///     own naming both consume — one constant set, so another family cannot be added on one side
+    ///     only (derive-or-delete).
+    /// </summary>
+    public static readonly IReadOnlyList<string> InternalSeriesPrefixes =
+        [JobMetricPrefix, DrainMetricPrefix, WriteMetricPrefix, SearchQueryMetricPrefix, SearchFusionMetricPrefix, RechunkMetricPrefix, McpMetricPrefix];
+
+    public static int ParseBufferCapacity(string? value) => int.TryParse(value, out var capacity) && capacity > 0 ? capacity : DefaultBufferCapacity;
+
+    public static int ParseFlushIntervalSeconds(string? value) => int.TryParse(value, out var seconds) && seconds > 0 ? seconds : DefaultFlushIntervalSeconds;
+
+    public static int ParseRetentionDays(string? value) => int.TryParse(value, out var days) && days > 0 ? days : DefaultRetentionDays;
+
+    /// <summary>The <c>job.&lt;name&gt;.duration_ms</c> series name for one maintenance job.</summary>
+    public static string JobDurationMetricName(string jobName) => $"{JobMetricPrefix}{jobName}.duration_ms";
+
+    /// <summary>The <c>job.&lt;name&gt;.rows</c> series name for one maintenance job.</summary>
+    public static string JobRowsMetricName(string jobName) => $"{JobMetricPrefix}{jobName}.rows";
+
+    /// <summary>The <c>drain.&lt;corpus&gt;.rows</c> series name for one embed-drain pass.</summary>
+    public static string DrainRowsMetricName(string corpus) => $"{DrainMetricPrefix}{corpus}.rows";
+
+    /// <summary>The <c>drain.&lt;corpus&gt;.duration_ms</c> series name for one embed-drain pass.</summary>
+    public static string DrainDurationMetricName(string corpus) => $"{DrainMetricPrefix}{corpus}.duration_ms";
 }

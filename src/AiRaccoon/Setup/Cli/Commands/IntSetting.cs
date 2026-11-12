@@ -9,7 +9,12 @@ namespace AiRaccoon.Setup.Cli.Commands;
 ///     <see cref="SetAsync" /> parses the CLI argument, rejects bad values with a usage error, saves,
 ///     and prints <paramref name="Confirmation" />.
 /// </summary>
-public sealed record IntSetting(string Key, string Argument, string Noun, string Unit, Func<int, string> Confirmation,
+public sealed record IntSetting(
+    string Key,
+    string Argument,
+    string Noun,
+    string Unit,
+    Func<int, string> Confirmation,
     int? Max = null)
 {
     public async Task<int> SetAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,

@@ -111,7 +111,7 @@ public sealed class PerformanceToolsTests
             LastProjectId = projectId;
             LastRequirement = requirement;
             LastToolName = toolName;
-            return Task.FromResult(projectId ?? string.Empty);
+            return Task.FromResult(projectId ?? "");
         }
 
         public Task<ApiEnvelope<T>> WrapAsync<T>(string? projectId, T data, CancellationToken cancellationToken) =>

@@ -82,7 +82,7 @@ public sealed class CliBankWriteTests : IAsyncLifetime
     ///     post-#603/ADR-0099 a map-less derive reports every id unattributed (0 folds) and --apply
     ///     commits nothing, so the gate would pass vacuously. The map makes loser→winner actionable.
     /// </summary>
-    private string _projectIdsMapPath = string.Empty;
+    private string _projectIdsMapPath = "";
     private ISqliteConnectionFactory _factory = null!;
     private LoopbackPort _portLease = null!;
     private int _port;

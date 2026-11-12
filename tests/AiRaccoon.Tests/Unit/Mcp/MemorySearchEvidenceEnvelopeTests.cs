@@ -6,7 +6,6 @@ using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
-using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;

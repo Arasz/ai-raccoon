@@ -37,7 +37,7 @@ public sealed class ProjectKeyFoldTests
     {
         // The resolver derives its enumeration prefix from ScopeProject(string.Empty).
         // Ledger — throw-on-blank : --filter ScopeProject_OfAnEmptyId_StillDerivesThePrefix : empty string (resolver prefix derivation).
-        IngestScopeKeys.ScopeProject(string.Empty).ShouldBe("ingest.scope.");
+        IngestScopeKeys.ScopeProject("").ShouldBe("ingest.scope.");
     }
 
     [Theory]

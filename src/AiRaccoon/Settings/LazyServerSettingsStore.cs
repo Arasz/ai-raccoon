@@ -1,10 +1,10 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using AiRaccoon.Core.Decisions;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Projects;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using AiRaccoon.Core.Decisions;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Decisions;
 using AiRaccoon.Decisions.Client;
@@ -32,89 +32,11 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
         _acquire = acquire;
     }
 
-    public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => await (await InnerAsync(cancellationToken)).GetSettingAsync(key, cancellationToken);
-
-    public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
-        await (await InnerAsync(cancellationToken)).SetSettingAsync(key, value, cancellationToken);
-
-    public async Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
-        CancellationToken cancellationToken = default) =>
-        await (await InnerAsync(cancellationToken)).GetSettingsByPrefixAsync(prefix, cancellationToken);
-
-    public async Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => await (await InnerAsync(cancellationToken)).DeleteSettingAsync(key, cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
-        CancellationToken cancellationToken = default) =>
-        await AsMigrationStore(await InnerAsync(cancellationToken))
-            .StartModelMigrationAsync(provider, model, baseUrl, cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<bool> HasOpenModelMigrationAsync(CancellationToken cancellationToken = default) =>
-        await AsMigrationStore(await InnerAsync(cancellationToken)).HasOpenModelMigrationAsync(cancellationToken);
-
     /// <inheritdoc />
     public async Task<EmbeddingConfig> ActivateCodeEngineAsync(string directory,
         CancellationToken cancellationToken = default) =>
         await AsCodeEngineStore(await InnerAsync(cancellationToken))
             .ActivateCodeEngineAsync(directory, cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<ReingestRepairReport> ReportReingestAsync(CancellationToken cancellationToken = default) =>
-        await AsRepairStore(await InnerAsync(cancellationToken)).ReportReingestAsync(cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<ChunkIndexRepairReport> ReportChunkIndexAsync(CancellationToken cancellationToken = default) =>
-        await AsRepairStore(await InnerAsync(cancellationToken)).ReportChunkIndexAsync(cancellationToken);
-
-    public async Task<ProjectIdCensusReport> ReportProjectIdsAsync(CancellationToken cancellationToken = default) =>
-        await AsRepairStore(await InnerAsync(cancellationToken)).ReportProjectIdsAsync(cancellationToken);
-
-    /// <inheritdoc />
-    public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default, string? projectIdsMapJson = null) =>
-        await AsRepairStore(await InnerAsync(cancellationToken)).RequestRepairAsync(kind, cancellationToken, projectIdsMapJson);
-
-    /// <inheritdoc />
-    public async Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default) =>
-        await AsPruneStore(await InnerAsync(cancellationToken)).ReportPruneOrphansAsync(cancellationToken);
-
-    /// <inheritdoc />
-    public async Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default) => await AsPruneStore(await InnerAsync(cancellationToken)).RequestPruneOrphansAsync(cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default) => await AsMaintenanceStatsStore(await InnerAsync(cancellationToken)).GetStatsAsync(cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default) =>
-        await AsNoiseSummaryStore(await InnerAsync(cancellationToken)).SummarizeAsync(cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default) =>
-        await AsWatchRegisteredStore(await InnerAsync(cancellationToken)).ListWatchesAsync(cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<ProjectRegistration> RegisterAsync(string projectId, string? name, CancellationToken cancellationToken = default) =>
-        await AsProjectDirectory(await InnerAsync(cancellationToken)).RegisterAsync(projectId, name, cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<IReadOnlyList<string>> FindByNameAsync(string name, CancellationToken cancellationToken = default) =>
-        await AsProjectDirectory(await InnerAsync(cancellationToken)).FindByNameAsync(name, cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<ProjectIdCheck> CheckAsync(string projectId, CancellationToken cancellationToken = default) =>
-        await AsProjectDirectory(await InnerAsync(cancellationToken)).CheckAsync(projectId, cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<WatchAddResponse> AddAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
-        await AsWatchControl(await InnerAsync(cancellationToken)).AddAsync(projectId, path, cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<WatchRemoveResponse> RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
-        await AsWatchControl(await InnerAsync(cancellationToken)).RemoveAsync(projectId, path, cancellationToken);
-
-    /// <inheritdoc />
-    public async Task<IReadOnlyList<WatchStatus>> StatusAsync(string? projectId, CancellationToken cancellationToken = default) =>
-        await AsWatchControl(await InnerAsync(cancellationToken)).StatusAsync(projectId, cancellationToken);
 
     /// <inheritdoc />
     public async Task<JsonDocument> RegisterTaskAsync(string projectId, RegisterTaskRequest request, CancellationToken cancellationToken = default) =>
@@ -147,6 +69,84 @@ internal sealed class LazyServerSettingsStore : ISettingsStore, IModelMigrationS
     /// <inheritdoc />
     public async Task<JsonDocument> ImportApplyAsync(string projectId, ImportApplyRequest request, CancellationToken cancellationToken = default) =>
         await AsDecisionClient(await InnerAsync(cancellationToken)).ImportApplyAsync(projectId, request, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default) => await AsMaintenanceStatsStore(await InnerAsync(cancellationToken)).GetStatsAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
+        CancellationToken cancellationToken = default) =>
+        await AsMigrationStore(await InnerAsync(cancellationToken))
+            .StartModelMigrationAsync(provider, model, baseUrl, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<bool> HasOpenModelMigrationAsync(CancellationToken cancellationToken = default) =>
+        await AsMigrationStore(await InnerAsync(cancellationToken)).HasOpenModelMigrationAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default) =>
+        await AsNoiseSummaryStore(await InnerAsync(cancellationToken)).SummarizeAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<ProjectRegistration> RegisterAsync(string projectId, string? name, CancellationToken cancellationToken = default) =>
+        await AsProjectDirectory(await InnerAsync(cancellationToken)).RegisterAsync(projectId, name, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> FindByNameAsync(string name, CancellationToken cancellationToken = default) =>
+        await AsProjectDirectory(await InnerAsync(cancellationToken)).FindByNameAsync(name, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<ProjectIdCheck> CheckAsync(string projectId, CancellationToken cancellationToken = default) =>
+        await AsProjectDirectory(await InnerAsync(cancellationToken)).CheckAsync(projectId, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default) =>
+        await AsPruneStore(await InnerAsync(cancellationToken)).ReportPruneOrphansAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default) => await AsPruneStore(await InnerAsync(cancellationToken)).RequestPruneOrphansAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<ReingestRepairReport> ReportReingestAsync(CancellationToken cancellationToken = default) =>
+        await AsRepairStore(await InnerAsync(cancellationToken)).ReportReingestAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<ChunkIndexRepairReport> ReportChunkIndexAsync(CancellationToken cancellationToken = default) =>
+        await AsRepairStore(await InnerAsync(cancellationToken)).ReportChunkIndexAsync(cancellationToken);
+
+    public async Task<ProjectIdCensusReport> ReportProjectIdsAsync(CancellationToken cancellationToken = default) =>
+        await AsRepairStore(await InnerAsync(cancellationToken)).ReportProjectIdsAsync(cancellationToken);
+
+    /// <inheritdoc />
+    public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default, string? projectIdsMapJson = null) =>
+        await AsRepairStore(await InnerAsync(cancellationToken)).RequestRepairAsync(kind, cancellationToken, projectIdsMapJson);
+
+    public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default) => await (await InnerAsync(cancellationToken)).GetSettingAsync(key, cancellationToken);
+
+    public async Task SetSettingAsync(string key, string value, CancellationToken cancellationToken = default) =>
+        await (await InnerAsync(cancellationToken)).SetSettingAsync(key, value, cancellationToken);
+
+    public async Task<IReadOnlyDictionary<string, string>> GetSettingsByPrefixAsync(string prefix,
+        CancellationToken cancellationToken = default) =>
+        await (await InnerAsync(cancellationToken)).GetSettingsByPrefixAsync(prefix, cancellationToken);
+
+    public async Task DeleteSettingAsync(string key, CancellationToken cancellationToken = default) => await (await InnerAsync(cancellationToken)).DeleteSettingAsync(key, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<WatchAddResponse> AddAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
+        await AsWatchControl(await InnerAsync(cancellationToken)).AddAsync(projectId, path, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<WatchRemoveResponse> RemoveAsync(string projectId, string path, CancellationToken cancellationToken = default) =>
+        await AsWatchControl(await InnerAsync(cancellationToken)).RemoveAsync(projectId, path, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<WatchStatus>> StatusAsync(string? projectId, CancellationToken cancellationToken = default) =>
+        await AsWatchControl(await InnerAsync(cancellationToken)).StatusAsync(projectId, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default) =>
+        await AsWatchRegisteredStore(await InnerAsync(cancellationToken)).ListWatchesAsync(cancellationToken);
 
     /// <summary>Same reasoning as <see cref="AsMigrationStore" />, for the decision routes.</summary>
     private static IDecisionClient AsDecisionClient(ISettingsStore store) =>

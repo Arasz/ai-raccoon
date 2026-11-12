@@ -6,11 +6,12 @@ namespace AiRaccoon.Infrastructure.Sync;
 /// <inheritdoc cref="ISyncBlobAuthenticator" />
 public sealed class SyncBlobAuthenticator : ISyncBlobAuthenticator
 {
+    private const int TagLength = 32; // HMACSHA256 output size
+
     // Deliberately not "SQLite format 3\0" — recognizably distinct so a legacy, never-wrapped
     // blob can never be mistaken for a wrapped one.
     private static readonly byte[] Header = "AIRACCOON-SYNC-HMAC-V1\n"u8.ToArray();
     private static readonly byte[] KeyInfo = "ai-raccoon-sync-auth"u8.ToArray();
-    private const int TagLength = 32; // HMACSHA256 output size
 
     public byte[] Wrap(string passphrase, byte[] data)
     {
@@ -38,8 +39,10 @@ public sealed class SyncBlobAuthenticator : ISyncBlobAuthenticator
 
     public bool Verify(string passphrase, byte[] tag, byte[] data) => CryptographicOperations.FixedTimeEquals(ComputeTag(passphrase, data), tag);
 
-    /// <summary>Derives a purpose-specific key from the passphrase via HKDF (platform primitive,
-    /// not a hand-rolled scheme) and tags the data with HMAC-SHA256.</summary>
+    /// <summary>
+    ///     Derives a purpose-specific key from the passphrase via HKDF (platform primitive,
+    ///     not a hand-rolled scheme) and tags the data with HMAC-SHA256.
+    /// </summary>
     private static byte[] ComputeTag(string passphrase, byte[] data)
     {
         var key = HKDF.DeriveKey(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(passphrase), 32,

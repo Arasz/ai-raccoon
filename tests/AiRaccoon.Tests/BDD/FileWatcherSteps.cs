@@ -1,6 +1,5 @@
 using System.Globalization;
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Sqlite;
@@ -92,7 +91,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         return _lastCliMessage;
     }
 
-    private string NextToken(string seed) => $"zephyr{seed.Replace("/", string.Empty).Replace(".", string.Empty)}{_tokenSeq++}";
+    private string NextToken(string seed) => $"zephyr{seed.Replace("/", "").Replace(".", "")}{_tokenSeq++}";
 
     private string Map(string virtualPath) => Ctx.MapPath(virtualPath);
 
@@ -177,7 +176,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         return await Ctx.StepUntilAsync(async () =>
         {
             var results = await SearchAsync(projectId, token);
-            return normalized is null ? results.Count > 0 : results.Any(r => Normalized(r.SourceFile ?? string.Empty) == normalized);
+            return normalized is null ? results.Count > 0 : results.Any(r => Normalized(r.SourceFile ?? "") == normalized);
         }, maxFakeSeconds);
     }
 
@@ -1289,7 +1288,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         ok.ShouldBeTrue("the content did not land under the new path");
         var expected = Normalized(real);
         var results = await SearchAsync(projectId, _lastFileContent!);
-        results.All(r => Normalized(r.SourceFile ?? string.Empty) == expected).ShouldBeTrue();
+        results.All(r => Normalized(r.SourceFile ?? "") == expected).ShouldBeTrue();
     }
 
     [Then("^nothing is returned under \"([^\"]*)\"$")]
@@ -1297,7 +1296,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     {
         _lastFileContent.ShouldNotBeNull();
         var results = await SearchAsync(DefaultProject, _lastFileContent!);
-        results.Any(r => Normalized(r.SourceFile ?? string.Empty) == Normalized(Resolve(path))).ShouldBeFalse();
+        results.Any(r => Normalized(r.SourceFile ?? "") == Normalized(Resolve(path))).ShouldBeFalse();
     }
 
     [Then("^the content lands under the final path$")]
@@ -1307,7 +1306,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         var ok = await EnsureSearchableAsync(DefaultProject, _lastFileContent!, newPath);
         ok.ShouldBeTrue("the renamed file's content did not land under the final path");
         (await SearchAsync(DefaultProject, _lastFileContent!))
-            .Any(r => Normalized(r.SourceFile ?? string.Empty) == Normalized(Path.Combine(Ctx.RepoDir, "old.md")))
+            .Any(r => Normalized(r.SourceFile ?? "") == Normalized(Path.Combine(Ctx.RepoDir, "old.md")))
             .ShouldBeFalse();
     }
 
@@ -1343,7 +1342,7 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
         {
             var incomingResults = await SearchAsync(DefaultProject, incoming);
             return incomingResults.Count > 0 &&
-                   incomingResults.All(r => Normalized(r.SourceFile ?? string.Empty) == Normalized(target));
+                   incomingResults.All(r => Normalized(r.SourceFile ?? "") == Normalized(target));
         });
         ok.ShouldBeTrue("the incoming content did not land under the target path");
 

@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Projects;
+
 namespace AiRaccoon.Core.Memory;
 
 /// <summary>The promotion reason tags and the refusal text a `shared` write reports — one place, so the wire strings agree.</summary>
@@ -40,11 +41,11 @@ public interface IMemoryWriteService
 }
 
 /// <inheritdoc cref="IMemoryWriteService" />
-public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue,
+public sealed class MemoryWriteService(
+    IMemoryStore store,
+    IPromotionQueue queue,
     ISharedProjectScope scope) : IMemoryWriteService
 {
-    private readonly ISharedProjectScope _scope = scope;
-
     /// <summary>
     ///     Derived from <see cref="PromotionScorer.MaxScore" /> — the scorer's declared output
     ///     ceiling — plus a full point, so an explicit request outranks every inference even if that
@@ -53,6 +54,8 @@ public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue
     ///     rather than being silently dropped, and that is reversible if it proves wrong.
     /// </summary>
     public const double AgentRequestedScore = PromotionScorer.MaxScore + 1.0;
+
+    private readonly ISharedProjectScope _scope = scope;
 
     public async Task<MemoryEntry> WriteAsync(MemoryWriteRequest request,
         CancellationToken cancellationToken = default)
@@ -79,14 +82,14 @@ public sealed class MemoryWriteService(IMemoryStore store, IPromotionQueue queue
         }
 
         var outcome = await queue.ProposeAsync(request.ProjectId,
-                [
-                    // K2 (F22): stamped with the current scorer version, not the 0 default — ClearStale
-                    // deletes every row on a retired version before the next pass ranks, which would
-                    // destroy the explicit request a below-floor note can never re-earn.
-                    new QueueCandidate(entry.Hash, entry.Path, entry.Value, request.SourceFile,
-                        AgentRequestedScore, [PromotionReasons.AgentRequestedShare], PromotionScorer.Version)
-                ],
-                cancellationToken);
+            [
+                // K2 (F22): stamped with the current scorer version, not the 0 default — ClearStale
+                // deletes every row on a retired version before the next pass ranks, which would
+                // destroy the explicit request a below-floor note can never re-earn.
+                new QueueCandidate(entry.Hash, entry.Path, entry.Value, request.SourceFile,
+                    AgentRequestedScore, [PromotionReasons.AgentRequestedShare], PromotionScorer.Version)
+            ],
+            cancellationToken);
 
         // F25: the upsert is refused for a remembered discard or an already-shared value twin, so
         // the queue — not the call — decides which reason is true here. Refused and NotQueued are

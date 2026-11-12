@@ -1,10 +1,9 @@
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Sqlite;
 
 namespace AiRaccoon.Infrastructure.Sqlite.Memory;
 
 /// <summary>
-///     Maps a context string to a row filter — the read/delete twin of <see cref="EntryBucket"/>,
+///     Maps a context string to a row filter — the read/delete twin of <see cref="EntryBucket" />,
 ///     which maps the same strings to write-time bucket columns. They live together so the rule
 ///     that a context stays inside its project cannot hold on one side and not the other.
 /// </summary>
@@ -13,7 +12,7 @@ internal static class ContextFilterProvider
     /// <summary>
     ///     Built only from constant fragments; every value goes through parameters, so a user-supplied
     ///     context string can never inject SQL. Callers that accept an untrusted context must first
-    ///     pass it through <see cref="ContextScope.RequireWithinProject"/> — this maps, it does not
+    ///     pass it through <see cref="ContextScope.RequireWithinProject" /> — this maps, it does not
     ///     authorize.
     /// </summary>
     public static ContextFilter For(string context, string projectId, string alias)

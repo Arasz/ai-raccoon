@@ -35,12 +35,16 @@ public sealed record Workspace
 
     public string Context => ContextNaming.WorkspaceContext(Id);
 
-    /// <summary>The one legal transition into Closed (WP5b/A-F7): throws from any non-Active
-    /// source, so a workspace can never be closed-into twice or reopened through this path.</summary>
+    /// <summary>
+    ///     The one legal transition into Closed (WP5b/A-F7): throws from any non-Active
+    ///     source, so a workspace can never be closed-into twice or reopened through this path.
+    /// </summary>
     public Workspace Consolidate() => TransitionTo(WorkspaceStatus.Closed);
 
-    /// <summary>The one legal transition into Discarded (WP5b/A-F7): throws from any non-Active
-    /// source, mirroring <see cref="Consolidate" />.</summary>
+    /// <summary>
+    ///     The one legal transition into Discarded (WP5b/A-F7): throws from any non-Active
+    ///     source, mirroring <see cref="Consolidate" />.
+    /// </summary>
     public Workspace Discard() => TransitionTo(WorkspaceStatus.Discarded);
 
     private Workspace TransitionTo(WorkspaceStatus terminal)

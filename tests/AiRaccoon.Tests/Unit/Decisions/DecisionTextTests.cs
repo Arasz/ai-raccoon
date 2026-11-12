@@ -10,11 +10,11 @@ public sealed class DecisionTextTests
 {
     [Fact]
     public void Required_measures_the_trimmed_text_against_the_maximum() =>
-        Should.NotThrow(() => DecisionText.Required("  " + new string('a', 200) + " ", 200, "title"));
+        Should.NotThrow(() => DecisionText.Required($"  {new string('a', 200)} ", 200, "title"));
 
     [Fact]
     public void Required_refuses_trimmed_text_over_the_maximum() =>
-        Should.Throw<ArgumentException>(() => DecisionText.Required(" " + new string('a', 201), 200, "title"));
+        Should.Throw<ArgumentException>(() => DecisionText.Required($" {new string('a', 201)}", 200, "title"));
 
     [Theory]
     [InlineData(0x202E)]

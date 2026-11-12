@@ -11,12 +11,16 @@ public sealed record PrunedWatch(string Path, string CoveredBy);
 /// <summary>The result of resolving one candidate add against a project's existing registrations.</summary>
 public enum WatchOverlapOutcome
 {
-    /// <summary>Nothing else in the project contains the candidate; existing entries the
-    /// candidate contains are listed in <see cref="WatchOverlapDecision.Pruned" />.</summary>
+    /// <summary>
+    ///     Nothing else in the project contains the candidate; existing entries the
+    ///     candidate contains are listed in <see cref="WatchOverlapDecision.Pruned" />.
+    /// </summary>
     Accepted,
 
-    /// <summary>The candidate is contained by (or loses the tie-break against) an existing
-    /// watch; nothing is written. <see cref="WatchOverlapDecision.CoveringPath" /> names it.</summary>
+    /// <summary>
+    ///     The candidate is contained by (or loses the tie-break against) an existing
+    ///     watch; nothing is written. <see cref="WatchOverlapDecision.CoveringPath" /> names it.
+    /// </summary>
     Rejected,
 
     /// <summary>The candidate's literal path exactly matches an existing registration — a no-op.</summary>
@@ -70,15 +74,15 @@ public sealed class WatchOverlapResolver : IWatchOverlapResolver
         // Step 1: real-path-equal groups (mutual containment via symlink/case spellings) reduce
         // to one survivor per group — longest literal path, then earliest registration.
         var groups = registrations
-            .GroupBy(r => IngestPath.ResolveReal(r.Path), IngestPath.PathComparer)
+            .GroupBy(static overlapCandidate => IngestPath.ResolveReal(overlapCandidate.Path), IngestPath.PathComparer)
             .ToArray();
 
         var candidates = new List<WatchOverlapCandidate>(groups.Length);
         foreach (var group in groups)
         {
             var ordered = group
-                .OrderByDescending(r => r.Path.Length)
-                .ThenBy(r => r.CreatedAt)
+                .OrderByDescending(static overlapCandidate => overlapCandidate.Path.Length)
+                .ThenBy(static overlapCandidate => overlapCandidate.CreatedAt)
                 .ToArray();
             var survivor = ordered[0];
             candidates.Add(survivor);
@@ -91,9 +95,8 @@ public sealed class WatchOverlapResolver : IWatchOverlapResolver
         // Step 2: cross-group containment — keep only the outermost watches; a candidate covered
         // by another is named by the deepest (most specific) surviving ancestor that contains it.
         var finalSurvivors = candidates
-            .Where(c => candidates.All(other => ReferenceEquals(other, c) ||
-                                                !IngestPath.IsWithinScope(c.Path, other.Path)))
-            .ToArray();
+            .Where(overlapCandidate => candidates.All(other => ReferenceEquals(other, overlapCandidate) || !IngestPath.IsWithinScope(overlapCandidate.Path, other.Path)))
+            .ToList();
 
         foreach (var candidate in candidates)
         {
@@ -104,7 +107,7 @@ public sealed class WatchOverlapResolver : IWatchOverlapResolver
 
             var coveredBy = finalSurvivors
                 .Where(s => IngestPath.IsWithinScope(candidate.Path, s.Path))
-                .OrderByDescending(s => s.Path.Length)
+                .OrderByDescending(static overlapCandidate => overlapCandidate.Path.Length)
                 .First();
             pruned.Add(new PrunedWatch(candidate.Path, coveredBy.Path));
         }
@@ -124,12 +127,7 @@ public sealed class WatchOverlapResolver : IWatchOverlapResolver
         combined.AddRange(existing);
         var pruned = SelectPruned(combined);
 
-        var candidatePruned = pruned.FirstOrDefault(p => IngestPath.PathComparer.Equals(p.Path, candidate.Path));
-        if (candidatePruned is not null)
-        {
-            return new WatchOverlapDecision(WatchOverlapOutcome.Rejected, candidatePruned.CoveredBy, []);
-        }
-
-        return new WatchOverlapDecision(WatchOverlapOutcome.Accepted, null, pruned);
+        var candidatePruned = pruned.FirstOrDefault(prunedWatch => IngestPath.PathComparer.Equals(prunedWatch.Path, candidate.Path));
+        return candidatePruned is not null ? new WatchOverlapDecision(WatchOverlapOutcome.Rejected, candidatePruned.CoveredBy, []) : new WatchOverlapDecision(WatchOverlapOutcome.Accepted, null, pruned);
     }
 }

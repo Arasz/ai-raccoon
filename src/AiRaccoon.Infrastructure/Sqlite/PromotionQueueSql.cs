@@ -89,24 +89,6 @@ internal static class PromotionQueueSql
                                     WHERE (@ProjectId IS NULL OR project_id = @ProjectId)
                                     """;
 
-    /// <summary>Orphans pre-dating the promotion_queue_entries_ad trigger (ADR-0023): rows whose (project_id, hash) has no backing entries row inside the project (<see cref="ProjectRows" />, ADR-0046), grouped per project for the dry-run report.</summary>
-    public static readonly string OrphanCountsPerProject = $"""
-                                                            SELECT project_id AS ProjectId, count(*) AS Count
-                                                            FROM promotion_queue q
-                                                            WHERE NOT EXISTS (SELECT 1 FROM entries e
-                                                                              WHERE e.project_id = q.project_id AND e.hash = q.hash
-                                                                                AND {ProjectRows.Scope("e.")})
-                                                            GROUP BY project_id
-                                                            """;
-
-    public static readonly string DeleteOrphans = $"""
-                                                   DELETE FROM promotion_queue
-                                                   WHERE NOT EXISTS (SELECT 1 FROM entries e
-                                                                     WHERE e.project_id = promotion_queue.project_id
-                                                                       AND e.hash = promotion_queue.hash
-                                                                       AND {ProjectRows.Scope("e.")})
-                                                   """;
-
     public const string EvictVictim = """
                                       DELETE FROM promotion_queue
                                       WHERE id = (
@@ -126,9 +108,11 @@ internal static class PromotionQueueSql
                                      WHERE project_id = @ProjectId AND scorer_version != @CurrentVersion
                                      """;
 
-    /// <summary>Claims one row by marking it claimed (WP5b/A-F11) rather than deleting it — a
-    /// ShareAsync failure after this leaves the row reclaimable instead of destroying the
-    /// candidate. Affects 0 rows when already claimed or gone.</summary>
+    /// <summary>
+    ///     Claims one row by marking it claimed (WP5b/A-F11) rather than deleting it — a
+    ///     ShareAsync failure after this leaves the row reclaimable instead of destroying the
+    ///     candidate. Affects 0 rows when already claimed or gone.
+    /// </summary>
     public const string Claim = """
                                 UPDATE promotion_queue
                                 SET claimed_at = @ClaimedAt
@@ -138,12 +122,32 @@ internal static class PromotionQueueSql
                                           created_at AS CreatedAt, updated_at AS UpdatedAt, scorer_version AS ScorerVersion
                                 """;
 
-    /// <summary>Releases claims older than the stale threshold back to the queue (WP5b/A-F11): the
-    /// caller that claimed a row and then died or hung mid-ShareAsync never gets to unclaim it
-    /// itself. Returns the count released.</summary>
+    /// <summary>
+    ///     Releases claims older than the stale threshold back to the queue (WP5b/A-F11): the
+    ///     caller that claimed a row and then died or hung mid-ShareAsync never gets to unclaim it
+    ///     itself. Returns the count released.
+    /// </summary>
     public const string ReclaimStaleClaims = """
                                              UPDATE promotion_queue
                                              SET claimed_at = NULL
                                              WHERE claimed_at IS NOT NULL AND claimed_at < @CutoffAt
                                              """;
+
+    /// <summary>Orphans pre-dating the promotion_queue_entries_ad trigger (ADR-0023): rows whose (project_id, hash) has no backing entries row inside the project (<see cref="ProjectRows" />, ADR-0046), grouped per project for the dry-run report.</summary>
+    public static readonly string OrphanCountsPerProject = $"""
+                                                            SELECT project_id AS ProjectId, count(*) AS Count
+                                                            FROM promotion_queue q
+                                                            WHERE NOT EXISTS (SELECT 1 FROM entries e
+                                                                              WHERE e.project_id = q.project_id AND e.hash = q.hash
+                                                                                AND {ProjectRows.Scope("e.")})
+                                                            GROUP BY project_id
+                                                            """;
+
+    public static readonly string DeleteOrphans = $"""
+                                                   DELETE FROM promotion_queue
+                                                   WHERE NOT EXISTS (SELECT 1 FROM entries e
+                                                                     WHERE e.project_id = promotion_queue.project_id
+                                                                       AND e.hash = promotion_queue.hash
+                                                                       AND {ProjectRows.Scope("e.")})
+                                                   """;
 }

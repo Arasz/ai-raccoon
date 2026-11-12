@@ -94,7 +94,7 @@ public sealed class Vec0PartitionKeyProbe : IDisposable
                 row => row.Item2),
             ("scope-partitioned", "ctx TEXT partition key, embedding float[384] distance_metric=cosine",
                 row => row.Item3),
-            ("unpartitioned", "embedding float[384] distance_metric=cosine", _ => string.Empty),
+            ("unpartitioned", "embedding float[384] distance_metric=cosine", _ => ""),
             // The shape a CORRECT replacement needs: no partition key, but ctx still filterable as a
             // vec0 metadata column, so the KNN stays scoped to the caller's context. The plain
             // unpartitioned row above is NOT a correct replacement — it returns the global top-k.
@@ -125,7 +125,7 @@ public sealed class Vec0PartitionKeyProbe : IDisposable
             var chunkSize = await connection.ExecuteScalarAsync<long>($"SELECT MAX(size) FROM {table}_chunks");
             var bytes = chunks * chunkSize * 384 * sizeof(float);
 
-            var where = partitioned ? "ctx = @ctx AND " : string.Empty;
+            var where = partitioned ? "ctx = @ctx AND " : "";
             var sql = $"SELECT rowid FROM {table} WHERE {where}embedding MATCH @vec AND k = {K}";
             var args = partitioned
                 ? new { ctx = key((vectors[0].Id, vectors[0].Ctx, vectors[0].Scope, probe)), vec = probe }

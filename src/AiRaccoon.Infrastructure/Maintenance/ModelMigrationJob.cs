@@ -27,7 +27,7 @@ public sealed class ModelMigrationJob(IEntryEmbedder embedder) : IMaintenanceJob
     {
         await embedder.ReconcileFingerprintAsync(connection, cancellationToken);
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                MemorySql.HasOpenModelMigration, cancellationToken: cancellationToken)) > 0;
+            MemorySql.HasOpenModelMigration, cancellationToken: cancellationToken)) > 0;
     }
 
     /// <summary>

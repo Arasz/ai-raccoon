@@ -20,8 +20,7 @@ public static class IngestScopeKeys
     ///     depth — the authoritative fold is the ToolGate choke): a loser id must never again be
     ///     embedded raw or the resolver would see two projects where the repair left one.
     /// </summary>
-    public static string ScopeProject(string projectId) =>
-        $"ingest.scope.{ProjectIdAliasMap.Default.Fold(projectId)}";
+    public static string ScopeProject(string projectId) => $"ingest.scope.{ProjectIdAliasMap.Default.Fold(projectId)}";
 
     public static string Serialize(IEnumerable<string> paths)
     {

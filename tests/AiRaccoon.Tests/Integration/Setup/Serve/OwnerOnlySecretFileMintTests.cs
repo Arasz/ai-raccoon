@@ -1,6 +1,5 @@
 using AiRaccoon.Hosting.Common;
 using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 using xRetry.v3;

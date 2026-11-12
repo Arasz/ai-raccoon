@@ -1,6 +1,9 @@
+using System.Collections.Frozen;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Infrastructure.Embedding;
 
@@ -12,12 +15,12 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     wrapping) is read from the file itself, never guessed — an unrecognized shape throws rather
 ///     than approximating.
 /// </summary>
-public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
+public sealed partial class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
 {
-    private readonly IContentEncoder _contentEncoder;
     private readonly AddedTokenSplitter _addedTokens;
-    private readonly IReadOnlyList<int> _prependIds;
     private readonly IReadOnlyList<int> _appendIds;
+    private readonly IContentEncoder _contentEncoder;
+    private readonly IReadOnlyList<int> _prependIds;
 
     private TokenizerJsonEmbeddingTokenizer(IContentEncoder contentEncoder, AddedTokenSplitter addedTokens,
         IReadOnlyList<int> prependIds, IReadOnlyList<int> appendIds)
@@ -28,86 +31,8 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
         _appendIds = appendIds;
     }
 
-    /// <summary>Parses <paramref name="tokenizerJsonPath" /> once and builds the encoder for the
-    /// shape it declares (model.type, normalizer, pre_tokenizer, post_processor).</summary>
-    public static TokenizerJsonEmbeddingTokenizer Create(string tokenizerJsonPath)
-    {
-        using var document = JsonDocument.Parse(File.ReadAllBytes(tokenizerJsonPath));
-        var root = document.RootElement;
-
-        var model = root.GetProperty("model");
-        var modelType = model.GetProperty("type").GetString();
-        IContentEncoder contentEncoder = modelType switch
-        {
-            "BPE" => BuildBpeEncoder(root, model, tokenizerJsonPath),
-            "WordPiece" => BuildWordPieceEncoder(root, model, tokenizerJsonPath),
-            var other => throw new NotSupportedException(
-                $"tokenizer.json model.type '{other}' is not supported by the tokenizer-json family (BPE and WordPiece are); '{tokenizerJsonPath}'.")
-        };
-
-        var addedTokens = AddedTokenSplitter.From(root);
-        var (prependIds, appendIds) = PostProcessorOf(root);
-
-        return new TokenizerJsonEmbeddingTokenizer(contentEncoder, addedTokens, prependIds, appendIds);
-    }
-
-    private static IContentEncoder BuildBpeEncoder(JsonElement root, JsonElement model, string tokenizerJsonPath)
-    {
-        var vocab = ReadVocab(model);
-        var mergeRanks = ReadMerges(model);
-        var byteFallback = model.TryGetProperty("byte_fallback", out var bf) && bf.ValueKind == JsonValueKind.True;
-        var normalizer = NormalizerOf(root);
-
-        return PreTokenizerOf(root, byteFallback) switch
-        {
-            PreTokenizerKind.ByteLevelGpt2Kind => new BpeContentEncoder(normalizer, Segmenters.Gpt2ByteLevel, vocab, mergeRanks, byteFallback: false),
-            PreTokenizerKind.SequenceSplitThenByteLevel seq => new BpeContentEncoder(normalizer, Segmenters.SplitByRegexThenByteLevel(seq.Pattern), vocab, mergeRanks, byteFallback: false),
-            PreTokenizerKind.SentencePieceSplitKind => new BpeContentEncoder(normalizer, Segmenters.WholeTextAsOneUnit, vocab, mergeRanks, byteFallback),
-            var other => throw new NotSupportedException($"tokenizer.json pre_tokenizer shape '{other}' is not supported; '{tokenizerJsonPath}'.")
-        };
-    }
-
-    private static IContentEncoder BuildWordPieceEncoder(JsonElement root, JsonElement model, string tokenizerJsonPath)
-    {
-        if (!root.TryGetProperty("pre_tokenizer", out var preTokenizer)
-            || preTokenizer.GetProperty("type").GetString() != "BertPreTokenizer")
-        {
-            throw new NotSupportedException(
-                $"tokenizer.json WordPiece model requires pre_tokenizer.type 'BertPreTokenizer'; '{tokenizerJsonPath}'.");
-        }
-
-        var vocab = ReadVocab(model);
-        var unkToken = model.GetProperty("unk_token").GetString()!;
-        var continuingPrefix = model.TryGetProperty("continuing_subword_prefix", out var prefix) && prefix.ValueKind == JsonValueKind.String
-            ? prefix.GetString()!
-            : "##";
-        var maxCharsPerWord = model.TryGetProperty("max_input_chars_per_word", out var max) && max.ValueKind == JsonValueKind.Number
-            ? max.GetInt32()
-            : 100;
-
-        var normalizerElement = root.GetProperty("normalizer");
-        if (normalizerElement.GetProperty("type").GetString() != "BertNormalizer")
-        {
-            throw new NotSupportedException($"tokenizer.json WordPiece model requires normalizer.type 'BertNormalizer'; '{tokenizerJsonPath}'.");
-        }
-
-        var lowercase = BoolOrDefault(normalizerElement, "lowercase", true);
-        var handleChineseChars = BoolOrDefault(normalizerElement, "handle_chinese_chars", true);
-        var cleanText = BoolOrDefault(normalizerElement, "clean_text", true);
-        var stripAccents = normalizerElement.TryGetProperty("strip_accents", out var strip) && strip.ValueKind is JsonValueKind.True or JsonValueKind.False
-            ? strip.GetBoolean()
-            : lowercase; // HF's own default: unset strip_accents follows lowercase.
-
-        return new WordPieceContentEncoder(vocab, unkToken, continuingPrefix, maxCharsPerWord, lowercase, handleChineseChars, cleanText, stripAccents);
-    }
-
-    private static bool BoolOrDefault(JsonElement element, string property, bool defaultValue) =>
-        element.TryGetProperty(property, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False
-            ? value.GetBoolean()
-            : defaultValue;
-
     /// <summary>Content tokens only — never the post-processor's prepend/append specials.</summary>
-    public int CountTokens(string text) => EncodeToIds(text, addSpecialTokens: false).Count;
+    public int CountTokens(string text) => EncodeToIds(text, false).Count;
 
     public IReadOnlyList<int> EncodeToIds(string text, bool addSpecialTokens)
     {
@@ -140,7 +65,86 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
     /// <summary>What the post-processor's "single" template adds beyond the content sequence.</summary>
     public int SpecialTokenReservation => _prependIds.Count + _appendIds.Count;
 
-    private static Dictionary<string, int> ReadVocab(JsonElement model)
+    /// <summary>
+    ///     Parses <paramref name="tokenizerJsonPath" /> once and builds the encoder for the
+    ///     shape it declares (model.type, normalizer, pre_tokenizer, post_processor).
+    /// </summary>
+    public static TokenizerJsonEmbeddingTokenizer Create(string tokenizerJsonPath)
+    {
+        using var document = JsonDocument.Parse(File.ReadAllBytes(tokenizerJsonPath));
+        var root = document.RootElement;
+
+        var model = root.GetProperty("model");
+        var modelType = model.GetProperty("type").GetString();
+        var contentEncoder = modelType switch
+        {
+            "BPE" => BuildBpeEncoder(root, model, tokenizerJsonPath),
+            "WordPiece" => BuildWordPieceEncoder(root, model, tokenizerJsonPath),
+            _ => throw new NotSupportedException($"tokenizer.json model.type '{modelType}' is not supported by the tokenizer-json family (BPE and WordPiece are); '{tokenizerJsonPath}'.")
+        };
+
+        var addedTokens = AddedTokenSplitter.From(root);
+        var (prependIds, appendIds) = PostProcessorOf(root);
+
+        return new TokenizerJsonEmbeddingTokenizer(contentEncoder, addedTokens, prependIds, appendIds);
+    }
+
+    private static BpeContentEncoder BuildBpeEncoder(JsonElement root, JsonElement model, string tokenizerJsonPath)
+    {
+        var vocab = ReadVocab(model);
+        var mergeRanks = ReadMerges(model);
+        var byteFallback = model.TryGetProperty("byte_fallback", out var bf) && bf.ValueKind == JsonValueKind.True;
+        var normalizer = NormalizerOf(root);
+
+        return PreTokenizerOf(root, byteFallback) switch
+        {
+            PreTokenizerKind.ByteLevelGpt2Kind => new BpeContentEncoder(normalizer, Segmenters.Gpt2ByteLevel, vocab, mergeRanks, false),
+            PreTokenizerKind.SequenceSplitThenByteLevel seq => new BpeContentEncoder(normalizer, Segmenters.SplitByRegexThenByteLevel(seq.Pattern), vocab, mergeRanks, false),
+            PreTokenizerKind.SentencePieceSplitKind => new BpeContentEncoder(normalizer, Segmenters.WholeTextAsOneUnit, vocab, mergeRanks, byteFallback),
+            var other => throw new NotSupportedException($"tokenizer.json pre_tokenizer shape '{other}' is not supported; '{tokenizerJsonPath}'.")
+        };
+    }
+
+    private static IContentEncoder BuildWordPieceEncoder(JsonElement root, JsonElement model, string tokenizerJsonPath)
+    {
+        if (!root.TryGetProperty("pre_tokenizer", out var preTokenizer)
+            || preTokenizer.GetProperty("type").GetString() != "BertPreTokenizer")
+        {
+            throw new NotSupportedException(
+                $"tokenizer.json WordPiece model requires pre_tokenizer.type 'BertPreTokenizer'; '{tokenizerJsonPath}'.");
+        }
+
+        var vocab = ReadVocab(model);
+        var unkToken = model.GetProperty("unk_token").GetString()!;
+        var continuingPrefix = model.TryGetProperty("continuing_subword_prefix", out var prefix) && prefix.ValueKind == JsonValueKind.String
+            ? prefix.GetString() ?? ThrowHelper.ThrowArgumentNullException<string>()
+            : "##";
+        var maxCharsPerWord = model.TryGetProperty("max_input_chars_per_word", out var max) && max.ValueKind == JsonValueKind.Number
+            ? max.GetInt32()
+            : 100;
+
+        var normalizerElement = root.GetProperty("normalizer");
+        if (normalizerElement.GetProperty("type").GetString() != "BertNormalizer")
+        {
+            throw new NotSupportedException($"tokenizer.json WordPiece model requires normalizer.type 'BertNormalizer'; '{tokenizerJsonPath}'.");
+        }
+
+        var lowercase = BoolOrDefault(normalizerElement, "lowercase", true);
+        var handleChineseChars = BoolOrDefault(normalizerElement, "handle_chinese_chars", true);
+        var cleanText = BoolOrDefault(normalizerElement, "clean_text", true);
+        var stripAccents = normalizerElement.TryGetProperty("strip_accents", out var strip) && strip.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? strip.GetBoolean()
+            : lowercase; // HF's own default: unset strip_accents follows lowercase.
+
+        return new WordPieceContentEncoder(vocab, unkToken, continuingPrefix, maxCharsPerWord, lowercase, handleChineseChars, cleanText, stripAccents);
+    }
+
+    private static bool BoolOrDefault(JsonElement element, string property, bool defaultValue) =>
+        element.TryGetProperty(property, out var value) && value.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? value.GetBoolean()
+            : defaultValue;
+
+    private static IReadOnlyDictionary<string, int> ReadVocab(JsonElement model)
     {
         var vocab = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var property in model.GetProperty("vocab").EnumerateObject())
@@ -148,12 +152,12 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
             vocab[property.Name] = property.Value.GetInt32();
         }
 
-        return vocab;
+        return vocab.ToFrozenDictionary();
     }
 
-    private static Dictionary<(string First, string Second), int> ReadMerges(JsonElement model)
+    private static Dictionary<Pair, int> ReadMerges(JsonElement model)
     {
-        var ranks = new Dictionary<(string, string), int>();
+        var ranks = new Dictionary<Pair, int>();
         if (!model.TryGetProperty("merges", out var merges) || merges.ValueKind != JsonValueKind.Array)
         {
             return ranks;
@@ -163,18 +167,18 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
         foreach (var merge in merges.EnumerateArray())
         {
             var pair = merge.ValueKind == JsonValueKind.Array
-                ? (merge[0].GetString()!, merge[1].GetString()!)
-                : SplitMergeString(merge.GetString()!);
+                ? new Pair(merge[0].GetString() ?? ThrowHelper.ThrowArgumentNullException<string>(), merge[1].GetString() ?? ThrowHelper.ThrowArgumentNullException<string>())
+                : SplitMergeString(merge.GetString() ?? ThrowHelper.ThrowArgumentNullException<string>());
             ranks[pair] = rank++;
         }
 
         return ranks;
     }
 
-    private static (string, string) SplitMergeString(string merge)
+    private static Pair SplitMergeString(string merge)
     {
         var space = merge.IndexOf(' ');
-        return (merge[..space], merge[(space + 1)..]);
+        return new Pair(merge[..space], merge[(space + 1)..]);
     }
 
     private static Func<string, string> NormalizerOf(JsonElement root)
@@ -201,18 +205,6 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
         throw new NotSupportedException($"tokenizer.json normalizer.type '{normalizer.GetProperty("type").GetString()}' is not supported.");
     }
 
-    private abstract record PreTokenizerKind
-    {
-        public sealed record ByteLevelGpt2Kind : PreTokenizerKind;
-
-        public sealed record SequenceSplitThenByteLevel(string Pattern) : PreTokenizerKind;
-
-        public sealed record SentencePieceSplitKind : PreTokenizerKind;
-
-        public static readonly PreTokenizerKind ByteLevelGpt2 = new ByteLevelGpt2Kind();
-        public static readonly PreTokenizerKind SentencePieceSplit = new SentencePieceSplitKind();
-    }
-
     private static PreTokenizerKind PreTokenizerOf(JsonElement root, bool byteFallback)
     {
         if (!root.TryGetProperty("pre_tokenizer", out var preTokenizer) || preTokenizer.ValueKind == JsonValueKind.Null)
@@ -228,37 +220,37 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
             case "Split" when byteFallback:
                 return PreTokenizerKind.SentencePieceSplit;
             case "Sequence":
+            {
+                var steps = preTokenizer.GetProperty("pretokenizers").EnumerateArray().ToList();
+                var split = steps.FirstOrDefault(static element => element.GetProperty("type").GetString() == "Split");
+                var hasByteLevel = steps.Any(static element => element.GetProperty("type").GetString() == "ByteLevel");
+                if (split.ValueKind == JsonValueKind.Object && hasByteLevel)
                 {
-                    var steps = preTokenizer.GetProperty("pretokenizers").EnumerateArray().ToList();
-                    var split = steps.FirstOrDefault(s => s.GetProperty("type").GetString() == "Split");
-                    var hasByteLevel = steps.Any(s => s.GetProperty("type").GetString() == "ByteLevel");
-                    if (split.ValueKind == JsonValueKind.Object && hasByteLevel)
-                    {
-                        return new PreTokenizerKind.SequenceSplitThenByteLevel(split.GetProperty("pattern").GetProperty("Regex").GetString()!);
-                    }
-
-                    throw new NotSupportedException("tokenizer.json pre_tokenizer Sequence must contain a Split(Regex) step and a ByteLevel step.");
+                    return new PreTokenizerKind.SequenceSplitThenByteLevel(split.GetProperty("pattern").GetProperty("Regex").GetString() ?? ThrowHelper.ThrowArgumentNullException<string>());
                 }
+
+                throw new NotSupportedException("tokenizer.json pre_tokenizer Sequence must contain a Split(Regex) step and a ByteLevel step.");
+            }
             default:
                 throw new NotSupportedException($"tokenizer.json pre_tokenizer.type '{type}' is not supported.");
         }
     }
 
-    private static (IReadOnlyList<int> Prepend, IReadOnlyList<int> Append) PostProcessorOf(JsonElement root)
+    private static ProcessorsIds PostProcessorOf(JsonElement root)
     {
         if (!root.TryGetProperty("post_processor", out var postProcessor) || postProcessor.ValueKind == JsonValueKind.Null)
         {
-            return ([], []);
+            return ProcessorsIds.Empty;
         }
 
         return ProcessorIds(postProcessor);
     }
 
-    private static (IReadOnlyList<int>, IReadOnlyList<int>) ProcessorIds(JsonElement processor) =>
+    private static ProcessorsIds ProcessorIds(JsonElement processor) =>
         processor.GetProperty("type").GetString() switch
         {
             "TemplateProcessing" => TemplateProcessingIds(processor),
-            "RobertaProcessing" => ([processor.GetProperty("cls")[1].GetInt32()], [processor.GetProperty("sep")[1].GetInt32()]),
+            "RobertaProcessing" => new ProcessorsIds([processor.GetProperty("cls")[1].GetInt32()], [processor.GetProperty("sep")[1].GetInt32()]),
             "Sequence" => ProcessorIds(FindTemplateInSequence(processor)),
             var other => throw new NotSupportedException($"tokenizer.json post_processor.type '{other}' is not supported.")
         };
@@ -277,7 +269,7 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
         throw new NotSupportedException("tokenizer.json post_processor Sequence has no TemplateProcessing/RobertaProcessing step.");
     }
 
-    private static (IReadOnlyList<int>, IReadOnlyList<int>) TemplateProcessingIds(JsonElement template)
+    private static ProcessorsIds TemplateProcessingIds(JsonElement template)
     {
         var specialTokens = template.GetProperty("special_tokens");
         var prepend = new List<int>();
@@ -296,18 +288,32 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
             (seenSequence ? append : prepend).Add(numericId);
         }
 
-        return (prepend, append);
+        return new ProcessorsIds(prepend, append);
     }
 
-    /// <summary>The Unicode-codepoint-vs-byte-fallback, regex-vs-whole-unit segmentation strategies
-    /// a <see cref="ContentEncoder" /> can be built with — pure functions, no state.</summary>
-    private static class Segmenters
+    private abstract record PreTokenizerKind
     {
-        /// <summary>GPT-2's own default pretokenizer regex — the `tokenizers` crate's ByteLevel
-        /// pretokenizer applies exactly this when built without a separate Split step.</summary>
-        private static readonly Regex Gpt2Pattern = new(
-            "'s|'t|'re|'ve|'m|'ll|'d| ?\\p{L}+| ?\\p{N}+| ?[^\\s\\p{L}\\p{N}]+|\\s+(?!\\S)|\\s+",
-            RegexOptions.Compiled);
+        public static readonly PreTokenizerKind ByteLevelGpt2 = new ByteLevelGpt2Kind();
+        public static readonly PreTokenizerKind SentencePieceSplit = new SentencePieceSplitKind();
+
+        public sealed record ByteLevelGpt2Kind : PreTokenizerKind;
+
+        public sealed record SequenceSplitThenByteLevel(string Pattern) : PreTokenizerKind;
+
+        public sealed record SentencePieceSplitKind : PreTokenizerKind;
+    }
+
+    /// <summary>
+    ///     The Unicode-codepoint-vs-byte-fallback, regex-vs-whole-unit segmentation strategies
+    ///     a <see cref="BpeContentEncoder" /> can be built with — pure functions, no state.
+    /// </summary>
+    private static partial class Segmenters
+    {
+        /// <summary>
+        ///     GPT-2's own default pretokenizer regex — the `tokenizers` crate's ByteLevel
+        ///     pretokenizer applies exactly this when built without a separate Split step.
+        /// </summary>
+        private static readonly Regex Gpt2Pattern = CreateGpt2PatternRegex();
 
         public static IEnumerable<string> Gpt2ByteLevel(string text) => RegexSegments(Gpt2Pattern, text);
 
@@ -332,6 +338,9 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
                 yield return match.Value;
             }
         }
+
+        [GeneratedRegex(@"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+", RegexOptions.Compiled)]
+        private static partial Regex CreateGpt2PatternRegex();
     }
 
     /// <summary>Turns raw text into content-token ids for one tokenizer.json model shape.</summary>
@@ -346,8 +355,12 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
     ///     (one symbol per Unicode codepoint, expanded to `&lt;0xNN&gt;` byte-fallback symbols for a
     ///     codepoint the vocabulary does not carry on its own), then greedily merges by rank.
     /// </summary>
-    private sealed class BpeContentEncoder(Func<string, string> normalize, Func<string, IEnumerable<string>> segment,
-        IReadOnlyDictionary<string, int> vocab, IReadOnlyDictionary<(string, string), int> mergeRanks, bool byteFallback) : IContentEncoder
+    private sealed class BpeContentEncoder(
+        Func<string, string> normalize,
+        Func<string, IEnumerable<string>> segment,
+        IReadOnlyDictionary<string, int> vocab,
+        IReadOnlyDictionary<Pair, int> mergeRanks,
+        bool byteFallback) : IContentEncoder
     {
         public IReadOnlyList<int> Encode(string text)
         {
@@ -399,8 +412,14 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
     ///     exactly (parity-measured, not assumed).
     /// </summary>
     private sealed class WordPieceContentEncoder(
-        IReadOnlyDictionary<string, int> vocab, string unkToken, string continuingPrefix, int maxCharsPerWord,
-        bool lowercase, bool handleChineseChars, bool cleanText, bool stripAccents) : IContentEncoder
+        IReadOnlyDictionary<string, int> vocab,
+        string unkToken,
+        string continuingPrefix,
+        int maxCharsPerWord,
+        bool lowercase,
+        bool handleChineseChars,
+        bool cleanText,
+        bool stripAccents) : IContentEncoder
     {
         private readonly int _unkId = vocab[unkToken];
 
@@ -408,7 +427,8 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
         {
             var normalized = Normalize(text);
             var ids = new List<int>();
-            foreach (var word in BertPreTokenize(normalized))
+            var preTokenized = BertPreTokenize(normalized);
+            foreach (var word in preTokenized)
             {
                 ids.AddRange(TokenizeWord(word));
             }
@@ -448,7 +468,7 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
                 string? matched = null;
                 while (end > start)
                 {
-                    var candidate = start > 0 ? continuingPrefix + word[start..end] : word[start..end];
+                    var candidate = start > 0 ? $"{continuingPrefix}{word[start..end]}" : word[start..end];
                     if (vocab.TryGetValue(candidate, out var id))
                     {
                         matched = candidate;
@@ -488,12 +508,12 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
 
         private static bool IsControlNotWhitespace(char ch) =>
             ch is not ('\t' or '\n' or '\r')
-            && System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch)
-                is System.Globalization.UnicodeCategory.Control or System.Globalization.UnicodeCategory.Format;
+            && CharUnicodeInfo.GetUnicodeCategory(ch)
+                is UnicodeCategory.Control or UnicodeCategory.Format;
 
         private static bool IsBertWhitespace(char ch) =>
             ch is ' ' or '\t' or '\n' or '\r'
-            || System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch) == System.Globalization.UnicodeCategory.SpaceSeparator;
+            || CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.SpaceSeparator;
 
         private static string HandleChineseChars(string text)
         {
@@ -513,8 +533,10 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
             return builder.ToString();
         }
 
-        /// <summary>The CJK Unified Ideograph blocks BERT's BasicTokenizer isolates — deliberately
-        /// not Hangul/Hiragana/Katakana, which BERT tokenizes as ordinary characters.</summary>
+        /// <summary>
+        ///     The CJK Unified Ideograph blocks BERT's BasicTokenizer isolates — deliberately
+        ///     not Hangul/Hiragana/Katakana, which BERT tokenizes as ordinary characters.
+        /// </summary>
         private static bool IsChineseChar(int codepoint) =>
             codepoint is >= 0x4E00 and <= 0x9FFF
                 or >= 0x3400 and <= 0x4DBF
@@ -531,7 +553,7 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
             var builder = new StringBuilder(decomposed.Length);
             foreach (var ch in decomposed)
             {
-                if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch) != System.Globalization.UnicodeCategory.NonSpacingMark)
+                if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
                 {
                     builder.Append(ch);
                 }
@@ -542,9 +564,12 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
 
         private static IEnumerable<string> BertPreTokenize(string text)
         {
-            foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var word in words)
             {
-                foreach (var piece in SplitPunctuation(word))
+                var pieces = SplitPunctuation(word);
+
+                foreach (var piece in pieces)
                 {
                     yield return piece;
                 }
@@ -585,20 +610,22 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
                 return true;
             }
 
-            return System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch) is
-                System.Globalization.UnicodeCategory.ConnectorPunctuation or
-                System.Globalization.UnicodeCategory.DashPunctuation or
-                System.Globalization.UnicodeCategory.OpenPunctuation or
-                System.Globalization.UnicodeCategory.ClosePunctuation or
-                System.Globalization.UnicodeCategory.InitialQuotePunctuation or
-                System.Globalization.UnicodeCategory.FinalQuotePunctuation or
-                System.Globalization.UnicodeCategory.OtherPunctuation;
+            return CharUnicodeInfo.GetUnicodeCategory(ch) is
+                UnicodeCategory.ConnectorPunctuation or
+                UnicodeCategory.DashPunctuation or
+                UnicodeCategory.OpenPunctuation or
+                UnicodeCategory.ClosePunctuation or
+                UnicodeCategory.InitialQuotePunctuation or
+                UnicodeCategory.FinalQuotePunctuation or
+                UnicodeCategory.OtherPunctuation;
         }
     }
 
-    /// <summary>The GPT-2 byte&lt;-&gt;unicode alphabet: printable bytes map to themselves, the
-    /// remaining 68 map to private-use code points starting at U+0100 — the same table
-    /// `tokenizers`' ByteLevel pretokenizer uses, so a byte-level vocab's keys line up.</summary>
+    /// <summary>
+    ///     The GPT-2 byte&lt;-&gt;unicode alphabet: printable bytes map to themselves, the
+    ///     remaining 68 map to private-use code points starting at U+0100 — the same table
+    ///     `tokenizers`' ByteLevel pretokenizer uses, so a byte-level vocab's keys line up.
+    /// </summary>
     private static class ByteLevelAlphabet
     {
         private static readonly char[] Table = Build();
@@ -653,7 +680,7 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
     /// <summary>Greedy BPE: repeatedly merge the lowest-rank adjacent pair until none remain.</summary>
     private static class Bpe
     {
-        public static List<string> Merge(List<string> symbols, IReadOnlyDictionary<(string, string), int> ranks)
+        public static List<string> Merge(List<string> symbols, IReadOnlyDictionary<Pair, int> ranks)
         {
             while (symbols.Count > 1)
             {
@@ -661,11 +688,13 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
                 var bestIndex = -1;
                 for (var i = 0; i < symbols.Count - 1; i++)
                 {
-                    if (ranks.TryGetValue((symbols[i], symbols[i + 1]), out var rank) && rank < bestRank)
+                    if (!ranks.TryGetValue(new Pair(symbols[i], symbols[i + 1]), out var rank) || rank >= bestRank)
                     {
-                        bestRank = rank;
-                        bestIndex = i;
+                        continue;
                     }
+
+                    bestRank = rank;
+                    bestIndex = i;
                 }
 
                 if (bestIndex < 0)
@@ -681,15 +710,19 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
         }
     }
 
-    /// <summary>Splits raw text on the exact-match spans of every added token's content, so an
-    /// added token is passed straight through as its own id instead of reaching the BPE encoder.</summary>
+    /// <summary>
+    ///     Splits raw text on the exact-match spans of every added token's content, so an
+    ///     added token is passed straight through as its own id instead of reaching the BPE encoder.
+    /// </summary>
     private sealed class AddedTokenSplitter(Regex? pattern, IReadOnlyDictionary<string, int> idsByContent)
     {
+        private static readonly AddedTokenSplitter Default = new(null, new Dictionary<string, int>());
+
         public static AddedTokenSplitter From(JsonElement root)
         {
             if (!root.TryGetProperty("added_tokens", out var addedTokens) || addedTokens.ValueKind != JsonValueKind.Array)
             {
-                return new AddedTokenSplitter(null, new Dictionary<string, int>());
+                return Default;
             }
 
             var idsByContent = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -707,17 +740,17 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
             }
 
             // Longest-first so e.g. "<|im_start|>" is never shadowed by a shorter overlapping token.
-            var alternation = string.Join('|', contents.OrderByDescending(c => c.Length).Select(Regex.Escape));
+            var alternation = string.Join('|', contents.OrderByDescending(static c => c.Length).Select(Regex.Escape));
             return new AddedTokenSplitter(new Regex(alternation, RegexOptions.Compiled), idsByContent);
         }
 
-        public IEnumerable<(string Text, int? Id)> Split(string text)
+        public IEnumerable<TextSpan> Split(string text)
         {
             if (pattern is null || text.Length == 0)
             {
                 if (text.Length > 0)
                 {
-                    yield return (text, null);
+                    yield return new TextSpan(text, null);
                 }
 
                 yield break;
@@ -728,17 +761,26 @@ public sealed class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenizer
             {
                 if (match.Index > cursor)
                 {
-                    yield return (text[cursor..match.Index], null);
+                    yield return new TextSpan(text[cursor..match.Index], null);
                 }
 
-                yield return (match.Value, idsByContent[match.Value]);
+                yield return new TextSpan(match.Value, idsByContent[match.Value]);
                 cursor = match.Index + match.Length;
             }
 
             if (cursor < text.Length)
             {
-                yield return (text[cursor..], null);
+                yield return new TextSpan(text[cursor..], null);
             }
         }
     }
+
+    private sealed record ProcessorsIds(IReadOnlyList<int> Prepend, IReadOnlyList<int> Append)
+    {
+        public static readonly ProcessorsIds Empty = new([], []);
+    }
+
+    private readonly record struct Pair(string First, string Second);
+
+    private sealed record TextSpan(string Text, int? Id);
 }

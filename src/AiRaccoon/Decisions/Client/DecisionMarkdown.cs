@@ -17,24 +17,24 @@ internal static class DecisionMarkdown
     public static IEnumerable<string> Render(string projectId, long projectRevision, DecisionExport export)
     {
         yield return $"# Decision export for project {Code(projectId)}";
-        yield return string.Empty;
+        yield return "";
         yield return $"- Project revision: {projectRevision.ToString(CultureInfo.InvariantCulture)}";
         yield return $"- Schema version: {export.SchemaVersion.ToString(CultureInfo.InvariantCulture)}";
         yield return $"- Exported at: {Time(export.ExportedAt)}";
         yield return $"- Selector: {Selector(export.Selector)}";
         yield return $"- Selected tasks: {List(export.SelectedTaskIds)}";
-        yield return $"- Counts: {export.Counts.Tasks} tasks, {export.Counts.Decisions} decisions, {export.Counts.Versions} versions, " +
-                     $"{export.Counts.Edges} edges, {export.Counts.BoundaryNodes} boundary decisions, {export.Counts.Imports} import records";
+        yield return
+            $"- Counts: {export.Counts.Tasks} tasks, {export.Counts.Decisions} decisions, {export.Counts.Versions} versions, {export.Counts.Edges} edges, {export.Counts.BoundaryNodes} boundary decisions, {export.Counts.Imports} import records";
         yield return "- This file is plaintext, even when the bank is encrypted.";
 
-        yield return string.Empty;
+        yield return "";
         yield return "## Tasks";
         foreach (var line in Tasks(export.Tasks))
         {
             yield return line;
         }
 
-        yield return string.Empty;
+        yield return "";
         yield return "## Decisions";
         foreach (var decision in export.Decisions)
         {
@@ -44,28 +44,28 @@ internal static class DecisionMarkdown
             }
         }
 
-        yield return string.Empty;
+        yield return "";
         yield return "## Edges";
         foreach (var edge in export.Edges)
         {
             yield return Edge(edge);
         }
 
-        yield return string.Empty;
+        yield return "";
         yield return "## Boundary decisions (outside the selected tasks)";
         foreach (var node in export.BoundaryNodes)
         {
             yield return $"- {Code(node.DecisionId)} [{Name(node.Status)}] {Inline(node.Title)} (version {node.CurrentVersion})";
         }
 
-        yield return string.Empty;
+        yield return "";
         yield return "## Referenced tasks";
         foreach (var line in Tasks(export.ReferencedTasks))
         {
             yield return line;
         }
 
-        yield return string.Empty;
+        yield return "";
         yield return "## Import records";
         foreach (var import in export.ImportRecords)
         {
@@ -81,8 +81,8 @@ internal static class DecisionMarkdown
     {
         var record = details.Record;
         var current = details.Versions.FirstOrDefault(version => version.Version == record.CurrentVersion) ?? details.Versions.LastOrDefault();
-        yield return $"# Decision {Code(record.DecisionId)} {Inline(current?.Content.Title ?? string.Empty)}";
-        yield return string.Empty;
+        yield return $"# Decision {Code(record.DecisionId)} {Inline(current?.Content.Title ?? "")}";
+        yield return "";
         yield return $"- Project: {Code(projectId)}; revision {projectRevision.ToString(CultureInfo.InvariantCulture)}";
         yield return $"- Origin task: {Code(record.OriginTaskId)}; created {Time(record.CreatedAt)}; current version {record.CurrentVersion}";
         foreach (var line in details.Versions.SelectMany(Version))
@@ -108,7 +108,7 @@ internal static class DecisionMarkdown
 
         var escaped = result.ToString();
         var start = escaped.TrimStart();
-        return start.Length > 0 && (start[0] is '-' or '+' or '=' || OrderedListStart(start)) ? "\\" + escaped.TrimStart() : escaped;
+        return start.Length > 0 && (start[0] is '-' or '+' or '=' || OrderedListStart(start)) ? $"\\{escaped.TrimStart()}" : escaped;
     }
 
     private static bool OrderedListStart(string text)
@@ -119,22 +119,20 @@ internal static class DecisionMarkdown
 
     private static IEnumerable<string> Tasks(IReadOnlyList<DecisionTask> tasks) =>
         tasks.Select(task =>
-            $"- {Code(task.TaskId)} {Inline(task.Title)} (order {task.RegisteredOrder}, registered {Time(task.RegisteredAt)}" +
-            (task.SourceRef is null ? ")" : $", source {Code(task.SourceRef)})"));
+            $"- {Code(task.TaskId)} {Inline(task.Title)} (order {task.RegisteredOrder}, registered {Time(task.RegisteredAt)}{(task.SourceRef is null ? ")" : $", source {Code(task.SourceRef)})")}");
 
     private static IEnumerable<string> Decision(ExportedDecision decision)
     {
         var record = decision.Record;
         var current = decision.Versions.FirstOrDefault(version => version.Version == record.CurrentVersion);
-        yield return string.Empty;
-        yield return $"### {Code(record.DecisionId)} {Inline(current?.Content.Title ?? string.Empty)}";
-        yield return string.Empty;
+        yield return "";
+        yield return $"### {Code(record.DecisionId)} {Inline(current?.Content.Title ?? "")}";
+        yield return "";
         yield return $"- Origin task: {Code(record.OriginTaskId)}; created {Time(record.CreatedAt)}; current version {record.CurrentVersion}";
         foreach (var touch in decision.Touches)
         {
-            yield return $"- Touched by {Code(touch.TaskId)}: {Inline(touch.Reason)}" +
-                         (touch.Version is { } version ? $" (version {version})" : string.Empty) +
-                         (touch.EdgeId is { } edge ? $" (edge {Code(edge)})" : string.Empty);
+            yield return
+                $"- Touched by {Code(touch.TaskId)}: {Inline(touch.Reason)}{(touch.Version is { } version ? $" (version {version})" : "")}{(touch.EdgeId is { } edge ? $" (edge {Code(edge)})" : "")}";
         }
 
         foreach (var version in decision.Versions)
@@ -149,9 +147,9 @@ internal static class DecisionMarkdown
     private static IEnumerable<string> Version(DecisionVersion version)
     {
         var content = version.Content;
-        yield return string.Empty;
+        yield return "";
         yield return $"#### Version {version.Version} [{Name(version.Status)}]";
-        yield return string.Empty;
+        yield return "";
         yield return $"- Title: {Inline(content.Title)}";
         yield return $"- Task: {Code(version.TaskId)}; project revision {version.ProjectRevision}; recorded {Time(version.RecordedAt)} by {Inline(version.Actor)} in session {Code(version.SessionId)}";
         if (version.ChangeReason is { } reason)
@@ -180,7 +178,7 @@ internal static class DecisionMarkdown
                      .Concat(Block("Reasoning", content.Reasoning))
                      .Concat(Items("Alternatives", content.Alternatives))
                      .Concat(Items("Consequences", content.Consequences))
-                     .Concat(Items("Sources (not fetched)", content.Sources.Select(source => $"{Code(source.Uri)} {Inline(source.Description)}"), escaped: true)))
+                     .Concat(Items("Sources (not fetched)", content.Sources.Select(source => $"{Code(source.Uri)} {Inline(source.Description)}"), true)))
         {
             yield return line;
         }
@@ -188,9 +186,9 @@ internal static class DecisionMarkdown
 
     private static IEnumerable<string> Block(string label, string text)
     {
-        yield return string.Empty;
+        yield return "";
         yield return $"**{label}:**";
-        yield return string.Empty;
+        yield return "";
         foreach (var line in text.Split('\n'))
         {
             yield return Inline(line.TrimEnd('\r'));
@@ -199,15 +197,15 @@ internal static class DecisionMarkdown
 
     private static IEnumerable<string> Items(string label, IEnumerable<string> items, bool escaped = false)
     {
-        var lines = items.Select(item => "- " + (escaped ? item : Inline(item))).ToArray();
+        var lines = items.Select(item => $"- {(escaped ? item : Inline(item))}").ToArray();
         if (lines.Length == 0)
         {
             yield break;
         }
 
-        yield return string.Empty;
+        yield return "";
         yield return $"**{label}:**";
-        yield return string.Empty;
+        yield return "";
         foreach (var line in lines)
         {
             yield return line;
@@ -216,27 +214,27 @@ internal static class DecisionMarkdown
 
     private static string Edge(DecisionEdge edge)
     {
-        var line = $"- {Code(edge.EdgeId)}: {Code(edge.SourceId)} --{Name(edge.Kind)}--> {Code(edge.TargetId)} — {Inline(edge.Reason)} " +
-                   $"(task {Code(edge.TaskId)}, revision {edge.CreatedRevision}, {Time(edge.CreatedAt)}, by {Inline(edge.Actor)})";
+        var line =
+            $"- {Code(edge.EdgeId)}: {Code(edge.SourceId)} --{Name(edge.Kind)}--> {Code(edge.TargetId)} — {Inline(edge.Reason)} (task {Code(edge.TaskId)}, revision {edge.CreatedRevision}, {Time(edge.CreatedAt)}, by {Inline(edge.Actor)})";
         return edge.RemovedRevision is { } removed
-            ? line + $"; removed at revision {removed} by task {Code(edge.RemovalTaskId ?? string.Empty)}: {Inline(edge.RemovalReason ?? string.Empty)}"
+            ? $"{line}; removed at revision {removed} by task {Code(edge.RemovalTaskId ?? "")}: {Inline(edge.RemovalReason ?? "")}"
             : line;
     }
 
     private static IEnumerable<string> Import(DecisionImport import)
     {
-        yield return string.Empty;
+        yield return "";
         yield return $"- {Code(import.SourceNamespace)} / {Code(import.ExternalId)} → decision {Code(import.DecisionId ?? "none")}, task {Code(import.TaskId)}, digest {Code(import.SourceDigest)}";
         foreach (var (label, raw) in new[] { ("Mapping", import.Mapping), ("Raw payload", import.RawPayload) })
         {
             var text = TerminalText.Visible(raw);
             var fence = new string('`', Math.Max(3, LongestRun(text, '`') + 1));
-            yield return string.Empty;
+            yield return "";
             yield return $"  {label}:";
-            yield return string.Empty;
-            yield return "  " + fence;
-            yield return "  " + text;
-            yield return "  " + fence;
+            yield return "";
+            yield return $"  {fence}";
+            yield return $"  {text}";
+            yield return $"  {fence}";
         }
     }
 
@@ -245,7 +243,7 @@ internal static class DecisionMarkdown
     {
         var text = TerminalText.Visible(value);
         var fence = new string('`', LongestRun(text, '`') + 1);
-        var pad = text.StartsWith('`') || text.EndsWith('`') ? " " : string.Empty;
+        var pad = text.StartsWith('`') || text.EndsWith('`') ? " " : "";
         return $"{fence}{pad}{text}{pad}{fence}";
     }
 
@@ -263,7 +261,7 @@ internal static class DecisionMarkdown
 
     private static string Selector(DecisionTaskSelector selector) =>
         selector.All ? "all tasks"
-        : selector.TaskIds is { } ids ? "tasks " + List(ids)
+        : selector.TaskIds is { } ids ? $"tasks {List(ids)}"
         : $"latest {selector.Last ?? 1} task(s)";
 
     private static string List(IReadOnlyList<string> ids) => ids.Count == 0 ? "none" : string.Join(", ", ids.Select(Code));

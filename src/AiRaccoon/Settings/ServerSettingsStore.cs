@@ -1,11 +1,11 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Net;
+using AiRaccoon.Core.Decisions;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Filtering;
 using AiRaccoon.Core.Projects;
-using AiRaccoon.Core.Decisions;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Decisions;
 using AiRaccoon.Decisions.Client;
@@ -72,6 +72,24 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     }
 
     /// <inheritdoc />
+    public async Task<EmbeddingConfig> ActivateCodeEngineAsync(string directory,
+        CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(directory);
+        var response = await SendAsync(token =>
+            _client.PostAsJsonAsync(SettingsProtocol.ModelCodePath, new ModelCodeActivationRequest(directory),
+                token), cancellationToken);
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            throw new CodeEngineActivationRefusedException(await response.Content.ReadAsStringAsync(cancellationToken));
+        }
+
+        await EnsureAsync(response, cancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<ModelCodeActivationResponse>(cancellationToken);
+        return new EmbeddingConfig("local", body!.Model, body.Engine);
+    }
+
+    /// <inheritdoc />
     public Task<JsonDocument> RegisterTaskAsync(string projectId, RegisterTaskRequest request, CancellationToken cancellationToken = default) =>
         _decisions.RegisterTaskAsync(projectId, request, cancellationToken);
 
@@ -84,16 +102,14 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
         _decisions.PreviewAsync(projectId, options, cancellationToken);
 
     /// <inheritdoc />
-    public Task<JsonDocument> RecordAsync(string projectId, JsonObject body, CancellationToken cancellationToken = default) =>
-        _decisions.RecordAsync(projectId, body, cancellationToken);
+    public Task<JsonDocument> RecordAsync(string projectId, JsonObject body, CancellationToken cancellationToken = default) => _decisions.RecordAsync(projectId, body, cancellationToken);
 
     /// <inheritdoc />
     public Task<JsonDocument> GetAsync(string projectId, string decisionId, bool includeHistory, CancellationToken cancellationToken = default) =>
         _decisions.GetAsync(projectId, decisionId, includeHistory, cancellationToken);
 
     /// <inheritdoc />
-    public Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default) =>
-        _decisions.QueryAsync(projectId, query, cancellationToken);
+    public Task<JsonDocument> QueryAsync(string projectId, DecisionQuery query, CancellationToken cancellationToken = default) => _decisions.QueryAsync(projectId, query, cancellationToken);
 
     /// <inheritdoc />
     public Task<JsonDocument> ImportPreviewAsync(string projectId, byte[] source, byte[] mapping, CancellationToken cancellationToken = default) =>
@@ -102,6 +118,126 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     /// <inheritdoc />
     public Task<JsonDocument> ImportApplyAsync(string projectId, ImportApplyRequest request, CancellationToken cancellationToken = default) =>
         _decisions.ImportApplyAsync(projectId, request, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(token => _client.GetAsync(MaintenanceStatsProtocol.Path, token), cancellationToken);
+        await EnsureAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<BankStats>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
+        CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(provider);
+        var response = await SendAsync(token =>
+            _client.PostAsJsonAsync(SettingsProtocol.ModelPath, new ModelMigrationRequest(provider, model, baseUrl),
+                token), cancellationToken);
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            throw new ModelMigrationInProgressException(await ReadRefusalBodyAsync(response.Content, cancellationToken));
+        }
+
+        await EnsureAsync(response, cancellationToken);
+        var body = await response.Content.ReadFromJsonAsync<ModelMigrationResponse>(cancellationToken);
+        return new EmbeddingConfig(body!.Provider, body.Model, body.Engine);
+    }
+
+    /// <summary>Never called from the CLI — no command asks "is a migration open" (ADR-0076: no progress channel); only ToolGate, server-side, needs this.</summary>
+    public Task<bool> HasOpenModelMigrationAsync(CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException(
+            "ai-raccoon: HasOpenModelMigrationAsync is a server-side check (ToolGate); the CLI never calls it");
+
+    /// <inheritdoc />
+    public async Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(token => _client.GetAsync(NoiseSummaryProtocol.Path, token), cancellationToken);
+        await EnsureAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<NoiseEntrySummary>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task<ProjectRegistration> RegisterAsync(string projectId, string? name, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(projectId);
+        var response = await SendAsync(token =>
+            _client.PostAsJsonAsync(ProjectsProtocol.Path, new ProjectRegisterRequest(projectId, name), token), cancellationToken);
+        await EnsureAsync(response, cancellationToken);
+        var body = (await response.Content.ReadFromJsonAsync<ProjectRegisterResponse>(cancellationToken))!;
+        return new ProjectRegistration(body.ProjectId, body.Outcome);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> FindByNameAsync(string name, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(name);
+        var response = await SendAsync(token => _client.GetAsync(ProjectsProtocol.ForName(name), token), cancellationToken);
+        await EnsureAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<ProjectIdsResponse>(cancellationToken))!.Ids;
+    }
+
+    /// <inheritdoc />
+    public async Task<ProjectIdCheck> CheckAsync(string projectId, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNullOrWhiteSpace(projectId);
+        var response = await SendAsync(token => _client.GetAsync(ProjectsProtocol.ForCheck(projectId), token), cancellationToken);
+        await EnsureAsync(response, cancellationToken);
+        var body = (await response.Content.ReadFromJsonAsync<ProjectCheckResponse>(cancellationToken))!;
+        return new ProjectIdCheck(body.ProjectId, body.Status);
+    }
+
+    /// <inheritdoc />
+    public async Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(token => _client.GetAsync(PromotionQueuePruneProtocol.Path, token), cancellationToken);
+        await EnsureAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<PromotionQueueOrphanReport>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(token =>
+            _client.PostAsync(PromotionQueuePruneProtocol.Path, null, token), cancellationToken);
+        await EnsureAsync(response, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<ReingestRepairReport> ReportReingestAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(token => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.Reingest), token), cancellationToken,
+            Timeout.InfiniteTimeSpan);
+        await EnsureAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<ReingestRepairReport>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task<ChunkIndexRepairReport> ReportChunkIndexAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(token => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.ChunkIndex), token), cancellationToken,
+            Timeout.InfiniteTimeSpan);
+        await EnsureAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<ChunkIndexRepairReport>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task<ProjectIdCensusReport> ReportProjectIdsAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await SendAsync(token => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.ProjectIds), token), cancellationToken,
+            Timeout.InfiniteTimeSpan);
+        await EnsureAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<ProjectIdCensusReport>(cancellationToken))!;
+    }
+
+    /// <inheritdoc />
+    public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default, string? projectIdsMapJson = null)
+    {
+        var response = await SendAsync(token =>
+            _client.PostAsJsonAsync(RepairProtocol.Path, new RepairRequest(kind.ToKey(), projectIdsMapJson), token), cancellationToken);
+        await EnsureAsync(response, cancellationToken);
+    }
 
     public async Task<string?> GetSettingAsync(string key, CancellationToken cancellationToken = default)
     {
@@ -154,122 +290,6 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     }
 
     /// <inheritdoc />
-    public async Task<EmbeddingConfig> StartModelMigrationAsync(string provider, string? model, string? baseUrl,
-        CancellationToken cancellationToken = default)
-    {
-        Guard.IsNotNullOrWhiteSpace(provider);
-        var response = await SendAsync(token =>
-            _client.PostAsJsonAsync(SettingsProtocol.ModelPath, new ModelMigrationRequest(provider, model, baseUrl),
-                token), cancellationToken);
-        if (response.StatusCode == HttpStatusCode.Conflict)
-        {
-            throw new ModelMigrationInProgressException(await ReadRefusalBodyAsync(response.Content, cancellationToken));
-        }
-
-        await EnsureAsync(response, cancellationToken);
-        var body = await response.Content.ReadFromJsonAsync<ModelMigrationResponse>(cancellationToken);
-        return new EmbeddingConfig(body!.Provider, body.Model, body.Engine);
-    }
-
-    /// <summary>Never called from the CLI — no command asks "is a migration open" (ADR-0076: no progress channel); only ToolGate, server-side, needs this.</summary>
-    public Task<bool> HasOpenModelMigrationAsync(CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException(
-            "ai-raccoon: HasOpenModelMigrationAsync is a server-side check (ToolGate); the CLI never calls it");
-
-    /// <inheritdoc />
-    public async Task<EmbeddingConfig> ActivateCodeEngineAsync(string directory,
-        CancellationToken cancellationToken = default)
-    {
-        Guard.IsNotNullOrWhiteSpace(directory);
-        var response = await SendAsync(token =>
-            _client.PostAsJsonAsync(SettingsProtocol.ModelCodePath, new ModelCodeActivationRequest(directory),
-                token), cancellationToken);
-        if (response.StatusCode == HttpStatusCode.BadRequest)
-        {
-            throw new CodeEngineActivationRefusedException(await response.Content.ReadAsStringAsync(cancellationToken));
-        }
-
-        await EnsureAsync(response, cancellationToken);
-        var body = await response.Content.ReadFromJsonAsync<ModelCodeActivationResponse>(cancellationToken);
-        return new EmbeddingConfig("local", body!.Model, body.Engine);
-    }
-
-    /// <inheritdoc />
-    public async Task<ReingestRepairReport> ReportReingestAsync(CancellationToken cancellationToken = default)
-    {
-        var response = await SendAsync(token => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.Reingest), token), cancellationToken,
-            Timeout.InfiniteTimeSpan);
-        await EnsureAsync(response, cancellationToken);
-        return (await response.Content.ReadFromJsonAsync<ReingestRepairReport>(cancellationToken))!;
-    }
-
-    /// <inheritdoc />
-    public async Task<ChunkIndexRepairReport> ReportChunkIndexAsync(CancellationToken cancellationToken = default)
-    {
-        var response = await SendAsync(token => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.ChunkIndex), token), cancellationToken,
-            Timeout.InfiniteTimeSpan);
-        await EnsureAsync(response, cancellationToken);
-        return (await response.Content.ReadFromJsonAsync<ChunkIndexRepairReport>(cancellationToken))!;
-    }
-
-    /// <inheritdoc />
-    public async Task<ProjectIdCensusReport> ReportProjectIdsAsync(CancellationToken cancellationToken = default)
-    {
-        var response = await SendAsync(token => _client.GetAsync(RepairProtocol.ForKind(RepairKinds.ProjectIds), token), cancellationToken,
-            Timeout.InfiniteTimeSpan);
-        await EnsureAsync(response, cancellationToken);
-        return (await response.Content.ReadFromJsonAsync<ProjectIdCensusReport>(cancellationToken))!;
-    }
-
-    /// <inheritdoc />
-    public async Task RequestRepairAsync(RepairKind kind, CancellationToken cancellationToken = default, string? projectIdsMapJson = null)
-    {
-        var response = await SendAsync(token =>
-            _client.PostAsJsonAsync(RepairProtocol.Path, new RepairRequest(kind.ToKey(), projectIdsMapJson), token), cancellationToken);
-        await EnsureAsync(response, cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public async Task<PromotionQueueOrphanReport> ReportPruneOrphansAsync(CancellationToken cancellationToken = default)
-    {
-        var response = await SendAsync(token => _client.GetAsync(PromotionQueuePruneProtocol.Path, token), cancellationToken);
-        await EnsureAsync(response, cancellationToken);
-        return (await response.Content.ReadFromJsonAsync<PromotionQueueOrphanReport>(cancellationToken))!;
-    }
-
-    /// <inheritdoc />
-    public async Task RequestPruneOrphansAsync(CancellationToken cancellationToken = default)
-    {
-        var response = await SendAsync(token =>
-            _client.PostAsync(PromotionQueuePruneProtocol.Path, null, token), cancellationToken);
-        await EnsureAsync(response, cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public async Task<BankStats> GetStatsAsync(CancellationToken cancellationToken = default)
-    {
-        var response = await SendAsync(token => _client.GetAsync(MaintenanceStatsProtocol.Path, token), cancellationToken);
-        await EnsureAsync(response, cancellationToken);
-        return (await response.Content.ReadFromJsonAsync<BankStats>(cancellationToken))!;
-    }
-
-    /// <inheritdoc />
-    public async Task<NoiseEntrySummary> SummarizeAsync(CancellationToken cancellationToken = default)
-    {
-        var response = await SendAsync(token => _client.GetAsync(NoiseSummaryProtocol.Path, token), cancellationToken);
-        await EnsureAsync(response, cancellationToken);
-        return (await response.Content.ReadFromJsonAsync<NoiseEntrySummary>(cancellationToken))!;
-    }
-
-    /// <inheritdoc />
-    public async Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default)
-    {
-        var response = await SendAsync(token => _client.GetAsync(WatchRegisteredProtocol.Path, token), cancellationToken);
-        await EnsureAsync(response, cancellationToken);
-        return (await response.Content.ReadFromJsonAsync<List<WatchRegistration>>(cancellationToken))!;
-    }
-
-    /// <inheritdoc />
     public async Task<WatchAddResponse> AddAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNullOrWhiteSpace(projectId);
@@ -299,33 +319,11 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
     }
 
     /// <inheritdoc />
-    public async Task<ProjectRegistration> RegisterAsync(string projectId, string? name, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<WatchRegistration>> ListWatchesAsync(CancellationToken cancellationToken = default)
     {
-        Guard.IsNotNullOrWhiteSpace(projectId);
-        var response = await SendAsync(token =>
-            _client.PostAsJsonAsync(ProjectsProtocol.Path, new ProjectRegisterRequest(projectId, name), token), cancellationToken);
+        var response = await SendAsync(token => _client.GetAsync(WatchRegisteredProtocol.Path, token), cancellationToken);
         await EnsureAsync(response, cancellationToken);
-        var body = (await response.Content.ReadFromJsonAsync<ProjectRegisterResponse>(cancellationToken))!;
-        return new ProjectRegistration(body.ProjectId, body.Outcome);
-    }
-
-    /// <inheritdoc />
-    public async Task<IReadOnlyList<string>> FindByNameAsync(string name, CancellationToken cancellationToken = default)
-    {
-        Guard.IsNotNullOrWhiteSpace(name);
-        var response = await SendAsync(token => _client.GetAsync(ProjectsProtocol.ForName(name), token), cancellationToken);
-        await EnsureAsync(response, cancellationToken);
-        return (await response.Content.ReadFromJsonAsync<ProjectIdsResponse>(cancellationToken))!.Ids;
-    }
-
-    /// <inheritdoc />
-    public async Task<ProjectIdCheck> CheckAsync(string projectId, CancellationToken cancellationToken = default)
-    {
-        Guard.IsNotNullOrWhiteSpace(projectId);
-        var response = await SendAsync(token => _client.GetAsync(ProjectsProtocol.ForCheck(projectId), token), cancellationToken);
-        await EnsureAsync(response, cancellationToken);
-        var body = (await response.Content.ReadFromJsonAsync<ProjectCheckResponse>(cancellationToken))!;
-        return new ProjectIdCheck(body.ProjectId, body.Status);
+        return (await response.Content.ReadFromJsonAsync<List<WatchRegistration>>(cancellationToken))!;
     }
 
     /// <summary>
@@ -409,7 +407,7 @@ internal sealed class ServerSettingsStore : ISettingsStore, IModelMigrationStore
             // operator saw it twice.
             throw new HttpRequestException(
                 $"the settings server refused this request ({(int)response.StatusCode} {response.ReasonPhrase}): {body}",
-                inner: null, response.StatusCode);
+                null, response.StatusCode);
         }
     }
 }

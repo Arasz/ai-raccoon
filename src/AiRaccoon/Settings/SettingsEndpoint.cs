@@ -3,8 +3,8 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Hosting.Node;
-using AiRaccoon.Projects;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Projects;
 
 namespace AiRaccoon.Settings;
 
@@ -138,8 +138,7 @@ internal static partial class SettingsEndpoint
                     if (request.BaseUrl is not null && !BaseUrlValidation.IsUsableHttpUrl(request.BaseUrl))
                     {
                         return Results.BadRequest(
-                            $"ai-raccoon: '{request.BaseUrl}' is not a usable absolute http(s) URL; " +
-                            "pass a full URL such as https://api.example.com/v1");
+                            $"ai-raccoon: '{request.BaseUrl}' is not a usable absolute http(s) URL; pass a full URL such as https://api.example.com/v1");
                     }
 
                     try
@@ -232,8 +231,7 @@ internal static partial class SettingsEndpoint
         || key.StartsWith(IngestScopeKeys.LegacyScopePrefix, StringComparison.Ordinal);
 
     /// <summary>Plain text, so the CLI writes the reason to stderr verbatim.</summary>
-    private static IResult Refused(string reason) =>
-        Results.Text($"ai-raccoon: settings write refused: {reason}", "text/plain", statusCode: StatusCodes.Status409Conflict);
+    private static IResult Refused(string reason) => Results.Text($"ai-raccoon: settings write refused: {reason}", "text/plain", statusCode: StatusCodes.Status409Conflict);
 
     internal static partial class Log
     {

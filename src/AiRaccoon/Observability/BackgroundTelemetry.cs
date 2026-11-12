@@ -96,8 +96,8 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
         private readonly DateTimeOffset _startedAtUtc = DateTimeOffset.UtcNow;
         private Activity? _activity;
         private bool _recorded;
-        private bool _worthy;
         private long? _rows;
+        private bool _worthy;
 
         private TimeSpan Elapsed => Stopwatch.GetElapsedTime(_startedAt);
 
@@ -125,9 +125,7 @@ public sealed class BackgroundTelemetry : IOperationTelemetry, IDisposable
             if (_recorded)
             {
                 throw new InvalidOperationException(
-                    $"{nameof(RecordRows)} was called after the scope's measurement was already recorded " +
-                    "(Succeeded/Failed/PartiallyFailed/Dispose) — the row count would be silently dropped. " +
-                    $"Call {nameof(RecordRows)} before the terminal call, not after.");
+                    $"{nameof(RecordRows)} was called after the scope's measurement was already recorded (Succeeded/Failed/PartiallyFailed/Dispose) — the row count would be silently dropped. Call {nameof(RecordRows)} before the terminal call, not after.");
             }
 
             _rows = rows;

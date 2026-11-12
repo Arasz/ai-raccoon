@@ -1,12 +1,17 @@
+using System.Globalization;
+using System.Text;
+
 namespace AiRaccoon.Infrastructure.Embedding.Download;
 
-/// <summary>What the downloader needs to know about a model's ONNX graph before fetching its siblings.
-/// <see cref="OutputRanks" /> (#504) carries each output's declared tensor rank — a dynamic axis
-/// still counts (rank is the dim COUNT, not each dim's value), so only an output with no shape at
-/// all (or a probe that predates this field) has no entry. <see cref="ExternalDataRefs" /> (#764
-/// stage 3 P2) carries each initializer's own (offset, length) slice into its external file — two
-/// initializers can share a location while reading disjoint byte ranges, which a shared-weights
-/// graph relies on.</summary>
+/// <summary>
+///     What the downloader needs to know about a model's ONNX graph before fetching its siblings.
+///     <see cref="OutputRanks" /> (#504) carries each output's declared tensor rank — a dynamic axis
+///     still counts (rank is the dim COUNT, not each dim's value), so only an output with no shape at
+///     all (or a probe that predates this field) has no entry. <see cref="ExternalDataRefs" /> (#764
+///     stage 3 P2) carries each initializer's own (offset, length) slice into its external file — two
+///     initializers can share a location while reading disjoint byte ranges, which a shared-weights
+///     graph relies on.
+/// </summary>
 public sealed record OnnxGraphProbe(
     IReadOnlyList<string> ExternalDataFiles,
     IReadOnlyList<string> InputNames,
@@ -20,8 +25,10 @@ public sealed record OnnxGraphProbe(
     public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
 }
 
-/// <summary>One initializer's external_data entry: the file it reads (<see cref="Location" />) and
-/// the byte range within it (<see cref="Offset" />, <see cref="Length" />).</summary>
+/// <summary>
+///     One initializer's external_data entry: the file it reads (<see cref="Location" />) and
+///     the byte range within it (<see cref="Offset" />, <see cref="Length" />).
+/// </summary>
 public sealed record OnnxExternalDataRef(string InitializerName, string Location, long Offset, long Length);
 
 /// <summary>The file is not a parseable ONNX protobuf (or the graph is malformed).</summary>
@@ -126,8 +133,8 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
         GuardDepth(depth);
         var reader = new ProtoReader(message);
         var external = false;
-        var name = string.Empty;
-        var location = string.Empty;
+        var name = "";
+        var location = "";
         var offset = 0L;
         var length = 0L;
         while (reader.TryTag(out var field, out var wireType))
@@ -174,7 +181,7 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
     }
 
     private static long ParseInt64(string value) =>
-        long.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+        long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
             ? parsed
             : throw new OnnxProbeException($"the file is not a valid ONNX protobuf (external_data value '{value}' is not an integer)");
 
@@ -182,8 +189,8 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
     {
         GuardDepth(depth);
         var reader = new ProtoReader(message);
-        var key = string.Empty;
-        var value = string.Empty;
+        var key = "";
+        var value = "";
         while (reader.TryTag(out var field, out var wireType))
         {
             switch (field, wireType)
@@ -206,7 +213,7 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
     private static void WalkOpset(ReadOnlySpan<byte> message, ProbeBuilder builder)
     {
         var reader = new ProtoReader(message);
-        var domain = string.Empty;
+        var domain = "";
         while (reader.TryTag(out var field, out var wireType))
         {
             switch (field, wireType)
@@ -293,7 +300,7 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
             return bytes;
         }
 
-        public string ReadString() => System.Text.Encoding.UTF8.GetString(ReadBytes());
+        public string ReadString() => Encoding.UTF8.GetString(ReadBytes());
 
         public void SkipBytes() => _ = ReadBytes();
 
@@ -341,12 +348,14 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
         private readonly List<string> _externalData = [];
         private readonly List<OnnxExternalDataRef> _externalDataRefs = [];
         private readonly List<string> _inputs = [];
-        private readonly List<string> _outputs = [];
         private readonly Dictionary<string, int> _outputRanks = new(StringComparer.Ordinal);
+        private readonly List<string> _outputs = [];
 
         public int IrVersion { get; set; }
 
         public int? OpsetVersion { get; set; }
+
+        public Dictionary<string, string> Metadata { get; } = new(StringComparer.Ordinal);
 
         public void AddExternalData(string location)
         {
@@ -361,7 +370,7 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
         public void AddValueInfo(ReadOnlySpan<byte> message, bool isInput)
         {
             var reader = new ProtoReader(message);
-            var name = string.Empty;
+            var name = "";
             int? rank = null;
             while (reader.TryTag(out var field, out var wireType))
             {
@@ -391,15 +400,14 @@ public sealed class OnnxGraphProbeReader : IOnnxGraphProbeReader
             }
         }
 
-        public Dictionary<string, string> Metadata { get; } = new(StringComparer.Ordinal);
+        public OnnxGraphProbe Build() => new(_externalData, _inputs, _outputs, IrVersion, OpsetVersion, _outputRanks, _externalDataRefs) { Metadata = Metadata };
 
-        public OnnxGraphProbe Build() =>
-            new(_externalData, _inputs, _outputs, IrVersion, OpsetVersion, _outputRanks, _externalDataRefs) { Metadata = Metadata };
-
-        /// <summary>#504: TypeProto.tensor_type (field 1) → Tensor.shape (field 2) → the dim count
-        /// of TensorShapeProto is the declared rank. Null for a sequence/map type (no tensor_type)
-        /// or an unranked tensor (tensor_type with no shape at all) — never a recursive walk, so no
-        /// depth guard is needed: nothing here follows a field back into another TypeProto.</summary>
+        /// <summary>
+        ///     #504: TypeProto.tensor_type (field 1) → Tensor.shape (field 2) → the dim count
+        ///     of TensorShapeProto is the declared rank. Null for a sequence/map type (no tensor_type)
+        ///     or an unranked tensor (tensor_type with no shape at all) — never a recursive walk, so no
+        ///     depth guard is needed: nothing here follows a field back into another TypeProto.
+        /// </summary>
         private static int? TensorRank(ReadOnlySpan<byte> typeMessage)
         {
             var reader = new ProtoReader(typeMessage);

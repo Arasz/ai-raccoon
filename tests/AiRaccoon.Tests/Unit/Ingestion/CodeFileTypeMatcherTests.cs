@@ -50,7 +50,7 @@ public sealed class CodeFileTypeMatcherTests
     [Fact]
     public void IsCodeFile_NullOrWhitespacePath_ReturnsFalse()
     {
-        _matcher.IsCodeFile(string.Empty).ShouldBeFalse();
+        _matcher.IsCodeFile("").ShouldBeFalse();
         _matcher.IsCodeFile("   ").ShouldBeFalse();
     }
 }

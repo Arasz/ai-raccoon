@@ -53,7 +53,7 @@ internal static class PromotionScorer
         ExtractionCandidateRow row, string projectId, IReadOnlyList<string> allProjectIds)
     {
         var archetype = ProvenanceArchetypeClassifier.Classify(row.Path, row.SourceFile, row.Value);
-        var (effectiveValue, _) = TurnMirrorPrefix.Split(row.Value ?? string.Empty);
+        var (effectiveValue, _) = TurnMirrorPrefix.Split(row.Value ?? "");
         var features = CandidateFeatureExtractor.Extract(effectiveValue, projectId, allProjectIds);
 
         var reasons = new List<string> { ProvenanceArchetypeClassifier.Tag(archetype) };

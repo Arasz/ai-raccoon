@@ -112,11 +112,12 @@ public sealed partial class DecisionService
         }, cancellationToken);
     }
 
-    private DecisionVersion Revised(DecisionVersion current, DecisionWrite write, long revision, string reason) => current with
-    {
-        Version = checked(current.Version + 1), TaskId = write.TaskId, ProjectRevision = revision,
-        RecordedAt = Now, Actor = write.Actor, SessionId = write.SessionId, ChangeReason = reason
-    };
+    private DecisionVersion Revised(DecisionVersion current, DecisionWrite write, long revision, string reason) =>
+        current with
+        {
+            Version = checked(current.Version + 1), TaskId = write.TaskId, ProjectRevision = revision,
+            RecordedAt = Now, Actor = write.Actor, SessionId = write.SessionId, ChangeReason = reason
+        };
 
     private DecisionEdge NewEdge(DecisionWrite write, long revision, string sourceId, string targetId, DecisionEdgeKind kind, string reason) =>
         new(Guid.CreateVersion7(Now).ToString(), sourceId, targetId, kind, reason, write.TaskId, revision, Now, write.Actor, write.SessionId);
@@ -147,7 +148,7 @@ public sealed partial class DecisionService
 
     private static async Task RequireRevisionAsync(IDecisionReader reader, long expectedProjectRevision, CancellationToken cancellationToken)
     {
-        Guard.IsGreaterThanOrEqualTo(expectedProjectRevision, 0L, nameof(expectedProjectRevision));
+        Guard.IsGreaterThanOrEqualTo(expectedProjectRevision, 0L);
         var current = await reader.RevisionAsync(cancellationToken);
         if (current != expectedProjectRevision)
         {

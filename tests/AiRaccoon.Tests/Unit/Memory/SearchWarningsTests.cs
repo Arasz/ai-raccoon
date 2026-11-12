@@ -48,7 +48,7 @@ public class SearchWarningsTests
         var combined = SearchWarnings.Compose(guard, length);
 
         combined.ShouldNotBeNullOrWhiteSpace();
-        combined!.ShouldContain("guard says X");
+        combined.ShouldContain("guard says X");
         combined.ShouldContain("length says Y");
     }
 
@@ -104,7 +104,7 @@ public class SearchWarningsTests
     [InlineData(AiRaccoon.Setup.McpServerInstructions.Text)]
     public void EngineAdvice_NamesActivation_NotADownload(string advice)
     {
-        advice.ShouldNotContain("download", Case.Insensitive);
-        advice.ShouldContain("bundled", Case.Insensitive);
+        advice.ShouldNotContain("download");
+        advice.ShouldContain("bundled");
     }
 }

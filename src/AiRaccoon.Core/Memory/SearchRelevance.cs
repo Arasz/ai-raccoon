@@ -21,6 +21,7 @@ public static class SearchRelevance
 
     /// <summary>The wire name of the absolute floor below, for the truncation marker.</summary>
     public const string AbsoluteRelevanceFloorName = "absoluteRelevance";
+
     /// <summary>
     ///     The default floor, for an engine whose manifest declares no <c>relevanceFloor</c>: below
     ///     this cosine a row is not relevant. Calibrated for MiniLM (a zero-overlap query's best row
@@ -60,8 +61,7 @@ public static class SearchRelevance
     private static double? CosineOf(MemorySearchResult result, IReadOnlyDictionary<string, RetrievalEvidence>? evidenceByHash) =>
         evidenceByHash is not null && evidenceByHash.TryGetValue(result.Hash, out var evidence) ? evidence.Cosine : null;
 
-    private static bool MatchesAllTerms(MemorySearchResult result, IReadOnlySet<string>? allTermsMatched) =>
-        allTermsMatched is not null && allTermsMatched.Contains(result.Hash);
+    private static bool MatchesAllTerms(MemorySearchResult result, IReadOnlySet<string>? allTermsMatched) => allTermsMatched is not null && allTermsMatched.Contains(result.Hash);
 
     private static bool BelowAbsoluteFloor(MemorySearchResult result, IReadOnlyDictionary<string, RetrievalEvidence>? evidenceByHash,
         IReadOnlySet<string>? allTermsMatched, double floor) =>
@@ -71,6 +71,5 @@ public static class SearchRelevance
         IReadOnlySet<string>? allTermsMatched, double floor) =>
         MatchesAllTerms(result, allTermsMatched) || CosineOf(result, evidenceByHash) is { } cosine && cosine >= floor;
 
-    private static bool IsFlatSingleLeg(FusionStats? stats) =>
-        stats is { ParticipatingLegs.Count: 1, TopMargin: { } margin } && margin < FlatTopMargin;
+    private static bool IsFlatSingleLeg(FusionStats? stats) => stats is { ParticipatingLegs.Count: 1, TopMargin: { } margin } && margin < FlatTopMargin;
 }

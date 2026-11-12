@@ -4,7 +4,13 @@ using CommunityToolkit.Diagnostics;
 namespace AiRaccoon.Core.Decisions;
 
 [JsonConverter(typeof(DecisionEnumConverter<DecisionEdgeKind>))]
-public enum DecisionEdgeKind { DependsOn, Supersedes, Supports, Contradicts }
+public enum DecisionEdgeKind
+{
+    DependsOn,
+    Supersedes,
+    Supports,
+    Contradicts
+}
 
 public sealed record DecisionLink(string SourceId, string TargetId, DecisionEdgeKind Kind);
 

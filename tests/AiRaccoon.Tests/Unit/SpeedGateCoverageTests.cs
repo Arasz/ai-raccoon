@@ -67,7 +67,7 @@ public sealed class SpeedGateCoverageTests
         .. member.GetCustomAttributesData()
             .Where(a => a.AttributeType.FullName == "Xunit.TraitAttribute" && a.ConstructorArguments.Count == 2)
             .Select(a => (
-                Name: a.ConstructorArguments[0].Value as string ?? string.Empty,
-                Value: a.ConstructorArguments[1].Value as string ?? string.Empty))
+                Name: a.ConstructorArguments[0].Value as string ?? "",
+                Value: a.ConstructorArguments[1].Value as string ?? ""))
     ];
 }

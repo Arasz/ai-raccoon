@@ -35,6 +35,5 @@ internal static class WatchStatusFormat
         }
     }
 
-    private static string FormatInstant(DateTimeOffset instant) =>
-        instant.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
+    private static string FormatInstant(DateTimeOffset instant) => instant.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
 }

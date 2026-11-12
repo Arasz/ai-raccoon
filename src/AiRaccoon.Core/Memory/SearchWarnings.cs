@@ -20,8 +20,7 @@ public static class SearchWarnings
 
     /// <inheritdoc cref="EngineNotConfiguredPrefix" />
     public const string EngineNotConfigured =
-        EngineNotConfiguredPrefix + " — the memory section is FTS5-only; run '" + EmbeddingEngineSetup.DefaultModelCommand
-        + "' to activate the bundled memory embedding model";
+        $"{EngineNotConfiguredPrefix} — the memory section is FTS5-only; run '{EmbeddingEngineSetup.DefaultModelCommand}' to activate the bundled memory embedding model";
 
     /// <summary>
     ///     Joins every supplied note in order, skipping nulls: guard guidance, length guidance,
@@ -42,8 +41,7 @@ public static class SearchWarnings
     ///     The memory leg's engine note: null when a provider is configured, the remedy-naming
     ///     warning when it is absent — the same settings row doctor reads for the memory engine.
     /// </summary>
-    public static string? MemoryEngineWarning(string? provider) =>
-        string.IsNullOrWhiteSpace(provider) ? EngineNotConfigured : null;
+    public static string? MemoryEngineWarning(string? provider) => string.IsNullOrWhiteSpace(provider) ? EngineNotConfigured : null;
 
     private static void Collect(QueryGuardVerdict verdict, ref List<string>? warnings)
     {

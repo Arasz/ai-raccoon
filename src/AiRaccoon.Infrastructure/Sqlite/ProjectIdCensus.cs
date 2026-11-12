@@ -1,4 +1,5 @@
 using AiRaccoon.Core.Projects;
+using AiRaccoon.Infrastructure.Sqlite.Decisions;
 using CommunityToolkit.Diagnostics;
 using Dapper;
 using Microsoft.Data.Sqlite;
@@ -125,6 +126,7 @@ public static class ProjectIdCensus
             row.OpenWorkspaces = group.N;
             row.OpenWorkspaceEntries = group.M;
         }
+
         await CountByIdAsync(connection,
             "SELECT project_id AS Id, COUNT(*) AS N FROM metrics WHERE project_id IS NOT NULL GROUP BY project_id",
             (row, n) => row.MetricsRows += n, cancellationToken);
@@ -133,7 +135,7 @@ public static class ProjectIdCensus
 
         var decisionTables = await connection.QueryAsync<string>(new CommandDefinition(
             "SELECT name FROM sqlite_master WHERE type='table' AND name IN @names",
-            new { names = Decisions.DecisionSchema.ProjectTableNames.ToArray() }, cancellationToken: cancellationToken));
+            new { names = DecisionSchema.ProjectTableNames.ToArray() }, cancellationToken: cancellationToken));
         foreach (var table in decisionTables)
         {
             await CountByIdAsync(connection, $"SELECT project_id AS Id, COUNT(*) AS N FROM {table} GROUP BY project_id",
@@ -197,8 +199,10 @@ public static class ProjectIdCensus
             }
         }
 
-        static async Task<long> ScalarAsync(SqliteConnection conn, string sql, CancellationToken ct) =>
-            await conn.ExecuteScalarAsync<long>(new CommandDefinition(sql, cancellationToken: ct));
+        static async Task<long> ScalarAsync(SqliteConnection conn, string sql, CancellationToken ct)
+        {
+            return await conn.ExecuteScalarAsync<long>(new CommandDefinition(sql, cancellationToken: ct));
+        }
     }
 
     /// <summary>Attributes an id-embedding settings key to its owner; false for global keys and a blank owner.</summary>
@@ -243,47 +247,48 @@ public static class ProjectIdCensus
     private sealed class RowBuilder(string id)
     {
         public static readonly RowBuilder Null = new("");
-
-        public long ProjectEntries;
-        public long CustomEntries;
-        public long SharedEntries;
-        public long WorkspaceEntries;
-        public long NullContextEntries;
-        public bool Registered;
-        public string? RegisteredName;
         public readonly List<string> SettingsKeys = [];
-
-        public ProjectIdCensusRow Build() => new(
-            id, Registered, RegisteredName,
-            ProjectEntries, CustomEntries, SharedEntries, WorkspaceEntries, NullContextEntries,
-            CodeEntries, CodeFtsRows, VecCodeRows, EntriesFtsRows, VecEntryRows, VecStructureRows,
-            Queued, Discards, QualityRows, Watches, WatchFiles, DigestClaims,
-            Tombstones, Workspaces, MetricsRows, NoiseRows,
-            SettingsKeys.Order(StringComparer.Ordinal).ToList())
-        {
-            OpenWorkspaces = OpenWorkspaces,
-            OpenWorkspaceEntries = OpenWorkspaceEntries,
-            DecisionRows = DecisionRows
-        };
 
         public long CodeEntries;
         public long CodeFtsRows;
-        public long VecCodeRows;
-        public long EntriesFtsRows;
-        public long VecEntryRows;
-        public long VecStructureRows;
-        public long Queued;
-        public long Discards;
-        public long QualityRows;
-        public long Watches;
-        public long WatchFiles;
-        public long DigestClaims;
+        public long CustomEntries;
         public long DecisionRows;
-        public long Tombstones;
-        public long Workspaces;
+        public long DigestClaims;
+        public long Discards;
+        public long EntriesFtsRows;
         public long MetricsRows;
         public long NoiseRows;
-        public long OpenWorkspaces;
+        public long NullContextEntries;
         public long OpenWorkspaceEntries;
+        public long OpenWorkspaces;
+
+        public long ProjectEntries;
+        public long QualityRows;
+        public long Queued;
+        public bool Registered;
+        public string? RegisteredName;
+        public long SharedEntries;
+        public long Tombstones;
+        public long VecCodeRows;
+        public long VecEntryRows;
+        public long VecStructureRows;
+        public long WatchFiles;
+        public long Watches;
+        public long WorkspaceEntries;
+        public long Workspaces;
+
+        public ProjectIdCensusRow Build() =>
+            new(
+                id, Registered, RegisteredName,
+                ProjectEntries, CustomEntries, SharedEntries, WorkspaceEntries, NullContextEntries,
+                CodeEntries, CodeFtsRows, VecCodeRows, EntriesFtsRows, VecEntryRows, VecStructureRows,
+                Queued, Discards, QualityRows, Watches, WatchFiles, DigestClaims,
+                Tombstones, Workspaces, MetricsRows, NoiseRows,
+                SettingsKeys.Order(StringComparer.Ordinal).ToList())
+            {
+                OpenWorkspaces = OpenWorkspaces,
+                OpenWorkspaceEntries = OpenWorkspaceEntries,
+                DecisionRows = DecisionRows
+            };
     }
 }

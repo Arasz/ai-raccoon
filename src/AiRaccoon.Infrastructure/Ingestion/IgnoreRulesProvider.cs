@@ -36,8 +36,10 @@ public sealed class IgnoreRulesProvider : IIgnoreRulesProvider
     }
 }
 
-/// <summary>Null object for callers that construct their dependency without DI (test/legacy call
-/// sites keeping a positional constructor working) — resolves to no rules, ever.</summary>
+/// <summary>
+///     Null object for callers that construct their dependency without DI (test/legacy call
+///     sites keeping a positional constructor working) — resolves to no rules, ever.
+/// </summary>
 public sealed class NullIgnoreRulesProvider : IIgnoreRulesProvider
 {
     public static NullIgnoreRulesProvider Instance { get; } = new();

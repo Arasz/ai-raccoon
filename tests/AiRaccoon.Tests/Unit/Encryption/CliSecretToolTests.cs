@@ -1,6 +1,5 @@
 using System.Reflection;
 using AiRaccoon.Infrastructure.Encryption;
-using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 

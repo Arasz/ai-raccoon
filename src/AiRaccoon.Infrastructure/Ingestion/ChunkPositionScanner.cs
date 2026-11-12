@@ -1,7 +1,5 @@
 using AiRaccoon.Core.Chunking;
 using AiRaccoon.Core.Ingestion;
-using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Sqlite;
 using CommunityToolkit.Diagnostics;
@@ -28,10 +26,11 @@ public sealed record ChunkPositionScan(
     IReadOnlyDictionary<long, int> PositionById,
     IReadOnlyDictionary<long, string?> SectionById)
 {
-    /// <summary>True when the given rows are exactly the rows the file is stored as: every one is reproduced and the
-    /// file holds no chunk without one.</summary>
-    public bool MatchesStoredRows =>
-        FileUsable && TotalChunks == PositionById.Count && PositionById.Values.All(position => position >= 0);
+    /// <summary>
+    ///     True when the given rows are exactly the rows the file is stored as: every one is reproduced and the
+    ///     file holds no chunk without one.
+    /// </summary>
+    public bool MatchesStoredRows => FileUsable && TotalChunks == PositionById.Count && PositionById.Values.All(position => position >= 0);
 }
 
 /// <summary>One stored row of a (ctx, source_file) position partition, as the position repairs read it.</summary>
@@ -103,18 +102,23 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
         // It stays as the partition rule's NULL-safe form and the shape that fixed the empty-lookup
         // crash, and costs nothing. source_file is never NULL in a group (the group queries filter
         // it), so plain `=` keeps a NULL-source_file member from matching unrelated rows.
-        return [.. await connection.QueryAsync<PartitionEntry>(new CommandDefinition(
-            $"""
-             WITH member AS (SELECT source_file AS sf, {MemorySql.ContextKeyExpression("")} AS ctx FROM entries WHERE id = @memberId)
-             SELECT e.id AS Id, e.hash AS Hash, e.path AS Path, e.source_file AS SourceFile, e.chunk_index AS ChunkIndex,
-                    e.total_chunks AS TotalChunks, e.section AS Section
-             FROM entries e, member m
-             WHERE e.source_file = m.sf AND ({MemorySql.ContextKeyExpression("e.")}) IS m.ctx
-             """, new { memberId }, cancellationToken: cancellationToken))];
+        return
+        [
+            .. await connection.QueryAsync<PartitionEntry>(new CommandDefinition(
+                $"""
+                 WITH member AS (SELECT source_file AS sf, {MemorySql.ContextKeyExpression("")} AS ctx FROM entries WHERE id = @memberId)
+                 SELECT e.id AS Id, e.hash AS Hash, e.path AS Path, e.source_file AS SourceFile, e.chunk_index AS ChunkIndex,
+                        e.total_chunks AS TotalChunks, e.section AS Section
+                 FROM entries e, member m
+                 WHERE e.source_file = m.sf AND ({MemorySql.ContextKeyExpression("e.")}) IS m.ctx
+                 """, new { memberId }, cancellationToken: cancellationToken))
+        ];
     }
 
-    /// <summary>The writes that give a partition its positions: the file's rows at <paramref name="scan" />'s
-    /// positions and sections, or in stored order when it is null; only rows whose position or total changes.</summary>
+    /// <summary>
+    ///     The writes that give a partition its positions: the file's rows at <paramref name="scan" />'s
+    ///     positions and sections, or in stored order when it is null; only rows whose position or total changes.
+    /// </summary>
     public static IReadOnlyList<ChunkMove> Moves(IReadOnlyList<PartitionEntry> partition, ChunkPositionScan? scan)
     {
         Guard.IsNotNull(partition);
@@ -173,8 +177,10 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
         return moves;
     }
 
-    /// <summary>Applies <paramref name="moves" /> in one transaction; a section is written only when it changes, so the
-    /// full-text index is not rewritten for a position-only move.</summary>
+    /// <summary>
+    ///     Applies <paramref name="moves" /> in one transaction; a section is written only when it changes, so the
+    ///     full-text index is not rewritten for a position-only move.
+    /// </summary>
     public static async Task WriteAsync(SqliteConnection connection, IReadOnlyList<ChunkMove> moves,
         CancellationToken cancellationToken)
     {
@@ -198,8 +204,7 @@ public sealed class ChunkPositionScanner(IFileTypeMatcher fileTypeMatcher, IEmbe
     }
 
     /// <summary>The same resolution the ingest path uses, read from the same settings (mirrors <see cref="Ingestion.ChunkBackfill" />'s BudgetAsync).</summary>
-    public Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
-        connection.ReadChunkBudgetAsync(embeddingService, cancellationToken);
+    public Task<ChunkBudget> BudgetAsync(SqliteConnection connection, CancellationToken cancellationToken) => connection.ReadChunkBudgetAsync(embeddingService, cancellationToken);
 
     private static bool TryReadFile(string path, out string content)
     {

@@ -55,7 +55,8 @@ internal partial class NodeRunner(
         if (await tokenFile.EnsureAsync(ctx) is not { } mcpToken)
         {
             Log.McpTokenUnavailable(logger, tokenFile.Path);
-            await streams.WriteErrorLineAsync($"ai-raccoon: {tokenFile.RefusalReason ?? $"cannot read or create the MCP token at {tokenFile.Path} — check its permissions, or remove it and start serve again"}");
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: {tokenFile.RefusalReason ?? $"cannot read or create the MCP token at {tokenFile.Path} — check its permissions, or remove it and start serve again"}");
             return tokenFile.NotOwnerOnly ? ErrorCode.Environment.SecretNotPrivate : ErrorCode.Environment.TokenUnavailable;
         }
 
@@ -64,7 +65,8 @@ internal partial class NodeRunner(
         var identityKeyFile = new IdentityKeyFile(cliInput.ServerConfig.Options);
         if (await identityKeyFile.EnsureAsync(ctx) is null)
         {
-            await streams.WriteErrorLineAsync($"ai-raccoon: {identityKeyFile.RefusalReason ?? $"cannot read or create the identity key at {identityKeyFile.Path} — check its permissions, or remove it and start serve again"}");
+            await streams.WriteErrorLineAsync(
+                $"ai-raccoon: {identityKeyFile.RefusalReason ?? $"cannot read or create the identity key at {identityKeyFile.Path} — check its permissions, or remove it and start serve again"}");
             return identityKeyFile.NotOwnerOnly ? ErrorCode.Environment.SecretNotPrivate : ErrorCode.Environment.IdentityKeyUnavailable;
         }
 
@@ -281,8 +283,7 @@ internal partial class NodeRunner(
     {
         Log.PortInUse(logger, descriptor.Port);
         await streams.WriteErrorLineAsync(
-            $"ai-raccoon: port {descriptor.Port} is in use by a listener that did not prove it serves this data root " +
-            $"({IdentityProof.RefusalText(reason)}) — stop the listener yourself, or serve on another port (--port 0)");
+            $"ai-raccoon: port {descriptor.Port} is in use by a listener that did not prove it serves this data root ({IdentityProof.RefusalText(reason)}) — stop the listener yourself, or serve on another port (--port 0)");
         return ErrorCode.Server.Unproven;
     }
 
@@ -299,9 +300,7 @@ internal partial class NodeRunner(
             // ADR-0107 PC.3: names the actual cause on stderr, the same way RefuseExistingServerAsync
             // does for the attach path — never the log line (EventId 657 stays unchanged).
             RestartOutcome.Unproven => new Refusal(
-                $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the listener did not prove it serves this data root " +
-                $"({IdentityProof.RefusalText(result.Reason ?? ThrowHelper.ThrowArgumentException<IdentityProofFailure>("Unproven without a reason"))}) " +
-                "— stop the listener yourself, then run serve again, or serve on another port (--port 0)",
+                $"ai-raccoon: cannot restart the server on port {descriptor.Port}: the listener did not prove it serves this data root ({IdentityProof.RefusalText(result.Reason ?? ThrowHelper.ThrowArgumentException<IdentityProofFailure>("Unproven without a reason"))}) — stop the listener yourself, then run serve again, or serve on another port (--port 0)",
                 ErrorCode.Server.Unproven),
             // ADR-0107 PC.4: reaching NoToken already proved the listener's identity (D5's proof
             // comes before the token read), so "another data root" is never a live possibility —
@@ -310,8 +309,7 @@ internal partial class NodeRunner(
             // comes before the token read), so "another data root" is never a live possibility —
             // TokenFile.RefusalReason (e.g. a chmod-600 remedy) is the real, actionable cause when set.
             RestartOutcome.NoToken => new Refusal(
-                $"ai-raccoon: cannot restart the server on port {descriptor.Port}: it proved this data root's identity but has no usable token " +
-                $"({descriptor.TokenFile.RefusalReason ?? $"{descriptor.TokenFile.Path} holds no token yet"}) — stop it yourself, or serve on another port",
+                $"ai-raccoon: cannot restart the server on port {descriptor.Port}: it proved this data root's identity but has no usable token ({descriptor.TokenFile.RefusalReason ?? $"{descriptor.TokenFile.Path} holds no token yet"}) — stop it yourself, or serve on another port",
                 ErrorCode.Server.NoToken),
             RestartOutcome.Refused => new Refusal(
                 $"ai-raccoon: cannot restart the server on port {descriptor.Port}: it refused the token in {descriptor.TokenFile.Path} — it serves another data root; stop it yourself, or serve on another port",
@@ -390,7 +388,8 @@ internal partial class NodeRunner(
             Message = "ai-raccoon: port {Port} is in use but gave the probe no answer; nothing was asked to stop")]
         public static partial void RestartProbeUnanswered(ILogger logger, int port);
 
-        [LoggerMessage(EventId = 605, Level = LogLevel.Information, Message = "ai-raccoon: attached to the server already listening on {Url} — it proved this root's identity key for {RequestedBankPath}")]
+        [LoggerMessage(EventId = 605, Level = LogLevel.Information,
+            Message = "ai-raccoon: attached to the server already listening on {Url} — it proved this root's identity key for {RequestedBankPath}")]
         public static partial void AttachedToExistingServer(ILogger logger, string url, string requestedBankPath);
 
         [LoggerMessage(EventId = 606, Level = LogLevel.Debug, Message = "ai-raccoon: /mcp is guarded by the token in {TokenPath}")]

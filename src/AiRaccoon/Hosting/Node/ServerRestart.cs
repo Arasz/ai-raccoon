@@ -33,16 +33,18 @@ public sealed partial class ServerRestart : IServerRestart
     public static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(200);
 
-    /// <summary>Time the OS is given to release the listening socket after the probe stops
-    /// answering, so the restart's own bind never loses the port to a TIME_WAIT hangover.</summary>
+    /// <summary>
+    ///     Time the OS is given to release the listening socket after the probe stops
+    ///     answering, so the restart's own bind never loses the port to a TIME_WAIT hangover.
+    /// </summary>
     private static readonly TimeSpan PortSettleGrace = TimeSpan.FromMilliseconds(100);
 
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly ILogger _logger;
     private readonly TimeSpan _portFreeWithin;
-    private readonly IIdentityProver _prover;
     private readonly IServerProbe _probe;
+    private readonly IIdentityProver _prover;
     private readonly TimeProvider _timeProvider;
 
     public ServerRestart(IServerProbe probe, TimeSpan portFreeWithin, TimeProvider timeProvider, IIdentityProver prover, ILogger<ServerRestart> logger)

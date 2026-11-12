@@ -46,38 +46,38 @@ public sealed partial class DecisionService
         var write = new DecisionWrite(parsed.LegacyTaskId, command.SessionId, command.RequestId, command.Actor);
         return MutateAsync(projectId, write, "import-semantica", new { sourceDigest, mappingDigest, command.ExpectedProjectRevision },
             async (writer, revision, ct) =>
-        {
-            await RequireRevisionAsync(writer, command.ExpectedProjectRevision, ct);
-            var plan = await PlanImportAsync(writer, export, parsed, ct);
-            if (!plan.CanApply)
             {
-                throw new DecisionException(DecisionErrorKinds.ImportBlocked,
-                    $"The import has {plan.Blockers.Count} blocker{(plan.Blockers.Count == 1 ? "" : "s")}; run the preview.");
-            }
+                await RequireRevisionAsync(writer, command.ExpectedProjectRevision, ct);
+                var plan = await PlanImportAsync(writer, export, parsed, ct);
+                if (!plan.CanApply)
+                {
+                    throw new DecisionException(DecisionErrorKinds.ImportBlocked,
+                        $"The import has {plan.Blockers.Count} blocker{(plan.Blockers.Count == 1 ? "" : "s")}; run the preview.");
+                }
 
-            var now = Now;
-            foreach (var decision in plan.Decisions)
-            {
-                var version = new DecisionVersion(decision.DecisionId, 1, decision.TaskId, revision, decision.Content, decision.Status,
-                    now, write.Actor, write.SessionId, null);
-                await writer.AddRecordAsync(new DecisionRecord(decision.DecisionId, decision.TaskId, 1, now), ct);
-                await writer.AddVersionAsync(version, ct);
-                await writer.AddImportAsync(decision.Import, ct);
-            }
+                var now = Now;
+                foreach (var decision in plan.Decisions)
+                {
+                    var version = new DecisionVersion(decision.DecisionId, 1, decision.TaskId, revision, decision.Content, decision.Status,
+                        now, write.Actor, write.SessionId, null);
+                    await writer.AddRecordAsync(new DecisionRecord(decision.DecisionId, decision.TaskId, 1, now), ct);
+                    await writer.AddVersionAsync(version, ct);
+                    await writer.AddImportAsync(decision.Import, ct);
+                }
 
-            foreach (var edge in plan.Edges)
-            {
-                await writer.AddEdgeAsync(new DecisionEdge(Guid.CreateVersion7(now).ToString(), edge.SourceId, edge.TargetId, edge.Kind,
-                    edge.Reason, edge.TaskId, revision, now, write.Actor, write.SessionId), ct);
-            }
+                foreach (var edge in plan.Edges)
+                {
+                    await writer.AddEdgeAsync(new DecisionEdge(Guid.CreateVersion7(now).ToString(), edge.SourceId, edge.TargetId, edge.Kind,
+                        edge.Reason, edge.TaskId, revision, now, write.Actor, write.SessionId), ct);
+                }
 
-            foreach (var row in plan.RetainedImports)
-            {
-                await writer.AddImportAsync(row, ct);
-            }
+                foreach (var row in plan.RetainedImports)
+                {
+                    await writer.AddImportAsync(row, ct);
+                }
 
-            return new Mutation<DecisionImportOutcome>(new DecisionImportOutcome(sourceDigest, plan.Counts), plan.HasNewRows);
-        }, cancellationToken, requireTask: false);
+                return new Mutation<DecisionImportOutcome>(new DecisionImportOutcome(sourceDigest, plan.Counts), plan.HasNewRows);
+            }, cancellationToken, false);
     }
 
     private static void RequireImportSize(byte[] source, byte[] mapping)

@@ -1,7 +1,6 @@
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
-using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tests.Unit.Storage;
 using Dapper;
 using Microsoft.Data.Sqlite;

@@ -1,11 +1,8 @@
 using System.Diagnostics;
 using AiRaccoon.Access;
-using AiRaccoon.Core.Isolation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Fusion;
 using AiRaccoon.Core.Memory.QueryGuard;
-using AiRaccoon.Core.Metrics;
-using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Observability;
 using AiRaccoon.Tests.TestHelpers;
@@ -167,7 +164,7 @@ public sealed class RefusedQueryRedactionTests
     private static string SpanText(Activity activity) =>
         string.Join("\n",
         [
-            activity.StatusDescription ?? string.Empty,
+            activity.StatusDescription ?? "",
             .. activity.TagObjects.Select(tag => $"{tag.Key}={tag.Value}"),
             .. activity.Events.SelectMany(e => e.Tags ?? []).Select(tag => $"{tag.Key}={tag.Value}")
         ]);

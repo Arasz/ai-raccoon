@@ -36,13 +36,13 @@ public sealed class GetQualityReportTests
         var method = typeof(QualityTools).GetMethod(nameof(QualityTools.GetQualityReport));
         method.ShouldNotBeNull("get_quality_report must exist as a tool method");
 
-        var attribute = method!.GetCustomAttribute<McpServerToolAttribute>();
+        var attribute = method.GetCustomAttribute<McpServerToolAttribute>();
         attribute.ShouldNotBeNull("the method must carry the MCP tool attribute");
-        attribute!.Name.ShouldBe("get_quality_report");
+        attribute.Name.ShouldBe("get_quality_report");
 
         var scope = method.GetCustomAttribute<McpToolScopeAttribute>();
         scope.ShouldNotBeNull("every tool declares its scope — a missing one is a build error (ADR-0139)");
-        scope!.Scope.ShouldBe(ToolScope.All, "the report is a telemetry read, like its sibling get_engine_statistics");
+        scope.Scope.ShouldBe(ToolScope.All, "the report is a telemetry read, like its sibling get_engine_statistics");
     }
 
     /// <summary>The gate decides the project and the access requirement; the tool only asks.</summary>
@@ -133,7 +133,7 @@ public sealed class GetQualityReportTests
             LastProjectId = projectId;
             LastRequirement = requirement;
             LastToolName = toolName;
-            return Task.FromResult(Canonical ?? projectId ?? string.Empty);
+            return Task.FromResult(Canonical ?? projectId ?? "");
         }
 
         public Task<ApiEnvelope<T>> WrapAsync<T>(string? projectId, T data, CancellationToken cancellationToken) =>

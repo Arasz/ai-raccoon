@@ -196,7 +196,7 @@ internal sealed class FakeHfServer : IDisposable
     {
         try
         {
-            var path = context.Request.Url?.AbsolutePath ?? string.Empty;
+            var path = context.Request.Url?.AbsolutePath ?? "";
             lock (_hits)
             {
                 _hits[path + context.Request.Url?.Query] = _hits.GetValueOrDefault(path + context.Request.Url?.Query) + 1;

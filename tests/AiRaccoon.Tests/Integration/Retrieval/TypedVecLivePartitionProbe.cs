@@ -47,7 +47,7 @@ public sealed class TypedVecLivePartitionProbe(ITestOutputHelper output)
             }.ToString());
             await source.OpenAsync(TestContext.Current.CancellationToken);
             await source.ExecuteAsync("PRAGMA query_only=ON");
-            var pin = JsonDocument.Parse(await File.ReadAllTextAsync(sourcePath + ".pin.json", TestContext.Current.CancellationToken));
+            var pin = JsonDocument.Parse(await File.ReadAllTextAsync($"{sourcePath}.pin.json", TestContext.Current.CancellationToken));
             await using var stream = File.OpenRead(sourcePath);
             var sourceHash = Convert.ToHexString(await SHA256.HashDataAsync(stream, TestContext.Current.CancellationToken)).ToLowerInvariant();
             sourceHash.ShouldBe(pin.RootElement.GetProperty("sha256").GetString());
@@ -63,7 +63,7 @@ public sealed class TypedVecLivePartitionProbe(ITestOutputHelper output)
                 var contexts = grouped.Take(3).Concat(grouped.TakeLast(1)).Select(g => g.Key).Distinct().ToArray();
                 foreach (var layout in new[] { "baseline", "composite", "native" })
                 {
-                    var dataRoot = Path.Combine(root, modality + "-" + layout);
+                    var dataRoot = Path.Combine(root, $"{modality}-{layout}");
                     var options = new InfrastructureOptions { DataRoot = dataRoot, Rid = "osx-arm64", Scope = InstallScope.User };
                     var factory = new SqliteConnectionFactory(options, NullKeyProvider.Resolver(options));
                     await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
@@ -74,7 +74,7 @@ public sealed class TypedVecLivePartitionProbe(ITestOutputHelper output)
                     {
                         foreach (var row in rows)
                         {
-                            var ctx = layout == "composite" ? row.Ctx + "|" + row.Type : row.Ctx;
+                            var ctx = layout == "composite" ? $"{row.Ctx}|{row.Type}" : row.Ctx;
                             await connection.ExecuteAsync(layout == "native"
                                 ? "INSERT INTO measured(rowid,ctx,type,embedding) VALUES(@Id,@ctx,@Type,@Embedding)"
                                 : "INSERT INTO measured(rowid,ctx,embedding) VALUES(@Id,@ctx,@Embedding)", new { row.Id, ctx, row.Type, row.Embedding }, transaction);
@@ -105,8 +105,8 @@ public sealed class TypedVecLivePartitionProbe(ITestOutputHelper output)
                                 _ => "ctx=@ctx"
                             };
                             var inner = $"SELECT rowid,distance FROM measured WHERE {predicate} AND embedding MATCH @vec AND k=10";
-                            var sql = layout == "composite" && type is null ? $"SELECT rowid,distance FROM ({inner}) ORDER BY distance+0 LIMIT 10" : inner + " ORDER BY distance";
-                            var args = new { ctx, type, memory = ctx + "|memory", file = ctx + "|file", typed = ctx + "|" + type, vec = queryRow.Embedding };
+                            var sql = layout == "composite" && type is null ? $"SELECT rowid,distance FROM ({inner}) ORDER BY distance+0 LIMIT 10" : $"{inner} ORDER BY distance";
+                            var args = new { ctx, type, memory = $"{ctx}|memory", file = $"{ctx}|file", typed = $"{ctx}|{type}", vec = queryRow.Embedding };
                             var neighbors = (await connection.QueryAsync<Neighbor>(sql, args)).ToArray();
                             if (layout == "baseline" && type is not null)
                             {

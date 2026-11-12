@@ -6,7 +6,6 @@ using AiRaccoon.Core.Degradation;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Degradation;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests;
 using AiRaccoon.Tools;
 using FluentValidation;
 using Microsoft.Extensions.Logging.Abstractions;

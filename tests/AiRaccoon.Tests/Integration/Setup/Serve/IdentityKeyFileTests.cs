@@ -166,7 +166,7 @@ public sealed class IdentityKeyFileTests : IDisposable
     {
         var time = new FakeTimeProvider();
         var keyFile = new IdentityKeyFile(TestData.CreateProjectOptions(_dataRoot), time);
-        await SeedDebrisAsync(keyFile.Path, string.Empty, time);
+        await SeedDebrisAsync(keyFile.Path, "", time);
 
         var healing = keyFile.EnsureAsync(TestContext.Current.CancellationToken);
         await Task.Delay(200, TestContext.Current.CancellationToken); // timer registers
@@ -185,7 +185,7 @@ public sealed class IdentityKeyFileTests : IDisposable
     {
         var time = new FakeTimeProvider();
         var keyFile = new IdentityKeyFile(TestData.CreateProjectOptions(_dataRoot), time);
-        await SeedDebrisAsync(keyFile.Path, string.Empty, time, age: TimeSpan.FromMinutes(-5));
+        await SeedDebrisAsync(keyFile.Path, "", time, age: TimeSpan.FromMinutes(-5));
 
         var healing = keyFile.EnsureAsync(TestContext.Current.CancellationToken);
         await Task.Delay(200, TestContext.Current.CancellationToken);

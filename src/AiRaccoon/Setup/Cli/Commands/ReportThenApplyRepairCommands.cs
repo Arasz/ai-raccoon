@@ -10,6 +10,8 @@ namespace AiRaccoon.Setup.Cli.Commands;
 /// </summary>
 public abstract class ReportThenApplyRepairCommands<TReport>(IRepairStore repair, RepairKind kind)
 {
+    protected abstract string AppliedMessage { get; }
+
     public async Task<int> RunAsync(ParseResult parseResult, StandardStreams streams, CancellationToken cancellationToken)
     {
         var apply = parseResult.GetValue<bool>("--apply");
@@ -32,6 +34,4 @@ public abstract class ReportThenApplyRepairCommands<TReport>(IRepairStore repair
     protected abstract Task<TReport> ReportAsync(IRepairStore repair, CancellationToken cancellationToken);
 
     protected abstract IEnumerable<string> Describe(TReport report, bool apply);
-
-    protected abstract string AppliedMessage { get; }
 }

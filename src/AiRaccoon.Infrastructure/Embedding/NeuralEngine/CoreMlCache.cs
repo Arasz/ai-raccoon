@@ -19,11 +19,11 @@ internal sealed partial class CoreMlCache
     public const string StatusFileName = "status.json";
     private const string ComputeUnitsDirectory = "CPUAndNeuralEngine";
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(250);
+    private readonly string _key;
+    private readonly ILogger _logger;
+    private readonly string _ortVersion;
 
     private readonly string _root;
-    private readonly string _key;
-    private readonly string _ortVersion;
-    private readonly ILogger _logger;
 
     public CoreMlCache(string root, string key, string ortVersion, ILogger logger)
     {
@@ -162,8 +162,10 @@ internal sealed partial class CoreMlCache
             throw new InvalidDataException($"{path} is not a CoreML status file: {ex.Message}", ex);
         }
 
-        static string Text(JsonElement status, string name) =>
-            status.GetProperty(name).GetString() ?? throw new InvalidDataException($"the status file's {name} is null");
+        static string Text(JsonElement status, string name)
+        {
+            return status.GetProperty(name).GetString() ?? throw new InvalidDataException($"the status file's {name} is null");
+        }
     }
 
     /// <summary>Replaces <c>status.json</c> with <paramref name="transition" />, atomically; a failed write is logged, never thrown.</summary>
@@ -364,8 +366,8 @@ internal sealed class CoreMlCacheLease : IDisposable
 {
     private readonly CoreMlCache _cache;
     private readonly Lock _gate = new();
-    private FileStream? _lock;
     private bool _disposed;
+    private FileStream? _lock;
 
     internal CoreMlCacheLease(CoreMlCache cache, FileStream @lock, bool compiling)
     {
@@ -376,6 +378,15 @@ internal sealed class CoreMlCacheLease : IDisposable
 
     /// <summary>True when this process holds the set exclusively to compile it; false when it loads a finished set.</summary>
     public bool Compiling { get; private set; }
+
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            _disposed = true;
+            _lock?.Dispose();
+        }
+    }
 
     /// <summary>Records the set as finished and keeps serving from it under a shared lock.</summary>
     public void MarkComplete()
@@ -391,15 +402,6 @@ internal sealed class CoreMlCacheLease : IDisposable
             _lock?.Dispose();
             _lock = _cache.LockShared();
             Compiling = false;
-        }
-    }
-
-    public void Dispose()
-    {
-        lock (_gate)
-        {
-            _disposed = true;
-            _lock?.Dispose();
         }
     }
 }

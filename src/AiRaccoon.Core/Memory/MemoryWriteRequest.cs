@@ -1,5 +1,5 @@
-using FluentValidation;
 using System.Text.Json.Serialization;
+using FluentValidation;
 
 namespace AiRaccoon.Core.Memory;
 
@@ -14,9 +14,12 @@ public sealed record MemoryWriteRequest(
 {
     /// <summary>Effective write scope derived from context and workspace; a workspace wins.</summary>
     [JsonIgnore]
-    public MemoryWriteScope Scope => !string.IsNullOrWhiteSpace(WorkspaceId)
-        ? MemoryWriteScope.Workspace
-        : Context == ContextNaming.SharedContext ? MemoryWriteScope.Shared : MemoryWriteScope.Project;
+    public MemoryWriteScope Scope =>
+        !string.IsNullOrWhiteSpace(WorkspaceId)
+            ? MemoryWriteScope.Workspace
+            : Context == ContextNaming.SharedContext
+                ? MemoryWriteScope.Shared
+                : MemoryWriteScope.Project;
 
     public sealed class Validator : AbstractValidator<MemoryWriteRequest>
     {

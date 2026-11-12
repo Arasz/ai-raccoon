@@ -30,12 +30,15 @@ public sealed record CliInput(
 
     /// <summary>The Usage code a failed parse exits with: the most specific case its errors name.</summary>
     public int FailureCode =>
-        IsUnparseable ? ErrorCode.Usage.Unparseable
-        : NamesRemovedTransport ? ErrorCode.Usage.RemovedTransport
-        : ParsedCliArgs.Errors.Any(error => error.SymbolResult is ArgumentResult { Tokens.Count: 0 }) ? ErrorCode.Usage.MissingValue
-        : ParsedCliArgs.Errors.Any(error => error.SymbolResult is OptionResult { Option: var option } && option == CliCommandTree.ObservabilityPortOption)
-            ? ErrorCode.Usage.UndialablePort
-        : ErrorCode.Usage.InvalidValue;
+        IsUnparseable
+            ? ErrorCode.Usage.Unparseable
+            : NamesRemovedTransport
+                ? ErrorCode.Usage.RemovedTransport
+                : ParsedCliArgs.Errors.Any(error => error.SymbolResult is ArgumentResult { Tokens.Count: 0 })
+                    ? ErrorCode.Usage.MissingValue
+                    : ParsedCliArgs.Errors.Any(error => error.SymbolResult is OptionResult { Option: var option } && option == CliCommandTree.ObservabilityPortOption)
+                        ? ErrorCode.Usage.UndialablePort
+                        : ErrorCode.Usage.InvalidValue;
 
     public ServerConfig ServerConfig { get; } = Options.ToServerConfig();
 }

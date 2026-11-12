@@ -30,7 +30,7 @@ public sealed class SemanticaImportPlanTests
     }
 
     private static Dictionary<string, string> Mint(SemanticaExport export) =>
-        export.Entities.Where(entity => entity.Type == "decision").Select(entity => entity.Id).Distinct().ToDictionary(id => id, id => "n-" + id);
+        export.Entities.Where(entity => entity.Type == "decision").Select(entity => entity.Id).Distinct().ToDictionary(id => id, id => $"n-{id}");
 
     private static SemanticaImportPlan FixturePlan(IReadOnlyList<DecisionImport>? imports = null, IReadOnlyDictionary<string, string>? ids = null) =>
         Plan(SemanticaParsingTests.Fixture("export-graph-json-0.7.0.json"), SemanticaParsingTests.Fixture("export-graph-json-0.7.0.mapping.json"), imports: imports, ids: ids);
@@ -38,18 +38,17 @@ public sealed class SemanticaImportPlanTests
     private static string[] Codes(IEnumerable<DecisionImportIssue> issues) => [.. issues.Select(issue => issue.Code)];
 
     private static string DecisionJson(string id, string? text = "Title", string properties = """{"category":"c","scenario":"s","outcome":"o","reasoning":"r"}""") =>
-        "{\"id\":" + Json(id) + (text is null ? "" : ",\"text\":" + Json(text)) + ",\"type\":\"decision\"" + (properties is null ? "" : ",\"properties\":" + properties) + "}";
+        $"{{\"id\":{Json(id)}{(text is null ? "" : $",\"text\":{Json(text)}")},\"type\":\"decision\"{(properties is null ? "" : $",\"properties\":{properties}")}}}";
 
     private static string Json(string value) => JsonSerializer.Serialize(value);
 
-    private static string Link(string id, string from, string to, string type) =>
-        "{\"id\":" + Json(id) + ",\"source_id\":" + Json(from) + ",\"target_id\":" + Json(to) + ",\"type\":" + Json(type) + "}";
+    private static string Link(string id, string from, string to, string type) => $"{{\"id\":{Json(id)},\"source_id\":{Json(from)},\"target_id\":{Json(to)},\"type\":{Json(type)}}}";
 
     private static byte[] Export(string[] entities, string[]? relationships = null)
     {
         relationships ??= [];
-        var inner = "{\"entities\":[" + string.Join(",", entities) + "],\"relationships\":[" + string.Join(",", relationships)
-            + "],\"statistics\":{\"entity_count\":" + entities.Length + ",\"relationship_count\":" + relationships.Length + "}}";
+        var inner =
+            $"{{\"entities\":[{string.Join(",", entities)}],\"relationships\":[{string.Join(",", relationships)}],\"statistics\":{{\"entity_count\":{entities.Length},\"relationship_count\":{relationships.Length}}}}}";
         return SemanticaParsingTests.Envelope(inner);
     }
 
@@ -108,9 +107,9 @@ public sealed class SemanticaImportPlanTests
 
         plan.Edges.Select(edge => (edge.SourceId, edge.TargetId, edge.Kind)).ShouldBe(
         [
-            ("n-" + D120, "n-" + Db05, DecisionEdgeKind.DependsOn),
-            ("n-" + C1d5, "n-" + D120, DecisionEdgeKind.Supports),
-            ("n-" + D33, "n-" + Db05, DecisionEdgeKind.Contradicts).Canonical(),
+            ($"n-{D120}", $"n-{Db05}", DecisionEdgeKind.DependsOn),
+            ($"n-{C1d5}", $"n-{D120}", DecisionEdgeKind.Supports),
+            ($"n-{D33}", $"n-{Db05}", DecisionEdgeKind.Contradicts).Canonical(),
         ]);
         plan.Edges[0].Reason.ShouldBe("Imported from Semantica semantica-main/c5755547-d909-50d3-86dd-600728885407 (depends_on).");
         var person = plan.RetainedImports.Single(row => row.ExternalId == "person-1");
@@ -329,9 +328,9 @@ public sealed class SemanticaImportPlanTests
         var order = Plan(Export(entities, [Link("r1", "b", "a", "contradicts")]), Mapping(Records("r1")), ids: new Dictionary<string, string> { ["a"] = "n-9", ["b"] = "n-1", ["c"] = "n-3" });
         order.Edges.Single().ShouldSatisfyAllConditions(edge => edge.SourceId.ShouldBe("n-1"), edge => edge.TargetId.ShouldBe("n-9"));
         var fixtureOrder = FixturePlan(ids: Mint(SemanticaExport.Parse(SemanticaParsingTests.Fixture("export-graph-json-0.7.0.json")))
-            .ToDictionary(pair => pair.Key, pair => pair.Key == Db05 ? "z-" + pair.Key : "a-" + pair.Key));
-        fixtureOrder.Edges[2].SourceId.ShouldBe("a-" + D33);
-        fixtureOrder.Edges[2].TargetId.ShouldBe("z-" + Db05);
+            .ToDictionary(pair => pair.Key, pair => pair.Key == Db05 ? $"z-{pair.Key}" : $"a-{pair.Key}"));
+        fixtureOrder.Edges[2].SourceId.ShouldBe($"a-{D33}");
+        fixtureOrder.Edges[2].TargetId.ShouldBe($"z-{Db05}");
     }
 
     [Fact]
@@ -414,9 +413,9 @@ public sealed class SemanticaImportPlanTests
     [Fact]
     public void ToReport_CapsEachListAndCountsTheRest()
     {
-        var entities = Enumerable.Range(0, 250).Select(index => DecisionJson("d" + index)).ToArray();
+        var entities = Enumerable.Range(0, 250).Select(index => DecisionJson($"d{index}")).ToArray();
 
-        var plan = Plan(Export(entities), Mapping(entities.Select((_, index) => ("d" + index, (string?)null))));
+        var plan = Plan(Export(entities), Mapping(entities.Select((_, index) => ($"d{index}", (string?)null))));
         var report = plan.ToReport("S", "M");
 
         plan.Blockers.Count.ShouldBe(250);

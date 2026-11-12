@@ -18,28 +18,27 @@ public sealed partial class WatchEventSource(
     ILogger<WatchEventSource> logger,
     TimeProvider? timeProvider = null) : IDisposable
 {
-    /// <summary>
-    ///     How long a watch's buffer overflows are gathered before they trigger one rescan and one log
-    ///     line. The window opens on the first overflow and is not extended by later ones (ADR-0143).
-    /// </summary>
-    public static TimeSpan OverflowDebounce { get; } = TimeSpan.FromSeconds(2);
-
-    private readonly Dictionary<WatchKey, OverflowWindow> _overflows = new();
-
-    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
-
     // File-mode registrations: WatchKey(projectId, registeredPath) → the watched file. FileSystemWatcher
     // requires a directory, so the watcher sits on the parent; Translate filters to this file.
     private readonly Dictionary<WatchKey, string> _fileTargets = new();
 
     private readonly object _gate = new();
 
+    private readonly Dictionary<WatchKey, OverflowWindow> _overflows = new();
+
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+
     private readonly Dictionary<WatchKey, FileSystemWatcher> _watchers = new();
+    /// <summary>
+    ///     How long a watch's buffer overflows are gathered before they trigger one rescan and one log
+    ///     line. The window opens on the first overflow and is not extended by later ones (ADR-0143).
+    /// </summary>
+    public static TimeSpan OverflowDebounce { get; } = TimeSpan.FromSeconds(2);
+
+    public void Dispose() => StopAll();
 
     /// <summary>Raised once per debounce window after the watcher for (projectId, path) overflowed and dropped events.</summary>
     public event Action<string, string>? Overflowed;
-
-    public void Dispose() => StopAll();
 
     /// <summary>
     ///     Creates + enables the watcher for (projectId, path); idempotent; failures become error events.

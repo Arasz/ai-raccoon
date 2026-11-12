@@ -50,10 +50,10 @@ public sealed class FileTypeMatcher : IFileTypeMatcher
     {
         if (string.IsNullOrWhiteSpace(ext))
         {
-            return string.Empty;
+            return "";
         }
 
         var trimmed = ext.Trim();
-        return trimmed.StartsWith('.') ? trimmed.ToLowerInvariant() : "." + trimmed.ToLowerInvariant();
+        return trimmed.StartsWith('.') ? trimmed.ToLowerInvariant() : $".{trimmed.ToLowerInvariant()}";
     }
 }

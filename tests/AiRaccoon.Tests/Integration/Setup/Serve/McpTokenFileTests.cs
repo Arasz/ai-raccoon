@@ -149,7 +149,7 @@ public sealed class McpTokenFileTests : IDisposable
         // start on it is worse than minting a new secret nobody is holding.
         var time = new FakeTimeProvider();
         var tokenFile = new McpTokenFile(_dataRoot, time);
-        await WriteOwnerOnlyAsync(tokenFile.Path, string.Empty);
+        await WriteOwnerOnlyAsync(tokenFile.Path, "");
         AgeTheDebris(tokenFile.Path, time);
 
         var healing = tokenFile.EnsureAsync(TestContext.Current.CancellationToken);
@@ -169,7 +169,7 @@ public sealed class McpTokenFileTests : IDisposable
     {
         var time = new FakeTimeProvider();
         var tokenFile = new McpTokenFile(_dataRoot, time);
-        await WriteOwnerOnlyAsync(tokenFile.Path, string.Empty);
+        await WriteOwnerOnlyAsync(tokenFile.Path, "");
         File.SetLastWriteTimeUtc(tokenFile.Path, time.GetUtcNow().UtcDateTime + TimeSpan.FromMinutes(5));
 
         var healing = tokenFile.EnsureAsync(TestContext.Current.CancellationToken);
@@ -213,7 +213,7 @@ public sealed class McpTokenFileTests : IDisposable
         var time = new FakeTimeProvider();
         var tokenFile = new McpTokenFile(_dataRoot, time);
         var writers = await MintElsewhereAsync();
-        await WriteOwnerOnlyAsync(tokenFile.Path, string.Empty);
+        await WriteOwnerOnlyAsync(tokenFile.Path, "");
         File.SetLastWriteTimeUtc(tokenFile.Path, time.GetUtcNow().UtcDateTime + TimeSpan.FromMinutes(5));
 
         var healing = tokenFile.EnsureAsync(TestContext.Current.CancellationToken);
@@ -281,7 +281,7 @@ public sealed class McpTokenFileTests : IDisposable
         // healers converge exactly as racing minters do.
         const int healers = 16;
         var healAfter = TimeSpan.FromMilliseconds(200);
-        await WriteOwnerOnlyAsync(new McpTokenFile(_dataRoot).Path, string.Empty);
+        await WriteOwnerOnlyAsync(new McpTokenFile(_dataRoot).Path, "");
         File.SetLastWriteTimeUtc(new McpTokenFile(_dataRoot).Path, DateTime.UtcNow - healAfter - TimeSpan.FromSeconds(1));
         var healed = new string?[healers];
 

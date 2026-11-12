@@ -63,7 +63,7 @@ public sealed class DecisionImportCliTests : IAsyncLifetime
         foreach (var (id, title) in new[] { ("semantica-legacy", "Legacy"), ("storage-task", "Storage") })
         {
             (await _host.Http.PostAsJsonAsync($"/decisions/projects/{_project}/tasks",
-                new { taskId = id, sessionId = "seed", requestId = "task-" + id, title }, Ct)).EnsureSuccessStatusCode();
+                new { taskId = id, sessionId = "seed", requestId = $"task-{id}", title }, Ct)).EnsureSuccessStatusCode();
         }
     }
 

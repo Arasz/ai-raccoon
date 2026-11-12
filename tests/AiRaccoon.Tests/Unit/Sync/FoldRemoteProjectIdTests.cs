@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Sync;
-using AiRaccoon.Tests;
 using Shouldly;
 using Xunit;
 

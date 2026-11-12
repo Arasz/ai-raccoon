@@ -8,7 +8,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///     Owns the process-wide ONNX Runtime environment and its log callback, and builds sessions that log one
 ///     node-placement line each instead of ORT's generic "Some nodes were not assigned" warning.
 /// </summary>
-internal sealed partial class OrtSessionLog
+internal static partial class OrtSessionLog
 {
     private const string EnvironmentLogId = "ai-raccoon";
 
@@ -17,37 +17,39 @@ internal sealed partial class OrtSessionLog
     private static bool _callbackInstalled;
     private static long _sessionCount;
 
-    private OrtSessionLog()
-    {
-    }
-
-    /// <summary>The ORT environment, created with this class's log callback unless something else created it first.
-    /// Use it instead of <see cref="OrtEnv.Instance" />, which creates an environment without the callback.</summary>
+    /// <summary>
+    ///     The ORT environment, created with this class's log callback unless something else created it first.
+    ///     Use it instead of <see cref="OrtEnv.Instance" />, which creates an environment without the callback.
+    /// </summary>
     internal static OrtEnv Environment
     {
         get
         {
             lock (EnvironmentGate)
             {
-                if (!OrtEnv.IsCreated)
+                if (OrtEnv.IsCreated)
                 {
-                    var options = new EnvironmentCreationOptions
-                    {
-                        logId = EnvironmentLogId,
-                        logLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING,
-                        loggingFunction = OnLog
-                    };
-                    OrtEnv.CreateInstanceWithOptions(ref options);
-                    _callbackInstalled = true;
+                    return OrtEnv.Instance();
                 }
+
+                var options = new EnvironmentCreationOptions
+                {
+                    logId = EnvironmentLogId,
+                    logLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING,
+                    loggingFunction = OnLog
+                };
+                OrtEnv.CreateInstanceWithOptions(ref options);
+                _callbackInstalled = true;
             }
 
             return OrtEnv.Instance();
         }
     }
 
-    /// <summary>Builds a session and logs where its nodes were placed. Overwrites the options' log id and, when the
-    /// callback is installed, raises their log severity to verbose: ORT reports placement only at verbose.</summary>
+    /// <summary>
+    ///     Builds a session and logs where its nodes were placed. Overwrites the options' log id and, when the
+    ///     callback is installed, raises their log severity to verbose: ORT reports placement only at verbose.
+    /// </summary>
     internal static InferenceSession Create(string modelPath, SessionOptions options, ILogger logger)
     {
         _ = Environment;
@@ -68,12 +70,16 @@ internal sealed partial class OrtSessionLog
         }
         finally
         {
+#pragma warning disable CS8601 // Possible null reference assignment.
             Sinks.TryRemove(logId, out _);
+#pragma warning restore CS8601 // Possible null reference assignment.
         }
     }
 
-    /// <summary>Routes a line to the sink of the session being built; anything else at warning or above goes to
-    /// stderr, as ORT's own default sink did. Never throws back into native code.</summary>
+    /// <summary>
+    ///     Routes a line to the sink of the session being built; anything else at warning or above goes to
+    ///     stderr, as ORT's own default sink did. Never throws back into native code.
+    /// </summary>
     private static void OnLog(IntPtr param, OrtLoggingLevel severity, string category, string logId, string codeLocation, string message)
     {
         try
@@ -116,8 +122,10 @@ internal sealed class OrtSessionSink(ILogger logger)
     private readonly Lock _gate = new();
     private readonly NodePlacement _placement = new();
 
-    /// <summary>Takes one ORT line: placement lines feed the summary, the generic placement warning and CoreML's
-    /// capability line are dropped, and other warnings and errors go to the logger.</summary>
+    /// <summary>
+    ///     Takes one ORT line: placement lines feed the summary, the generic placement warning and CoreML's
+    ///     capability line are dropped, and other warnings and errors go to the logger.
+    /// </summary>
     public void Add(OrtLoggingLevel severity, string codeLocation, string message)
     {
         lock (_gate)
@@ -161,10 +169,11 @@ internal sealed class OrtSessionSink(ILogger logger)
         return string.IsNullOrEmpty(directory) ? file : $"{directory}/{file}";
     }
 
-    private static LogLevel Level(OrtLoggingLevel severity) => severity switch
-    {
-        OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING => LogLevel.Warning,
-        OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR => LogLevel.Error,
-        _ => LogLevel.Critical
-    };
+    private static LogLevel Level(OrtLoggingLevel severity) =>
+        severity switch
+        {
+            OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING => LogLevel.Warning,
+            OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR => LogLevel.Error,
+            _ => LogLevel.Critical
+        };
 }

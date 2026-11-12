@@ -161,7 +161,7 @@ public sealed class SharedExtractionService : ISharedExtractionService
 
     private static string NormalizeWhitespace(string value) => string.Concat(value.Where(c => !char.IsWhiteSpace(c)));
 
-    private static string Truncate(string value) => value.Length <= PreviewLength ? value : value[..(PreviewLength - 1)] + "…";
+    private static string Truncate(string value) => value.Length <= PreviewLength ? value : $"{value[..(PreviewLength - 1)]}…";
 
     private readonly record struct ScoredCandidate(ExtractionCandidateRow Row, double Score, List<string> Reasons);
 }

@@ -26,7 +26,9 @@ public sealed record DecisionWrite
 }
 
 public sealed record DecisionResult<T>(string ProjectId, long ProjectRevision, T Value, bool Replayed = false);
+
 public sealed record DecisionDetails(DecisionRecord Record, IReadOnlyList<DecisionVersion> Versions, int SelectedVersion = 0);
+
 public sealed record DecisionSupersession(DecisionVersion Replacement, DecisionVersion Replaced, DecisionEdge Edge);
 
 /// <summary>A decision command refusal with a stable machine-readable kind.</summary>

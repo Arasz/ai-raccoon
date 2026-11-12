@@ -16,7 +16,7 @@ public sealed class SemanticaParsingTests
         File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Resources", "Semantica", name));
 
     internal static byte[] Envelope(string inner, string format = "json") =>
-        Encoding.UTF8.GetBytes("{\"format\":" + JsonSerializer.Serialize(format) + ",\"data\":" + JsonSerializer.Serialize(inner) + "}");
+        Encoding.UTF8.GetBytes($"{{\"format\":{JsonSerializer.Serialize(format)},\"data\":{JsonSerializer.Serialize(inner)}}}");
 
     private static string Inner(string entities = "[]", string relationships = "[]", string statistics = EmptyStatistics) =>
         $$"""{"entities":{{entities}},"relationships":{{relationships}},"statistics":{{statistics}}}""";
@@ -53,7 +53,7 @@ public sealed class SemanticaParsingTests
 
     public static TheoryData<string, byte[]> DuplicateKeys => new()
     {
-        { "envelope", Encoding.UTF8.GetBytes("{\"format\":\"json\",\"format\":\"json\",\"data\":" + JsonSerializer.Serialize(Inner()) + "}") },
+        { "envelope", Encoding.UTF8.GetBytes($"{{\"format\":\"json\",\"format\":\"json\",\"data\":{JsonSerializer.Serialize(Inner())}}}") },
         { "inner data", Envelope($$"""{"entities":[],"entities":[],"relationships":[],"statistics":{{EmptyStatistics}}}""") },
         { "properties", Envelope(Inner("""[{"id":"a","type":"decision","properties":{"outcome":"x","outcome":"y"}}]""",
             statistics: """{"entity_count":1,"relationship_count":0}""")) },
@@ -116,7 +116,7 @@ public sealed class SemanticaParsingTests
     public static TheoryData<string, byte[]> UnsupportedShapes => new()
     {
         { "format is not json", Envelope(Inner(), format: "yaml") },
-        { "envelope extra key", Encoding.UTF8.GetBytes("{\"format\":\"json\",\"data\":" + JsonSerializer.Serialize(Inner()) + ",\"extra\":1}") },
+        { "envelope extra key", Encoding.UTF8.GetBytes($"{{\"format\":\"json\",\"data\":{JsonSerializer.Serialize(Inner())},\"extra\":1}}") },
         { "envelope missing data", Encoding.UTF8.GetBytes("""{"format":"json"}""") },
         { "data is not a string", Encoding.UTF8.GetBytes("""{"format":"json","data":{}}""") },
         { "envelope is an array", Encoding.UTF8.GetBytes("[]") },

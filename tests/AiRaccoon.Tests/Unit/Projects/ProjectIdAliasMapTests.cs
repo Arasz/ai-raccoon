@@ -152,21 +152,14 @@ public sealed class ProjectIdAliasMapTests
     }
 
     [Fact]
-    public void FromJson_WithNullAliasEntry_ThrowsArgumentException()
-    {
-        Should.Throw<ArgumentException>(() =>
-            ProjectIdAliasMap.FromJson("{\"Aliases\":[null],\"Canonicals\":[],\"Dropped\":[]}"));
-    }
+    public void FromJson_WithNullAliasEntry_ThrowsJsonException() => Should.Throw<JsonException>(static () => ProjectIdAliasMap.FromJson("{\"Aliases\":[null],\"Canonicals\":[],\"Dropped\":[]}"));
 
     [Theory]
     [InlineData("{\"Aliases\":[{\"Alias\":null,\"Canonical\":\"b\"}],\"Canonicals\":[],\"Dropped\":[]}")]
     [InlineData("{\"Aliases\":[{\"Alias\":\"a\",\"Canonical\":null}],\"Canonicals\":[],\"Dropped\":[]}")]
     [InlineData("{\"Aliases\":null,\"Canonicals\":[],\"Dropped\":[]}")]
     [InlineData("{\"Aliases\":[],\"Canonicals\":null,\"Dropped\":[]}")]
-    public void FromJson_WithNullSpellingsOrSections_ThrowsArgumentException(string json)
-    {
-        Should.Throw<ArgumentException>(() => ProjectIdAliasMap.FromJson(json));
-    }
+    public void FromJson_WithNullSpellingsOrSections_ThrowsJsonException(string json) => Should.Throw<JsonException>(() => ProjectIdAliasMap.FromJson(json));
 
     [Fact]
     public void LoadFromFile_OfAMissingFile_ThrowsFileNotFound_NamingThePath()
@@ -215,19 +208,13 @@ public sealed class ProjectIdAliasMapTests
     [InlineData("qa-noise-project", "qa-noise-project")]
     [InlineData("JSAA", "JSAA")]
     [InlineData("Job-Search-Ai-Assistant", "Job-Search-Ai-Assistant")]
-    public void Fold_MapsKnownLosers_AndLeavesEverythingElseAlone(string input, string expected)
-    {
-        FixtureMap().Fold(input).ShouldBe(expected);
-    }
+    public void Fold_MapsKnownLosers_AndLeavesEverythingElseAlone(string input, string expected) => FixtureMap().Fold(input).ShouldBe(expected);
 
     [Theory]
     [InlineData("job-search-ai-assistant", "job-search-ai-assistant")]
     [InlineData("AI-RACCOON", "AI-RACCOON")]
     [InlineData("qa-noise-project", "qa-noise-project")]
-    public void DefaultFold_PassesThrough_FormerLoserStrings(string input, string expected)
-    {
-        ProjectIdAliasMap.Default.Fold(input).ShouldBe(expected);
-    }
+    public void DefaultFold_PassesThrough_FormerLoserStrings(string input, string expected) => ProjectIdAliasMap.Default.Fold(input).ShouldBe(expected);
 
     /// <summary>
     ///     A guid spelling folds to the D-form even when the map knows nothing about it — same
@@ -248,10 +235,7 @@ public sealed class ProjectIdAliasMapTests
     ///     Ledger — throw-on-blank : --filter Fold_OfABlankInput_ReturnsItUnchanged : empty string.
     /// </summary>
     [Fact]
-    public void Fold_OfABlankInput_ReturnsItUnchanged()
-    {
-        ProjectIdAliasMap.Default.Fold(string.Empty).ShouldBe(string.Empty);
-    }
+    public void Fold_OfABlankInput_ReturnsItUnchanged() => ProjectIdAliasMap.Default.Fold("").ShouldBe("");
 
     private const string GuidLoser = "0719fdbe-632c-4eb8-906c-0a652463cd95";
     private const string GuidDropped = "4efcf199-3fef-4f1a-9ff6-7712797c0b22";
@@ -265,27 +249,18 @@ public sealed class ProjectIdAliasMapTests
     [InlineData(GuidLoser)]
     [InlineData("0719FDBE-632C-4EB8-906C-0A652463CD95")]
     [InlineData("{0719fdbe-632c-4eb8-906c-0a652463cd95}")]
-    public void Apply_AliasInAnyGuidSpelling_ReturnsTheCanonicalWinner(string spelling)
-    {
-        GuidMap().Apply(spelling).ShouldBe(new FoldedProjectId("ai-sheepdog", Dropped: false));
-    }
+    public void Apply_AliasInAnyGuidSpelling_ReturnsTheCanonicalWinner(string spelling) => GuidMap().Apply(spelling).ShouldBe(new FoldedProjectId("ai-sheepdog", Dropped: false));
 
     [Theory]
     [InlineData(GuidDropped, GuidDropped)]
     [InlineData("{4EFCF199-3FEF-4F1A-9FF6-7712797C0B22}", GuidDropped)]
-    public void Apply_DroppedId_ReportsDroppedAndDoesNotFold(string spelling, string canonical)
-    {
-        GuidMap().Apply(spelling).ShouldBe(new FoldedProjectId(canonical, Dropped: true));
-    }
+    public void Apply_DroppedId_ReportsDroppedAndDoesNotFold(string spelling, string canonical) => GuidMap().Apply(spelling).ShouldBe(new FoldedProjectId(canonical, Dropped: true));
 
     [Theory]
     [InlineData("ai-badger")]
     [InlineData("Some-Typo")]
     [InlineData("01a102bb-ed70-7fbb-92c7-412c7794ec2c")]
-    public void Apply_UnmappedId_PassesThroughNotDropped(string projectId)
-    {
-        GuidMap().Apply(projectId).ShouldBe(new FoldedProjectId(projectId, Dropped: false));
-    }
+    public void Apply_UnmappedId_PassesThroughNotDropped(string projectId) => GuidMap().Apply(projectId).ShouldBe(new FoldedProjectId(projectId, Dropped: false));
 
     [Fact]
     public void Apply_DroppedAliasOfLiveWinner_PreservesSourceRetirement()

@@ -69,6 +69,5 @@ public static class ExtractionConfigKeys
     }
 
     /// <summary>Display form for the threshold setting: the invariant score, or "off" when disabled.</summary>
-    public static string FormatAutoPromoteThreshold(double? value) =>
-        value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "off";
+    public static string FormatAutoPromoteThreshold(double? value) => value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "off";
 }

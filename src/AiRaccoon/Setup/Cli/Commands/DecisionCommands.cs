@@ -68,8 +68,7 @@ internal sealed class DecisionCommands
         if (RecordBody(text) is not { } body)
         {
             await streams.WriteErrorLineAsync(
-                $"ai-raccoon: {TerminalText.Visible(input)} must hold one JSON object with unique fields and without {string.Join(", ", WriteFields)} — " +
-                "the task comes from --task-id and the retry identity from --session-id/--request-id; nothing was sent");
+                $"ai-raccoon: {TerminalText.Visible(input)} must hold one JSON object with unique fields and without {string.Join(", ", WriteFields)} — the task comes from --task-id and the retry identity from --session-id/--request-id; nothing was sent");
             return ErrorCode.Usage.InvalidValue;
         }
 
@@ -152,7 +151,7 @@ internal sealed class DecisionCommands
         var requestId = parseResult.GetValue<string?>("--request-id");
         if (sessionId is null || requestId is null)
         {
-            sessionId ??= "cli-" + Guid.CreateVersion7().ToString("N");
+            sessionId ??= $"cli-{Guid.CreateVersion7():N}";
             requestId ??= Guid.CreateVersion7().ToString("N");
             await streams.WriteErrorLineAsync($"ai-raccoon: sending with --session-id {sessionId} --request-id {requestId}; pass both to retry this {what} safely");
         }
@@ -309,7 +308,7 @@ internal sealed class DecisionCommands
     private static string Quote(string value) =>
         value.All(character => char.IsAsciiLetterOrDigit(character) || character is '_' or '.' or '/' or ':' or '-')
             ? value
-            : "'" + TerminalText.Visible(value).Replace("'", "'\\''") + "'";
+            : $"'{TerminalText.Visible(value).Replace("'", "'\\''")}'";
 
     private static string ProjectId(ParseResult parseResult) => parseResult.GetValue<string>("--project-id")!;
 

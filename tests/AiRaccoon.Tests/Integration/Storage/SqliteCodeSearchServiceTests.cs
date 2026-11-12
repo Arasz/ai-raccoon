@@ -183,7 +183,7 @@ public sealed class SqliteCodeSearchServiceTests : IAsyncLifetime
         var entry = await _service.GetAsync("acme", "hash-1", TestContext.Current.CancellationToken);
 
         entry.ShouldNotBeNull();
-        entry!.Value.ShouldBe("sealed class NarwhalTusk { }");
+        entry.Value.ShouldBe("sealed class NarwhalTusk { }");
         entry.Path.ShouldBe("src/Bar.cs");
         entry.LineStart.ShouldBe(5);
         entry.LineEnd.ShouldBe(9);

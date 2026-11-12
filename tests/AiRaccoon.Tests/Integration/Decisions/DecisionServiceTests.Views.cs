@@ -1,10 +1,5 @@
-using System.Text;
 using AiRaccoon.Core.Decisions;
-using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Decisions;
-using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Infrastructure.Sqlite.Decisions;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
@@ -99,7 +94,7 @@ public sealed partial class DecisionServiceTests
         var chain = new List<string>();
         foreach (var name in new[] { "A", "B", "C", "D" })
         {
-            chain.Add((await service.RecordAsync("a", new DecisionWrite("task", "s", "record-" + name),
+            chain.Add((await service.RecordAsync("a", new DecisionWrite("task", "s", $"record-{name}"),
                 new DecisionContent(name, "architecture", "s", "o", "r"), DecisionStatus.Accepted, ct)).Value.DecisionId);
         }
 
@@ -135,7 +130,7 @@ public sealed partial class DecisionServiceTests
         var ids = new List<string>();
         foreach (var name in new[] { "one", "two", "three" })
         {
-            ids.Add((await service.RecordAsync("a", new DecisionWrite("task", "s", "record-" + name),
+            ids.Add((await service.RecordAsync("a", new DecisionWrite("task", "s", $"record-{name}"),
                 new DecisionContent(name, "architecture", "s", "o", "r"), DecisionStatus.Accepted, ct)).Value.DecisionId);
         }
 

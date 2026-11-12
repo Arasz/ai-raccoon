@@ -1,3 +1,4 @@
+using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Memory.Fusion;
 
 namespace AiRaccoon.Core.SearchQuality;
@@ -32,7 +33,7 @@ public interface ISearchQualityService
         IReadOnlyList<string> topSourceFiles,
         CancellationToken ct = default,
         IReadOnlyList<RetrievalEvidence>? evidence = null,
-        AiRaccoon.Core.Memory.EntryType? entryTypes = null);
+        EntryType? entryTypes = null);
 
     /// <summary>
     ///     <see cref="RecordSearchAsync" />, best-effort: swallows and logs any failure instead of
@@ -52,7 +53,7 @@ public interface ISearchQualityService
         IReadOnlyList<string> topSourceFiles,
         CancellationToken ct = default,
         IReadOnlyList<RetrievalEvidence>? evidence = null,
-        AiRaccoon.Core.Memory.EntryType? entryTypes = null);
+        EntryType? entryTypes = null);
 
     /// <summary>
     ///     Records that the agent read a file that appeared in the search results.

@@ -12,4 +12,7 @@ public interface IToolCallMetrics : IDisposable
 
     /// <summary>Records a tool invocation: increments the counter and records the duration histogram.</summary>
     void RecordInvocation(string tool, string projectId, TimeSpan duration, bool isError, string? errorType = null);
+
+    /// <summary>Records time from the HTTP request Activity start to MCP tool filter entry.</summary>
+    void RecordDispatchDelay(TimeSpan duration);
 }

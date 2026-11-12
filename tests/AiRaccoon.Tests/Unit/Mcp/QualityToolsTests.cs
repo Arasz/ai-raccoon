@@ -128,7 +128,7 @@ public sealed class QualityToolsTests
             LastProjectId = projectId;
             LastRequirement = requirement;
             LastToolName = toolName;
-            return Task.FromResult(Canonical ?? projectId ?? string.Empty);
+            return Task.FromResult(Canonical ?? projectId ?? "");
         }
 
         public Task<ApiEnvelope<T>> WrapAsync<T>(string? projectId, T data, CancellationToken cancellationToken) =>

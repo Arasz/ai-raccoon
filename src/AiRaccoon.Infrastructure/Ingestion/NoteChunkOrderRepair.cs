@@ -26,10 +26,12 @@ public sealed class NoteChunkOrderRepair
          WHERE source_file IS NOT NULL AND path IS NOT NULL AND path <> source_file AND value IS NOT NULL
          """;
 
-    /// <summary>Repairs every source-citing note in the bank. Notes still at the -1 sentinel are first given a place
-    /// by the bank-wide keeping-order renumber sync also runs (adding no rows, so file rows keep theirs), so
-    /// <see cref="NoteTextOrder.Repositioned" /> can act on them; the full-table pass is accepted because this runs
-    /// once per bank.</summary>
+    /// <summary>
+    ///     Repairs every source-citing note in the bank. Notes still at the -1 sentinel are first given a place
+    ///     by the bank-wide keeping-order renumber sync also runs (adding no rows, so file rows keep theirs), so
+    ///     <see cref="NoteTextOrder.Repositioned" /> can act on them; the full-table pass is accepted because this runs
+    ///     once per bank.
+    /// </summary>
     public async Task<NoteChunkOrderReport> RunAsync(SqliteConnection connection, CancellationToken cancellationToken = default)
     {
         Guard.IsNotNull(connection);
@@ -55,7 +57,7 @@ public sealed class NoteChunkOrderRepair
         List<Row> rows = [];
         foreach (var batch in paths.Chunk(PathsPerQuery))
         {
-            rows.AddRange(await connection.QueryAsync<Row>(new CommandDefinition(SelectNoteRows + " AND path IN @paths",
+            rows.AddRange(await connection.QueryAsync<Row>(new CommandDefinition($"{SelectNoteRows} AND path IN @paths",
                 new { paths = batch }, cancellationToken: cancellationToken)));
         }
 
@@ -108,8 +110,7 @@ public sealed class NoteChunkOrderRepair
 
     /// <summary>Moves one note's rows in one transaction, so a note is never left holding a position twice.</summary>
     private static async Task MoveAsync(SqliteConnection connection, IReadOnlyList<(long Id, long ChunkIndex)> moves,
-        CancellationToken cancellationToken)
-    {
+        CancellationToken cancellationToken) =>
         await connection.InWriteTransactionAsync(async () =>
         {
             foreach (var (id, chunkIndex) in moves)
@@ -118,7 +119,6 @@ public sealed class NoteChunkOrderRepair
                     new { id, chunkIndex }, cancellationToken: cancellationToken));
             }
         }, cancellationToken);
-    }
 
     // A plain class, not a record: Ctx is a computed column, which an empty result set reports as byte[] —
     // property-set materialization tolerates that; record constructor-matching does not.

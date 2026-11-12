@@ -50,7 +50,7 @@ public sealed class TypedVecPartitionProbe(ITestOutputHelper output)
                 {
                     foreach (var row in rows)
                     {
-                        var ctx = layout == "composite" ? row.Ctx + "|" + row.Type : row.Ctx;
+                        var ctx = layout == "composite" ? $"{row.Ctx}|{row.Type}" : row.Ctx;
                         var columns = layout == "native" ? "rowid,ctx,type,embedding" : "rowid,ctx,embedding";
                         var values = layout == "native" ? "@Id,@ctx,@Type,@vec" : "@Id,@ctx,@vec";
                         await connection.ExecuteAsync($"INSERT INTO probe_{layout}({columns}) VALUES ({values})",
@@ -85,7 +85,7 @@ public sealed class TypedVecPartitionProbe(ITestOutputHelper output)
                             {
                                 sql = $"SELECT rowid,distance FROM probe_{layout} WHERE {predicate} AND embedding MATCH @vec AND k={K} ORDER BY distance";
                             }
-                            var args = new { ctx, type, memory = ctx + "|memory", file = ctx + "|file", typed = ctx + "|" + type, vec = Bytes(query) };
+                            var args = new { ctx, type, memory = $"{ctx}|memory", file = $"{ctx}|file", typed = $"{ctx}|{type}", vec = Bytes(query) };
                             try
                             {
                                 var neighbors = (await connection.QueryAsync<Neighbor>(sql, args)).ToArray();
@@ -130,7 +130,7 @@ public sealed class TypedVecPartitionProbe(ITestOutputHelper output)
                 for (var tie = 1; tie <= 15; tie++)
                 {
                     var tieType = tie % 2 == 0 ? "file" : "memory";
-                    var tieCtx = layout == "composite" ? "ties|" + tieType : "ties";
+                    var tieCtx = layout == "composite" ? $"ties|{tieType}" : "ties";
                     var columns = layout == "native" ? "rowid,ctx,type,embedding" : "rowid,ctx,embedding";
                     var values = layout == "native" ? "@id,@ctx,@type,@vec" : "@id,@ctx,@vec";
                     await connection.ExecuteAsync($"INSERT INTO probe_{layout}({columns}) VALUES ({values})",

@@ -14,7 +14,7 @@ internal sealed class ProjectIdCommands(IProjectDirectory directory)
     {
         var projectId = parseResult.GetValue<string>("id");
         var name = parseResult.GetValue<string?>("--name");
-        if (string.IsNullOrWhiteSpace(projectId) || (name is not null && string.IsNullOrWhiteSpace(name)))
+        if (string.IsNullOrWhiteSpace(projectId) || name is not null && string.IsNullOrWhiteSpace(name))
         {
             return await UsageAsync(streams, "project id register needs a non-blank <id>, and --name, when given, must not be blank");
         }

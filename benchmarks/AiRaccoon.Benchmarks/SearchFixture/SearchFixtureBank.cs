@@ -183,8 +183,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
                 "SELECT COUNT(*) FROM entries WHERE structure_embedding IS NOT NULL", cancellationToken);
         var totalEntries = await Scalar(connection, "SELECT COUNT(*) FROM entries", cancellationToken);
         Console.WriteLine(
-            $"[SearchFixtureBank] structure-populated fraction: {structuredEntries}/{totalEntries} " +
-            $"({(double)structuredEntries / totalEntries:P1})");
+            $"[SearchFixtureBank] structure-populated fraction: {structuredEntries}/{totalEntries} ({(double)structuredEntries / totalEntries:P1})");
 
         var probe = await Store.SearchAsync(
                 new SearchQuery(ProjectId, Queries[0], Limit: 10, MinRelativeScore: 0.0),

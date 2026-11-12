@@ -29,10 +29,6 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
     private const string VocabUrl =
         "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/vocab.txt";
 
-    /// <summary>True when <paramref name="model" /> names the bundled engine: unset or <see cref="SettingValue" />.</summary>
-    public static bool IsBundled(string? model) =>
-        string.IsNullOrWhiteSpace(model) || string.Equals(model, SettingValue, StringComparison.OrdinalIgnoreCase);
-
     /// <summary>
     ///     Verifies every file the bundled manifest pins plus the legacy vocab and, when one is
     ///     missing, downloads the pinned copy into the repo's src/AiRaccoon/Models so the next build
@@ -77,14 +73,16 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
         return new BundledModelResult(errors.Count == 0, errors);
     }
 
+    /// <summary>True when <paramref name="model" /> names the bundled engine: unset or <see cref="SettingValue" />.</summary>
+    public static bool IsBundled(string? model) => string.IsNullOrWhiteSpace(model) || string.Equals(model, SettingValue, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>The bundled engine's directory next to the tool (or in the source tree during development).</summary>
     public static string ResolveDirectory() => ResolveDirectory(AppContext.BaseDirectory);
 
     internal static string ResolveDirectory(string baseDirectory) =>
         ResolveDirectoryOrNull(baseDirectory)
         ?? throw BundledAssetUnavailable("embedding model", DirectoryName, baseDirectory,
-            $"Bundled embedding model directory '{DirectoryName}' not found next to the tool. Reinstall the tool to restore it, " +
-            "or 'ai-raccoon model embedding set local <model-dir>' for a downloaded model.");
+            $"Bundled embedding model directory '{DirectoryName}' not found next to the tool. Reinstall the tool to restore it, or 'ai-raccoon model embedding set local <model-dir>' for a downloaded model.");
 
     private static string? ResolveDirectoryOrNull(string baseDirectory)
     {
@@ -108,6 +106,7 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
         var source = root.GetProperty("source");
         var baseUrl = $"https://huggingface.co/{source.GetProperty("repo").GetString()}/resolve/{source.GetProperty("revision").GetString()}/";
         var files = new List<BundledResource>();
+
         void Add(JsonElement list, string upstreamDir)
         {
             foreach (var file in list.EnumerateArray())
@@ -133,8 +132,7 @@ public sealed partial class BundledModel(ILogger<BundledModel> logger, IHttpClie
         ResolveBundled(VocabFileName, baseDirectory)
         ?? throw BundledAssetUnavailable("BERT vocab", VocabFileName, baseDirectory, MissingBundledVocabMessage(VocabFileName));
 
-    internal static string MissingBundledVocabMessage(string fileName) =>
-        $"Bundled BERT vocab '{fileName}' not found next to the tool. Run 'ai-raccoon model embedding set local' to restore it.";
+    internal static string MissingBundledVocabMessage(string fileName) => $"Bundled BERT vocab '{fileName}' not found next to the tool. Run 'ai-raccoon model embedding set local' to restore it.";
 
     private static InvalidOperationException BundledAssetUnavailable(string assetLabel, string fileName, string baseDirectory, string missingAssetMessage) =>
         Directory.Exists(baseDirectory)

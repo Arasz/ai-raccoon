@@ -172,9 +172,11 @@ public sealed class WatchDigestExecutor(
         string.Equals(Path.GetFileName(normalizedPath), IgnoreRulesProvider.FileName, StringComparison.Ordinal) &&
         IngestPath.PathComparer.Equals(Path.GetDirectoryName(normalizedPath), normalizedWatch);
 
-    /// <summary>The digest's gate: the enumeration's hidden/deny-set rule first (#494 — an event
-    /// under an agent worktree must be skipped exactly like the walk skips it), then the watch
-    /// root's `ai-raccoon.ignore` rules.</summary>
+    /// <summary>
+    ///     The digest's gate: the enumeration's hidden/deny-set rule first (#494 — an event
+    ///     under an agent worktree must be skipped exactly like the walk skips it), then the watch
+    ///     root's `ai-raccoon.ignore` rules.
+    /// </summary>
     private async Task<bool> IsExcludedAsync(string projectId, string normalizedWatch, string normalized,
         CancellationToken cancellationToken)
     {

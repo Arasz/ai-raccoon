@@ -21,11 +21,12 @@ public static class SearchKindWireNames
     public const string Code = "code";
     public const string Both = "both";
 
-    public static string ToWireString(this SearchKind kind) => kind switch
-    {
-        SearchKind.Memory => Memory,
-        SearchKind.Code => Code,
-        SearchKind.Both => Both,
-        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown search kind")
-    };
+    public static string ToWireString(this SearchKind kind) =>
+        kind switch
+        {
+            SearchKind.Memory => Memory,
+            SearchKind.Code => Code,
+            SearchKind.Both => Both,
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown search kind")
+        };
 }

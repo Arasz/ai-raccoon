@@ -35,9 +35,9 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
         CancellationToken cancellationToken = default)
     {
         await access.EnsureAsync(projectId, AccessRequirement.Destructive, "trigger_memory_cleanup_threshold",
-                cancellationToken);
+            cancellationToken);
         await store.SetSettingAsync(SweepThresholdSettingKey,
-                SweepThreshold.Format(threshold), cancellationToken);
+            SweepThreshold.Format(threshold), cancellationToken);
     }
 
     /// <summary>Sets or clears one entry's TTL, then reports it next to the rating gate a sweep also checks.</summary>
@@ -45,7 +45,7 @@ public sealed class ForgettingPolicyService(IMemoryStore store, IMemoryAccessGua
         CancellationToken cancellationToken = default)
     {
         await access.EnsureAsync(projectId, AccessRequirement.Destructive, "set_memory_ttl",
-                cancellationToken);
+            cancellationToken);
         EntryTtl.EnsureValid(ttlDays);
 
         // Wrong project and unknown hash are the same refusal here — one project must not learn another's

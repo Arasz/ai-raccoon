@@ -32,7 +32,7 @@ namespace AiRaccoon.Infrastructure.Embedding;
 ///         interval of latency and zero rows.
 ///     </para>
 /// </summary>
-public sealed partial class EmbedDrainService(
+public sealed class EmbedDrainService(
     IEventPump<EmbedDrainRequest> pump,
     ISqliteConnectionFactory factory,
     IEntryEmbedder entryEmbedder,
@@ -52,8 +52,14 @@ public sealed partial class EmbedDrainService(
 
     internal const string OperationName = "embed.drain";
 
-    /// <summary>Completed after each drain pass (success, failure, or a signal that raced to an
-    /// empty pump); test seam.</summary>
+
+    /// <summary>The most recently warned-about invalid raw value, or null once a valid one is seen — this pass runs every drain, so warning on every pass for a persistent bad value would never stop (review finding 2, #517).</summary>
+    private string? _lastWarnedRowsPerRun;
+
+    /// <summary>
+    ///     Completed after each drain pass (success, failure, or a signal that raced to an
+    ///     empty pump); test seam.
+    /// </summary>
     internal TickSignal Drains { get; } = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -150,10 +156,6 @@ public sealed partial class EmbedDrainService(
         }
     }
 
-
-    /// <summary>The most recently warned-about invalid raw value, or null once a valid one is seen — this pass runs every drain, so warning on every pass for a persistent bad value would never stop (review finding 2, #517).</summary>
-    private string? _lastWarnedRowsPerRun;
-
     /// <summary>Unset defaults to 128; a present-but-invalid value (unparseable, non-positive, or outside the 64..4096 range) also falls back, warning once per DISTINCT bad value — not every pass. Test seam.</summary>
     internal int ResolveRowsPerRun(string? raw)
     {
@@ -172,5 +174,4 @@ public sealed partial class EmbedDrainService(
 
         return rows;
     }
-
 }

@@ -12,14 +12,14 @@ public sealed class FileSniffer
     public async Task<bool> IsBinaryAsync(string path, CancellationToken cancellationToken)
     {
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
-            bufferSize: 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
         return await IsBinaryAsync(stream, cancellationToken);
     }
 
     public async Task<bool> IsBinaryAsync(Stream stream, CancellationToken cancellationToken)
     {
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true,
-            bufferSize: 4096, leaveOpen: true);
+        using var reader = new StreamReader(stream, Encoding.UTF8, true,
+            4096, true);
         var buffer = new char[BinaryContent.InspectedLength];
         var count = await reader.ReadBlockAsync(buffer.AsMemory(), cancellationToken);
         return BinaryContent.IsBinary(new string(buffer, 0, count));

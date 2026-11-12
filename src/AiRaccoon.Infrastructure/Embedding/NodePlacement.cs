@@ -15,8 +15,8 @@ internal sealed partial class NodePlacement
     private const string CoreMlProvider = "CoreMLExecutionProvider";
 
     private readonly List<Provider> _providers = [];
-    private Provider? _current;
     private (int Partitions, int Total, int Supported)? _coreMl;
+    private Provider? _current;
 
     /// <summary>Feeds one ORT log message, in the order ORT wrote them.</summary>
     public void Add(string message)
@@ -41,8 +41,10 @@ internal sealed partial class NodePlacement
         }
     }
 
-    /// <summary>One line per session, e.g. "CoreML: 305/400 original nodes in 37 fused partitions; CPU: 95 — Reshape×48, Neg×24";
-    /// null when ORT reported no placement.</summary>
+    /// <summary>
+    ///     One line per session, e.g. "CoreML: 305/400 original nodes in 37 fused partitions; CPU: 95 — Reshape×48, Neg×24";
+    ///     null when ORT reported no placement.
+    /// </summary>
     public string? Summary()
     {
         if (_providers.Count == 0)
@@ -97,8 +99,19 @@ internal sealed partial class NodePlacement
 
     private static int Number(Group group) => int.Parse(group.Value, CultureInfo.InvariantCulture);
 
-    /// <summary>One provider's share of the graph. Fused nodes are the partitions a provider compiled; their op type
-    /// carries an underscore, which no ONNX or contrib op type does.</summary>
+    [GeneratedRegex(@"^\s*(?:(?<all>All nodes)|Node\(s\)) placed on \[(?<provider>[^\]]+)\]\. Number of nodes: (?<count>\d+)")]
+    private static partial Regex PlacedOn();
+
+    [GeneratedRegex(@"^  (?<op>\S+) \(")]
+    private static partial Regex NodeLine();
+
+    [GeneratedRegex(@"number of partitions supported by CoreML: (?<partitions>\d+) number of nodes in the graph: (?<total>\d+) number of nodes supported by CoreML: (?<supported>\d+)")]
+    private static partial Regex CoreMlCapability();
+
+    /// <summary>
+    ///     One provider's share of the graph. Fused nodes are the partitions a provider compiled; their op type
+    ///     carries an underscore, which no ONNX or contrib op type does.
+    /// </summary>
     private sealed class Provider(string name, int nodes, bool all)
     {
         private readonly Dictionary<string, (string Name, int Count, int Order)> _ops = new(StringComparer.Ordinal);
@@ -108,8 +121,7 @@ internal sealed partial class NodePlacement
         public bool All { get; } = all;
         public int Fused { get; private set; }
 
-        public IEnumerable<(string Name, int Count)> Ops =>
-            _ops.Values.OrderBy(op => op.Order).Select(op => (op.Name, op.Count));
+        public IEnumerable<(string Name, int Count)> Ops => _ops.Values.OrderBy(op => op.Order).Select(op => (op.Name, op.Count));
 
         public void Count(string opType)
         {
@@ -124,13 +136,4 @@ internal sealed partial class NodePlacement
                 : (opType, 1, _ops.Count);
         }
     }
-
-    [GeneratedRegex(@"^\s*(?:(?<all>All nodes)|Node\(s\)) placed on \[(?<provider>[^\]]+)\]\. Number of nodes: (?<count>\d+)")]
-    private static partial Regex PlacedOn();
-
-    [GeneratedRegex(@"^  (?<op>\S+) \(")]
-    private static partial Regex NodeLine();
-
-    [GeneratedRegex(@"number of partitions supported by CoreML: (?<partitions>\d+) number of nodes in the graph: (?<total>\d+) number of nodes supported by CoreML: (?<supported>\d+)")]
-    private static partial Regex CoreMlCapability();
 }

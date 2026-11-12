@@ -26,16 +26,32 @@ public sealed record FoldedProjectId(string ProjectId, bool Dropped);
 /// </remarks>
 public sealed class ProjectIdAliasMap
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
-
-    private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
-
     /// <summary>The empty map: no aliases, no canonicals, no drops. <see cref="Fold" /> degrades to guid D-form normalization only.</summary>
     public static ProjectIdAliasMap Empty { get; } = new([], [], []);
+
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false, RespectNullableAnnotations = true};
+
+    private static readonly JsonSerializerOptions IndentedJsonOptions = new() { WriteIndented = true };
 
     private static readonly Lock DefaultGate = new();
 
     private static ProjectIdAliasMap _default = Empty;
+    private readonly Dictionary<string, string> _aliases;
+    private readonly HashSet<string> _canonicals;
+    private readonly HashSet<string> _dropped;
+
+    public ProjectIdAliasMap(IEnumerable<ProjectIdAliasEntry> aliases, IEnumerable<string> canonicals, IEnumerable<string> dropped)
+    {
+        _aliases = aliases.ToDictionary(static aliasEntry => aliasEntry.Alias, static aliasEntry => aliasEntry.Canonical, StringComparer.Ordinal);
+        _canonicals = new HashSet<string>(canonicals, StringComparer.Ordinal);
+        _dropped = new HashSet<string>(dropped, StringComparer.Ordinal);
+        if (_aliases.Any(static pair => SharedProjectScope.IsReservedId(pair.Key) || SharedProjectScope.IsReservedId(pair.Value))
+            || _dropped.Contains(SharedProjectScope.Id) || _canonicals.Contains(SharedProjectScope.Id))
+        {
+            throw new ArgumentException("shared-project-reserved: shared cannot be aliased, folded into, or retired.");
+        }
+    }
+
 
     /// <summary>
     ///     The steady-state map consumed by every choke point (ToolGate, watch boundaries, key
@@ -56,6 +72,15 @@ public sealed class ProjectIdAliasMap
         }
     }
 
+    public IReadOnlyList<ProjectIdAliasEntry> Aliases => [.. _aliases.Select(static kv => new ProjectIdAliasEntry(kv.Key, kv.Value))];
+
+    public IReadOnlyList<string> Canonicals => [.. _canonicals];
+
+    public IReadOnlyList<string> Dropped => [.. _dropped];
+
+    /// <summary>True when the map carries no aliases, canonicals, or drops — steady-state pass-through.</summary>
+    public bool IsEmpty => _aliases.Count == 0 && _canonicals.Count == 0 && _dropped.Count == 0;
+
     /// <summary>Reloads the choke-point cache after the durable map changed (repair apply, sync pull).</summary>
     public static void ReplaceDefault(ProjectIdAliasMap map)
     {
@@ -75,47 +100,15 @@ public sealed class ProjectIdAliasMap
         }
     }
 
-    private readonly Dictionary<string, string> _aliases;
-    private readonly HashSet<string> _canonicals;
-    private readonly HashSet<string> _dropped;
-
-    public ProjectIdAliasMap(IEnumerable<ProjectIdAliasEntry> aliases, IEnumerable<string> canonicals, IEnumerable<string> dropped)
-    {
-        Guard.IsNotNull(aliases);
-        Guard.IsNotNull(canonicals);
-        Guard.IsNotNull(dropped);
-        _aliases = aliases.ToDictionary(e => e.Alias, e => e.Canonical, StringComparer.Ordinal);
-        _canonicals = new HashSet<string>(canonicals, StringComparer.Ordinal);
-        _dropped = new HashSet<string>(dropped, StringComparer.Ordinal);
-        if (_aliases.Any(pair => SharedProjectScope.IsReservedId(pair.Key) || SharedProjectScope.IsReservedId(pair.Value))
-            || _dropped.Contains(SharedProjectScope.Id) || _canonicals.Contains(SharedProjectScope.Id))
-        {
-            throw new ArgumentException("shared-project-reserved: shared cannot be aliased, folded into, or retired.");
-        }
-
-    }
-
-    public IReadOnlyList<ProjectIdAliasEntry> Aliases =>
-        _aliases.Select(kv => new ProjectIdAliasEntry(kv.Key, kv.Value)).ToList();
-
-    public IReadOnlyList<string> Canonicals => [.. _canonicals];
-
-    public IReadOnlyList<string> Dropped => [.. _dropped];
-
     /// <summary>A copy without the aliases and drops keyed by <paramref name="projectIds" />; canonicals are kept.</summary>
     public ProjectIdAliasMap Without(IEnumerable<string> projectIds)
     {
-        Guard.IsNotNull(projectIds);
         var held = new HashSet<string>(projectIds, StringComparer.Ordinal);
-        return new ProjectIdAliasMap(Aliases.Where(entry => !held.Contains(entry.Alias)), _canonicals,
-            _dropped.Where(id => !held.Contains(id)));
+        return new ProjectIdAliasMap(Aliases.Where(entry => !held.Contains(entry.Alias)), _canonicals, _dropped.Where(id => !held.Contains(id)));
     }
 
-    /// <summary>True when the map carries no aliases, canonicals, or drops — steady-state pass-through.</summary>
-    public bool IsEmpty => _aliases.Count == 0 && _canonicals.Count == 0 && _dropped.Count == 0;
-
     /// <summary>True and the winner when the id is a known loser or a canonical itself (self-mapped); false for dropped ids and true typos.</summary>
-    public bool TryResolve(string projectId, [NotNullWhen(true)] out string? canonical)
+    internal bool TryResolve(string projectId, [NotNullWhen(true)] out string? canonical)
     {
         if (_aliases.TryGetValue(projectId, out canonical))
         {
@@ -150,10 +143,7 @@ public sealed class ProjectIdAliasMap
     }
 
     /// <summary>True when the id is deleted with a tombstone at merge time, never folded.</summary>
-    public bool IsDropped(string projectId)
-    {
-        return _dropped.Contains(projectId);
-    }
+    internal bool IsDropped(string projectId) => _dropped.Contains(projectId);
 
     /// <summary>The stored id after canonicalizing and folding aliases; a dropped winner remains retired.</summary>
     public FoldedProjectId Apply(string projectId)
@@ -161,18 +151,15 @@ public sealed class ProjectIdAliasMap
         var canonical = ProjectId.Canonicalize(projectId);
         if (IsDropped(canonical))
         {
-            return new FoldedProjectId(canonical, Dropped: true);
+            return new FoldedProjectId(canonical, true);
         }
 
         var folded = Fold(canonical);
-        return new FoldedProjectId(folded, Dropped: IsDropped(folded));
+        return new FoldedProjectId(folded, IsDropped(folded));
     }
 
     /// <summary>Serializes the map for durable hand-off (plan artifact, settings snapshot); no bank schema involved.</summary>
-    public string ToJson()
-    {
-        return ToJson(indented: false);
-    }
+    internal string ToJson() => ToJson(indented: false);
 
     /// <summary>Serializes the map; <paramref name="indented" /> selects the human-editable template shape.</summary>
     public string ToJson(bool indented)
@@ -189,22 +176,22 @@ public sealed class ProjectIdAliasMap
         Guard.IsNotNull(payload);
         if (payload.Aliases is null || payload.Canonicals is null || payload.Dropped is null)
         {
-            throw new ArgumentException("ai-raccoon: project-ids alias map holds a null aliases, canonicals, or dropped section.");
+            throw new JsonException("ai-raccoon: project-ids alias map holds a null aliases, canonicals, or dropped section.");
         }
 
         foreach (var entry in payload.Aliases)
         {
             if (entry is null || entry.Alias is null || entry.Canonical is null)
             {
-                throw new ArgumentException("ai-raccoon: project-ids alias map holds a null alias entry or null alias/canonical spelling.");
+                throw new JsonException("ai-raccoon: project-ids alias map holds a null alias entry or null alias/canonical spelling.");
             }
         }
 
-        return new ProjectIdAliasMap(payload.Aliases!, payload.Canonicals, payload.Dropped);
+        return new ProjectIdAliasMap(payload.Aliases, payload.Canonicals, payload.Dropped);
     }
 
     /// <summary>Loads a map written by <see cref="ToJson" /> (or the dry-run template) from disk. Missing files throw <see cref="FileNotFoundException" /> naming the path; malformed JSON throws <see cref="JsonException" /> naming the path.</summary>
-    public static ProjectIdAliasMap LoadFromFile(string path)
+    internal static ProjectIdAliasMap LoadFromFile(string path)
     {
         Guard.IsNotNullOrWhiteSpace(path);
         string json;

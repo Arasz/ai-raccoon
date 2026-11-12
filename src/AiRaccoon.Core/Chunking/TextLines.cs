@@ -28,6 +28,5 @@ public static class TextLines
     }
 
     /// <summary>Rewrites CRLF and lone CR endings as LF.</summary>
-    public static string NormalizeLineEndings(string text) =>
-        text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+    public static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
 }

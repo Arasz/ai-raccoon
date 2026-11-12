@@ -1,5 +1,4 @@
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Sync;
 using AiRaccoon.Tests.TestHelpers;

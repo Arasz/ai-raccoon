@@ -12,8 +12,10 @@ using Microsoft.Data.Sqlite;
 
 namespace AiRaccoon.Setup.Cli.Commands;
 
-/// <summary>The <see cref="ErrorCode" /> for a command that threw: the case the exception names, and
-/// <see cref="ErrorCode.Internal.Unexpected" /> when none does — never "you mistyped" by default.</summary>
+/// <summary>
+///     The <see cref="ErrorCode" /> for a command that threw: the case the exception names, and
+///     <see cref="ErrorCode.Internal.Unexpected" /> when none does — never "you mistyped" by default.
+/// </summary>
 internal static class CliFailureErrorCode
 {
     private const int SqliteBusy = 5;
@@ -64,8 +66,7 @@ internal static class CliFailureErrorCode
         };
 
     /// <summary>The first code that names the failure, or <paramref name="general" /> when only the catch-all would.</summary>
-    internal static int For(Exception? ex, int general) =>
-        ex is null || For(ex) == ErrorCode.Internal.Unexpected ? general : For(ex);
+    internal static int For(Exception? ex, int general) => ex is null || For(ex) == ErrorCode.Internal.Unexpected ? general : For(ex);
 
     /// <summary>A refused watch call: an unusable project id, an open migration, or a value the watch service rejected.</summary>
     private static int ForWatchRefusal(string kind) =>

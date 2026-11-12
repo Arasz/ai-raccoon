@@ -13,25 +13,26 @@ public sealed partial class SqliteMemoryStore : IProjectRegistry
         var canonical = ProjectId.Canonicalize(projectId);
 
         await using var connection = await factory.OpenBankAsync(cancellationToken);
-        if (_scope.IsReserved(canonical))
+        if (scope.IsReserved(canonical))
         {
-            await connection.RequireSharedAvailableAsync(canonical, _scope, cancellationToken);
+            await connection.RequireSharedAvailableAsync(canonical, scope, cancellationToken);
             if (name is not null && name != SharedProjectScope.Id)
             {
                 throw new ArgumentException("shared-project-reserved: the shared target cannot be renamed.");
             }
+
             return;
         }
 
-        if (_scope.IsReserved(name))
+        if (scope.IsReserved(name))
         {
             throw new ReservedProjectNameException();
         }
 
         await connection.ExecuteAsync(new CommandDefinition(
-                MemorySql.InsertProject,
-                new { id = canonical, name, createdAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
-                cancellationToken: cancellationToken));
+            MemorySql.InsertProject,
+            new { id = canonical, name, createdAt = timeProvider.GetUtcNow().ToUnixTimeSeconds() },
+            cancellationToken: cancellationToken));
     }
 
     /// <inheritdoc />
@@ -42,16 +43,16 @@ public sealed partial class SqliteMemoryStore : IProjectRegistry
 
         await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
         await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
-        if (_scope.IsReserved(canonical))
+        if (scope.IsReserved(canonical))
         {
-            await connection.RequireSharedAvailableAsync(canonical, _scope, cancellationToken);
+            await connection.RequireSharedAvailableAsync(canonical, scope, cancellationToken);
             return true;
         }
 
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                MemorySql.ProjectIsRegistered,
-                new { projectId = canonical },
-                cancellationToken: cancellationToken)) > 0;
+            MemorySql.ProjectIsRegistered,
+            new { projectId = canonical },
+            cancellationToken: cancellationToken)) > 0;
     }
 
     /// <inheritdoc />
@@ -63,8 +64,8 @@ public sealed partial class SqliteMemoryStore : IProjectRegistry
         await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
         await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                MemorySql.ProjectHasRows,
-                new { projectId = canonical },
-                cancellationToken: cancellationToken)) > 0;
+            MemorySql.ProjectHasRows,
+            new { projectId = canonical },
+            cancellationToken: cancellationToken)) > 0;
     }
 }

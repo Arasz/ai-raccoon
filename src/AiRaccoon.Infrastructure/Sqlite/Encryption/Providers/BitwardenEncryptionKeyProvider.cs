@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Encryption;
-using CommunityToolkit.Diagnostics;
 
 namespace AiRaccoon.Infrastructure.Sqlite.Encryption.Providers;
 

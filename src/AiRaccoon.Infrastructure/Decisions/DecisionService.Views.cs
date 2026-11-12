@@ -9,11 +9,12 @@ public sealed partial class DecisionService
     internal const int GraphEdgeLimit = 2000;
 
     public Task<DecisionResult<DecisionExport>> ExportAsync(string projectId, DecisionTaskSelector? selector = null,
-        CancellationToken cancellationToken = default) => Store.ReadAsync(projectId, async (reader, ct) =>
-    {
-        var snapshot = await LoadAsync(reader, true, true, ct);
-        return new DecisionResult<DecisionExport>(projectId, snapshot.Revision, Export(snapshot, selector ?? new DecisionTaskSelector(), Now));
-    }, cancellationToken);
+        CancellationToken cancellationToken = default) =>
+        Store.ReadAsync(projectId, async (reader, ct) =>
+        {
+            var snapshot = await LoadAsync(reader, true, true, ct);
+            return new DecisionResult<DecisionExport>(projectId, snapshot.Revision, Export(snapshot, selector ?? new DecisionTaskSelector(), Now));
+        }, cancellationToken);
 
     public Task<DecisionResult<DecisionPreview>> PreviewAsync(string projectId, DecisionPreviewOptions? options = null,
         CancellationToken cancellationToken = default)
@@ -70,7 +71,7 @@ public sealed partial class DecisionService
     {
         ValidateSearch(scenario, category);
         DecisionText.Required(scenario, 2000, nameof(scenario));
-        Guard.IsBetweenOrEqualTo(limit, 1, 20, nameof(limit));
+        Guard.IsBetweenOrEqualTo(limit, 1, 20);
         return Store.ReadAsync(projectId, async (reader, ct) =>
         {
             var revision = await reader.RevisionAsync(ct);
@@ -98,7 +99,7 @@ public sealed partial class DecisionService
             }
 
             var live = snapshot.Edges.Where(edge => edge.RemovedRevision is null
-                && (request.IncludeContext || edge.Kind is DecisionEdgeKind.DependsOn or DecisionEdgeKind.Supersedes)).ToArray();
+                                                    && (request.IncludeContext || edge.Kind is DecisionEdgeKind.DependsOn or DecisionEdgeKind.Supersedes)).ToArray();
             var touching = Touching(live);
             var visited = new HashSet<string>(StringComparer.Ordinal) { request.DecisionId };
             var pending = new Queue<(string Id, int Depth)>();
@@ -179,10 +180,6 @@ public sealed partial class DecisionService
             positions.Add(index);
         }
     }
-
-    private sealed record Snapshot(long Revision, IReadOnlyList<DecisionTask> Tasks, IReadOnlyList<DecisionRecord> Records,
-        IReadOnlyDictionary<string, DecisionVersion> Current, IReadOnlyList<DecisionVersion> Versions,
-        IReadOnlyList<DecisionEdge> Edges, IReadOnlyList<DecisionImport> Imports);
 
     private static async Task<Snapshot> LoadAsync(IDecisionReader reader, bool history, bool imports, CancellationToken ct)
     {
@@ -265,8 +262,11 @@ public sealed partial class DecisionService
     }
 
     private static DecisionNode Node(DecisionVersion version, bool boundary = false) => new(version.DecisionId, version.Content.Title, version.Status, version.Version, boundary);
-    private static DecisionMatch Match(DecisionVersion version, double? rank) => new(Node(version), version.Content.Category,
-        Excerpt(version.Content.Outcome, 240), Excerpt(version.Content.Reasoning, 240), version.Content.Sources, rank);
+
+    private static DecisionMatch Match(DecisionVersion version, double? rank) =>
+        new(Node(version), version.Content.Category,
+            Excerpt(version.Content.Outcome, 240), Excerpt(version.Content.Reasoning, 240), version.Content.Sources, rank);
+
     private static void ValidateSearch(string? query, string? category)
     {
         if (query is not null)
@@ -279,4 +279,13 @@ public sealed partial class DecisionService
             DecisionText.Required(category, 100, nameof(category));
         }
     }
+
+    private sealed record Snapshot(
+        long Revision,
+        IReadOnlyList<DecisionTask> Tasks,
+        IReadOnlyList<DecisionRecord> Records,
+        IReadOnlyDictionary<string, DecisionVersion> Current,
+        IReadOnlyList<DecisionVersion> Versions,
+        IReadOnlyList<DecisionEdge> Edges,
+        IReadOnlyList<DecisionImport> Imports);
 }

@@ -13,12 +13,16 @@ public interface IEmbeddingService
     /// </summary>
     string TrimQueryToWindow(EmbeddingSettings settings, string query);
 
-    /// <summary>Stored text as the engine embeds it: the manifest's documentInstruction, when the
-    /// local model declares one, followed by <paramref name="text" />.</summary>
+    /// <summary>
+    ///     Stored text as the engine embeds it: the manifest's documentInstruction, when the
+    ///     local model declares one, followed by <paramref name="text" />.
+    /// </summary>
     string DocumentText(EmbeddingSettings settings, string text);
 
-    /// <summary>The configured engine's own relevance floor (its manifest's <c>relevanceFloor</c>), or
-    /// null when it declares none and search keeps the default floor.</summary>
+    /// <summary>
+    ///     The configured engine's own relevance floor (its manifest's <c>relevanceFloor</c>), or
+    ///     null when it declares none and search keeps the default floor.
+    /// </summary>
     double? RelevanceFloor(EmbeddingSettings settings);
 
     /// <summary>

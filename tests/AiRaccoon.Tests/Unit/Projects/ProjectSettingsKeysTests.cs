@@ -141,7 +141,7 @@ public class ProjectSettingsKeysTests
     [InlineData("watch.concurrency.")]
     public void WithProjectId_RejectsMachineGlobalSourceAndTarget(string prefix)
     {
-        Should.Throw<ArgumentException>(() => ProjectSettingsKeys.WithProjectId(prefix + "global", Id));
+        Should.Throw<ArgumentException>(() => ProjectSettingsKeys.WithProjectId($"{prefix}global", Id));
         Should.Throw<ArgumentException>(() => ProjectSettingsKeys.WithProjectId(prefix + Id, "global"));
     }
 

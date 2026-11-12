@@ -7,6 +7,13 @@ namespace AiRaccoon.Core.Memory.Filtering.Policies;
 public sealed class HermesProcessNoisePolicy : INoiseFilterPolicy
 {
     /// <summary>
+    ///     The exact-body shape of the third notification: "received signal &lt;digits&gt;". Measured:
+    ///     7 rows in the live bank (six "received signal 1", one "received signal 15"), none graded
+    ///     above 2/5.
+    /// </summary>
+    private const string ReceivedSignalPrefix = "received signal";
+
+    /// <summary>
     ///     The prefixes that mark a notification. Measured read-only against the live bank's 399
     ///     search_quality rows: 29 rows carry the first, 25 the second, and every graded one of
     ///     them scored 2/5 — never higher.
@@ -16,13 +23,6 @@ public sealed class HermesProcessNoisePolicy : INoiseFilterPolicy
         "[IMPORTANT: Background process",
         "[ASYNC DELEGATION BATCH"
     ];
-
-    /// <summary>
-    ///     The exact-body shape of the third notification: "received signal &lt;digits&gt;". Measured:
-    ///     7 rows in the live bank (six "received signal 1", one "received signal 15"), none graded
-    ///     above 2/5.
-    /// </summary>
-    private const string ReceivedSignalPrefix = "received signal";
 
     public string Name => "HermesBackgroundProcessLog";
 

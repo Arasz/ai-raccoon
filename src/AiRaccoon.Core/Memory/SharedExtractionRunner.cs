@@ -90,7 +90,7 @@ public sealed class SharedExtractionRunner(
                     ? (row.Value, row.SourceFile)
                     : (c.ValuePreview, (string?)null);
                 var (score, reasons) = existingByHash.TryGetValue(c.Hash, out var existing) &&
-                                        existing.Reasons.Contains(PromotionReasons.AgentRequestedShare, StringComparer.Ordinal)
+                                       existing.Reasons.Contains(PromotionReasons.AgentRequestedShare, StringComparer.Ordinal)
                     ? (MemoryWriteService.AgentRequestedScore, MergeAgentRequestedReasons(c.Reasons))
                     : (c.Score, c.Reasons);
                 return new QueueCandidate(c.Hash, c.Path, value, sourceFile, score, reasons, PromotionScorer.Version);

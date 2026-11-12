@@ -33,15 +33,15 @@ internal static class SharedProjectStorage
         }
 
         var conflict = await connection.ExecuteScalarAsync<bool>(Sql.Def("""
-            SELECT EXISTS(SELECT 1 FROM projects WHERE id = @projectId)
-                OR EXISTS(SELECT 1 FROM projects WHERE name = @projectId)
-                OR EXISTS(SELECT 1 FROM entries WHERE project_id = @projectId AND scope IS NOT 'shared')
-                OR EXISTS(SELECT 1 FROM code_entries WHERE project_id = @projectId)
-                OR EXISTS(SELECT 1 FROM workspaces WHERE project_id = @projectId)
-                OR ((EXISTS(SELECT 1 FROM watches WHERE project_id = @projectId)
-                    OR EXISTS(SELECT 1 FROM watch_files WHERE project_id = @projectId))
-                    AND NOT EXISTS(SELECT 1 FROM settings WHERE key = @activationKey AND value = '1'))
-            """, new { projectId, activationKey = SharedProjectScope.WatchActivationKey }, cancellationToken));
+                                                                         SELECT EXISTS(SELECT 1 FROM projects WHERE id = @projectId)
+                                                                             OR EXISTS(SELECT 1 FROM projects WHERE name = @projectId)
+                                                                             OR EXISTS(SELECT 1 FROM entries WHERE project_id = @projectId AND scope IS NOT 'shared')
+                                                                             OR EXISTS(SELECT 1 FROM code_entries WHERE project_id = @projectId)
+                                                                             OR EXISTS(SELECT 1 FROM workspaces WHERE project_id = @projectId)
+                                                                             OR ((EXISTS(SELECT 1 FROM watches WHERE project_id = @projectId)
+                                                                                 OR EXISTS(SELECT 1 FROM watch_files WHERE project_id = @projectId))
+                                                                                 AND NOT EXISTS(SELECT 1 FROM settings WHERE key = @activationKey AND value = '1'))
+                                                                         """, new { projectId, activationKey = SharedProjectScope.WatchActivationKey }, cancellationToken));
         if (conflict)
         {
             throw new ArgumentException("shared-project-conflict: legacy private data or registration uses 'shared'; repair that owner before using the reserved target. No data was published.");

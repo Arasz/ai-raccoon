@@ -17,7 +17,7 @@ public sealed record DecisionOperation(string Tool, string Method, string Route,
         var path = $"/decisions/projects/{Uri.EscapeDataString(projectId)}{Route}";
         foreach (var name in RouteParameters.Where(Args.ContainsKey))
         {
-            path = path.Replace("{" + name + "}", Uri.EscapeDataString((string)Args[name]!), StringComparison.Ordinal);
+            path = path.Replace($"{{{name}}}", Uri.EscapeDataString((string)Args[name]!), StringComparison.Ordinal);
         }
 
         return Method == "GET" ? path + Query() : path;
@@ -25,7 +25,7 @@ public sealed record DecisionOperation(string Tool, string Method, string Route,
 
     /// <summary>The JSON body: every argument that is not a route placeholder.</summary>
     public Dictionary<string, object?> Body() =>
-        Args.Where(a => !RouteParameters.Contains(a.Key) || !Route.Contains("{" + a.Key + "}", StringComparison.Ordinal))
+        Args.Where(a => !RouteParameters.Contains(a.Key) || !Route.Contains($"{{{a.Key}}}", StringComparison.Ordinal))
             .ToDictionary(a => a.Key, a => a.Value);
 
     /// <summary>The MCP arguments for <paramref name="projectId" />.</summary>
@@ -35,7 +35,7 @@ public sealed record DecisionOperation(string Tool, string Method, string Route,
     private string Query()
     {
         var query = Body().Select(a => $"{a.Key}={Uri.EscapeDataString(Convert.ToString(a.Value, System.Globalization.CultureInfo.InvariantCulture)!.ToLowerInvariant())}").ToArray();
-        return query.Length == 0 ? string.Empty : "?" + string.Join('&', query);
+        return query.Length == 0 ? "" : $"?{string.Join('&', query)}";
     }
 }
 

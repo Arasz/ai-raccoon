@@ -52,8 +52,8 @@ public sealed class SqliteMaintenanceStatsStore(ISqliteConnectionFactory factory
         }
 
         var dbPath = factory.BankPath;
-        var walPath = dbPath + "-wal";
-        var shmPath = dbPath + "-shm";
+        var walPath = $"{dbPath}-wal";
+        var shmPath = $"{dbPath}-shm";
         return new BankStats(
             pageCount * pageSize,
             File.Exists(walPath) ? new FileInfo(walPath).Length : 0,

@@ -106,7 +106,7 @@ public static class EntryTypeParameter
     public static EntryType Single(EntryType types)
     {
         RefuseUnknownBits(types);
-        if (types == EntryType.None || (types & (types - 1)) != EntryType.None)
+        if (types == EntryType.None || (types & types - 1) != EntryType.None)
         {
             throw new ArgumentException(
                 $"A lookup names one entry type, not '{types}'.", nameof(types));

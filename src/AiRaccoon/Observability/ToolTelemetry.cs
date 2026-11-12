@@ -37,10 +37,10 @@ internal static class ToolTelemetry
     internal static readonly IReadOnlyDictionary<string, Func<IDictionary<string, JsonElement>?, ToolProject>>
         Projections = new Dictionary<string, Func<IDictionary<string, JsonElement>?, ToolProject>>(StringComparer.Ordinal)
         {
-            ["get_memories_sharing_ranking"] = arguments => new ToolProject(Text(arguments, ProjectIdArgument) ?? AllProjectsId, null),
-            ["trigger_memory_sharing"] = arguments => new ToolProject(JoinedText(arguments, ProjectIdsArgument), MultiProjectId),
-            ["save_project_id_token"] = _ => new ToolProject(NoProjectId, null),
-            ["get_project_id"] = _ => new ToolProject(NoProjectId, null)
+            ["get_memories_sharing_ranking"] = static arguments => new ToolProject(Text(arguments, ProjectIdArgument) ?? AllProjectsId, null),
+            ["trigger_memory_sharing"] = static arguments => new ToolProject(JoinedText(arguments, ProjectIdsArgument), MultiProjectId),
+            ["save_project_id_token"] = static _ => new ToolProject(NoProjectId, null),
+            ["get_project_id"] = static _ => new ToolProject(NoProjectId, null)
         };
 
     /// <summary>The filter: every call to every registered tool, present and future, passes through it.</summary>
@@ -51,10 +51,11 @@ internal static class ToolTelemetry
             var metrics = request.Services?.GetService<ToolCallMetrics>();
             var recorder = request.Services?.GetService<IMeasurementRecorder>();
             var timeProvider = request.Services?.GetService<TimeProvider>();
+            var requestContext = request.Services?.GetService<IHttpContextAccessor>()?.HttpContext;
             return metrics is null
                 ? await next(request, cancellationToken)
-                : await RecordAsync(metrics, request.Params?.Name ?? string.Empty, request.Params?.Arguments,
-                    token => next(request, token), cancellationToken, recorder, timeProvider);
+                : await RecordAsync(metrics, request.Params.Name, request.Params.Arguments,
+                    token => next(request, token), cancellationToken, recorder, timeProvider, requestContext);
         };
 
     /// <summary>
@@ -65,11 +66,12 @@ internal static class ToolTelemetry
     internal static async ValueTask<CallToolResult> RecordAsync(ToolCallMetrics metrics, string toolName,
         IDictionary<string, JsonElement>? arguments,
         Func<CancellationToken, ValueTask<CallToolResult>> next, CancellationToken cancellationToken,
-        IMeasurementRecorder? recorder = null, TimeProvider? timeProvider = null)
+        IMeasurementRecorder? recorder = null, TimeProvider? timeProvider = null, HttpContext? requestContext = null)
     {
         var project = ProjectFor(toolName, arguments);
         var bankProjectId = ProjectIdAliasMap.Default.Fold(project.SpanId);
-        using var activity = new ToolExecutionActivity(metrics, toolName, project.SpanId, project.MetricId, recorder, timeProvider, bankProjectId);
+        using var activity = new ToolExecutionActivity(metrics, toolName, project.SpanId, project.MetricId, recorder,
+            timeProvider, bankProjectId, requestContext);
         try
         {
             var result = await next(cancellationToken);
@@ -87,7 +89,7 @@ internal static class ToolTelemetry
     internal static ToolProject ProjectFor(string toolName, IDictionary<string, JsonElement>? arguments) =>
         Projections.TryGetValue(toolName, out var projection)
             ? projection(arguments)
-            : new ToolProject(Text(arguments, ProjectIdArgument) ?? string.Empty, null);
+            : new ToolProject(Text(arguments, ProjectIdArgument) ?? "", null);
 
     /// <summary>
     ///     A refusal is what <see cref="ToolRefusals" /> already calls one — no second list of what
@@ -95,8 +97,7 @@ internal static class ToolTelemetry
     ///     way: caller-triggered and cheap to emit in bulk, so the counter stays bounded (WP9).
     ///     <see cref="ToolRefusals.PrefixFor" /> itself stays exact-type.
     /// </summary>
-    private static bool Refused(Exception exception) =>
-        ToolRefusals.PrefixFor(exception) is not null || exception is McpException || exception is OperationCanceledException;
+    private static bool Refused(Exception exception) => ToolRefusals.PrefixFor(exception) is not null || exception is McpException || exception is OperationCanceledException;
 
     private static string? Text(IDictionary<string, JsonElement>? arguments, string name) =>
         arguments?.TryGetValue(name, out var value) == true && value.ValueKind == JsonValueKind.String
@@ -106,9 +107,9 @@ internal static class ToolTelemetry
     private static string JoinedText(IDictionary<string, JsonElement>? arguments, string name) =>
         arguments?.TryGetValue(name, out var value) == true && value.ValueKind == JsonValueKind.Array
             ? string.Join(",", value.EnumerateArray()
-                .Where(element => element.ValueKind == JsonValueKind.String)
-                .Select(element => element.GetString()))
-            : string.Empty;
+                .Where(static element => element.ValueKind == JsonValueKind.String)
+                .Select(static element => element.GetString()))
+            : "";
 
     /// <summary>SpanId is what the caller sent; MetricId is the bounded value, or null to reuse SpanId.</summary>
     internal readonly record struct ToolProject(string SpanId, string? MetricId);

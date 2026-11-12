@@ -16,24 +16,33 @@ public sealed record PlannedEdge(string SourceId, string TargetId, DecisionEdgeK
 ///     What importing one Semantica export under one mapping would write, and what blocks it. RetainedImports are the new
 ///     rows without a decision, including the rows whose relationship became an edge.
 /// </summary>
-public sealed record SemanticaImportPlan(IReadOnlyList<PlannedDecision> Decisions, IReadOnlyList<PlannedEdge> Edges,
-    IReadOnlyList<DecisionImport> RetainedImports, IReadOnlyList<DecisionImportIssue> Blockers, IReadOnlyList<DecisionImportIssue> Notices,
-    int EntityCount, int RelationshipCount, int AlreadyImported, int Collapsed)
+public sealed record SemanticaImportPlan(
+    IReadOnlyList<PlannedDecision> Decisions,
+    IReadOnlyList<PlannedEdge> Edges,
+    IReadOnlyList<DecisionImport> RetainedImports,
+    IReadOnlyList<DecisionImportIssue> Blockers,
+    IReadOnlyList<DecisionImportIssue> Notices,
+    int EntityCount,
+    int RelationshipCount,
+    int AlreadyImported,
+    int Collapsed)
 {
     public bool CanApply => Blockers.Count == 0;
 
     public bool HasNewRows => Decisions.Count > 0 || RetainedImports.Count > 0;
 
-    public DecisionImportCounts Counts => new(EntityCount, RelationshipCount, Decisions.Count, Edges.Count,
-        RetainedImports.Count - Edges.Count, AlreadyImported, Collapsed);
+    public DecisionImportCounts Counts =>
+        new(EntityCount, RelationshipCount, Decisions.Count, Edges.Count,
+            RetainedImports.Count - Edges.Count, AlreadyImported, Collapsed);
 
     /// <summary>Uppercase hex SHA-256 of the bytes.</summary>
     public static string Digest(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
 
     /// <summary>The preview report, with each issue list capped at <see cref="DecisionImportLimits.MaxIssues" />.</summary>
-    public DecisionImportReport ToReport(string sourceDigest, string mappingDigest) => new(sourceDigest, mappingDigest, CanApply, Counts,
-        [.. Blockers.Take(DecisionImportLimits.MaxIssues)], Math.Max(0, Blockers.Count - DecisionImportLimits.MaxIssues),
-        [.. Notices.Take(DecisionImportLimits.MaxIssues)], Math.Max(0, Notices.Count - DecisionImportLimits.MaxIssues));
+    public DecisionImportReport ToReport(string sourceDigest, string mappingDigest) =>
+        new(sourceDigest, mappingDigest, CanApply, Counts,
+            [.. Blockers.Take(DecisionImportLimits.MaxIssues)], Math.Max(0, Blockers.Count - DecisionImportLimits.MaxIssues),
+            [.. Notices.Take(DecisionImportLimits.MaxIssues)], Math.Max(0, Notices.Count - DecisionImportLimits.MaxIssues));
 
     /// <summary>
     ///     Plans the import from parsed files, the project's registered tasks, existing import rows and edges, and a native
@@ -58,21 +67,33 @@ public sealed record SemanticaImportPlan(IReadOnlyList<PlannedDecision> Decision
 
     private sealed record Resolved(string ExternalId, string TaskId, string? Status, string? Title);
 
-    private sealed class Planner(SemanticaExport export, SemanticaMapping mapping, IReadOnlyCollection<DecisionTask> tasks,
-        IReadOnlyList<DecisionImport> imports, IReadOnlyList<DecisionEdge> edges, IReadOnlyDictionary<string, string> decisionIds)
+    private sealed class Planner(
+        SemanticaExport export,
+        SemanticaMapping mapping,
+        IReadOnlyCollection<DecisionTask> tasks,
+        IReadOnlyList<DecisionImport> imports,
+        IReadOnlyList<DecisionEdge> edges,
+        IReadOnlyDictionary<string, string> decisionIds)
     {
         private readonly List<DecisionImportIssue> _blockers = [];
-        private readonly List<DecisionImportIssue> _notices = [];
         private readonly List<PlannedDecision> _decisions = [];
         private readonly List<PlannedEdge> _edges = [];
-        private readonly List<DecisionImport> _rows = [];
-        private readonly HashSet<string> _taskIds = tasks.Select(task => task.TaskId).ToHashSet(StringComparer.Ordinal);
+
         private readonly Dictionary<string, DecisionImport> _existing = imports
             .Where(import => import.SourceNamespace == mapping.SourceNamespace)
             .ToDictionary(import => import.ExternalId, StringComparer.Ordinal);
+
         private readonly Dictionary<string, DecisionEdgeKind> _kinds = new(StringComparer.Ordinal);
-        private readonly List<DecisionLink> _links = [.. edges.Where(edge => edge.RemovedRevision is null)
-            .Select(edge => new DecisionLink(edge.SourceId, edge.TargetId, edge.Kind))];
+
+        private readonly List<DecisionLink> _links =
+        [
+            .. edges.Where(edge => edge.RemovedRevision is null)
+                .Select(edge => new DecisionLink(edge.SourceId, edge.TargetId, edge.Kind))
+        ];
+
+        private readonly List<DecisionImportIssue> _notices = [];
+        private readonly List<DecisionImport> _rows = [];
+        private readonly HashSet<string> _taskIds = tasks.Select(task => task.TaskId).ToHashSet(StringComparer.Ordinal);
         private int _alreadyImported;
         private int _collapsed;
 
@@ -319,7 +340,7 @@ public sealed record SemanticaImportPlan(IReadOnlyList<PlannedDecision> Decision
                 return;
             }
 
-            var status = Enum.Parse<DecisionStatus>(record.Status!, ignoreCase: true);
+            var status = Enum.Parse<DecisionStatus>(record.Status!, true);
             var id = nativeIds[source.Id];
             var row = Row(source, record, id, null);
             _decisions.Add(new PlannedDecision(id, record.TaskId, content, status, row));
@@ -397,8 +418,7 @@ public sealed record SemanticaImportPlan(IReadOnlyList<PlannedDecision> Decision
             new(mapping.SourceNamespace, record.ExternalId, decisionId, record.TaskId, Digest(Encoding.UTF8.GetBytes(source.Raw)), source.Raw,
                 MappingJson(source, record, edgeKind));
 
-        private string MappingJson(Source source, Resolved record) =>
-            MappingJson(source, record, !source.IsEntity && _kinds.TryGetValue(source.Type, out var kind) ? kind : null);
+        private string MappingJson(Source source, Resolved record) => MappingJson(source, record, !source.IsEntity && _kinds.TryGetValue(source.Type, out var kind) ? kind : null);
 
         private static string MappingJson(Source source, Resolved record, DecisionEdgeKind? edgeKind)
         {
@@ -427,7 +447,7 @@ public sealed record SemanticaImportPlan(IReadOnlyList<PlannedDecision> Decision
                     {
                         DecisionEdgeKind.DependsOn => "depends_on",
                         DecisionEdgeKind.Supports => "supports",
-                        _ => "contradicts",
+                        _ => "contradicts"
                     });
                 }
 
@@ -474,7 +494,7 @@ public sealed record SemanticaImportPlan(IReadOnlyList<PlannedDecision> Decision
 
             string? maker = null;
             if (properties.TryGetProperty("decision_maker", out var who) && who.ValueKind != JsonValueKind.Null
-                && !Text(properties, "decision_maker", $"{source.Path}.properties.decision_maker", source, out maker))
+                                                                         && !Text(properties, "decision_maker", $"{source.Path}.properties.decision_maker", source, out maker))
             {
                 return null;
             }

@@ -18,7 +18,7 @@ public sealed partial class SqliteMemoryStore
         CancellationToken cancellationToken)
     {
         var rows = (await connection.QueryAsync<SettingRow>(
-                    Def(MemorySql.SelectSettingsByPrefix, new { prefix = "retrieval." }, cancellationToken)))
+                Def(MemorySql.SelectSettingsByPrefix, new { prefix = "retrieval." }, cancellationToken)))
             .ToDictionary(row => row.Key, row => row.Value, StringComparer.Ordinal);
         var fusionFlag = await connection.ReadSettingAsync(FusionConfigKeys.NoRegressionEnabledGlobal, cancellationToken);
         return new SettingsBackedSearchParameters(rows, fusionFlag);
@@ -27,8 +27,8 @@ public sealed partial class SqliteMemoryStore
     /// <summary>A sparse settings snapshot: null per option when the key is absent or malformed.</summary>
     private sealed class SettingsBackedSearchParameters : ISearchParametersSource
     {
-        private readonly IReadOnlyDictionary<string, string> _retrieval;
         private readonly string? _fusionFlag;
+        private readonly IReadOnlyDictionary<string, string> _retrieval;
 
         public SettingsBackedSearchParameters(IReadOnlyDictionary<string, string> retrieval, string? fusionFlag)
         {

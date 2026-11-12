@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Reflection;
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Infrastructure.Embedding;
-using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Setup;
 using AiRaccoon.Setup.Cli;
 using AiRaccoon.Setup.Cli.Commands;

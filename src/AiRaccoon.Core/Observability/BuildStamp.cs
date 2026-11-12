@@ -23,7 +23,7 @@ public sealed record BuildStamp(string Version, string Commit, DateTimeOffset? C
     {
         if (string.IsNullOrEmpty(informationalVersion))
         {
-            return new VersionParts(string.Empty, UnknownCommit);
+            return new VersionParts("", UnknownCommit);
         }
 
         var parts = informationalVersion.Split('+', 2);

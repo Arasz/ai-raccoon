@@ -1,7 +1,5 @@
 using System.CommandLine;
-using System.CommandLine.Parsing;
 using AiRaccoon.Core.Memory;
-using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Hosting.Node;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
@@ -17,9 +15,11 @@ internal static class CliCommandTree
 {
     private const string Description = "MCP server exposing agent memory over sqlite-memory";
 
-    /// <summary>CLI surface is proxy|http only (stdio/https removed, P1); a hand-maintained
-    /// allowlist of the surviving pair (ADR-0104) — a new McpTransport member stays out of help
-    /// until it is added here deliberately. nameof keeps the spelling tied to the enum.</summary>
+    /// <summary>
+    ///     CLI surface is proxy|http only (stdio/https removed, P1); a hand-maintained
+    ///     allowlist of the surviving pair (ADR-0104) — a new McpTransport member stays out of help
+    ///     until it is added here deliberately. nameof keeps the spelling tied to the enum.
+    /// </summary>
     private static readonly string TransportHelpName =
         string.Join('|', new[] { nameof(McpTransport.Proxy), nameof(McpTransport.Http) }.Select(name => name.ToLowerInvariant()));
 
@@ -87,7 +87,8 @@ internal static class CliCommandTree
     ///     subsystem is a node here, not a new top-level family nobody remembers to add.
     /// </summary>
     private static Command SettingsCommand() =>
-        new("settings", "Runtime configuration, one node per subsystem. Operations live at the top level: 'watch registered', 'extract prune', 'noise entries', 'model embedding set', 'model code set', 'encryption', 'serve'.")
+        new("settings",
+            "Runtime configuration, one node per subsystem. Operations live at the top level: 'watch registered', 'extract prune', 'noise entries', 'model embedding set', 'model code set', 'encryption', 'serve'.")
         {
             AccessCommand(),
             SettingsModelCommand(),
@@ -434,7 +435,8 @@ internal static class CliCommandTree
     ///     the job; it never writes the bank.
     /// </summary>
     private static Command RepairCommand() =>
-        new("repair", "Fixes bank-state drift by asking the server to repair it. chunk-index fixes wrong chunk positions; reingest re-processes files a chunker change made unreproducible; project-ids folds fragment ids into one.")
+        new("repair",
+            "Fixes bank-state drift by asking the server to repair it. chunk-index fixes wrong chunk positions; reingest re-processes files a chunker change made unreproducible; project-ids folds fragment ids into one.")
         {
             new Command("chunk-index",
                 "Use this when chunk positions drifted from document order. Reports by default; --apply asks the server to fix them.")
@@ -452,7 +454,8 @@ internal static class CliCommandTree
                 new Option<bool>("--apply") { Description = "Ask the server to fold the ids on its next maintenance poll (~15s)" },
                 new Option<bool>("--queue-only") { Description = "With --apply: queue one request and exit without waiting for the run-until-fixed loop to converge" },
                 new Option<bool>("--diagnose") { Description = "Show the id clusters without queueing anything (the default)" },
-                new Option<string?>("--map") { Description = "JSON alias map override; defaults to <data-root>/project-id-map.json when present, otherwise the empty map plans no folds", HelpName = "path" }
+                new Option<string?>("--map")
+                    { Description = "JSON alias map override; defaults to <data-root>/project-id-map.json when present, otherwise the empty map plans no folds", HelpName = "path" }
             }
         };
 
@@ -602,8 +605,7 @@ internal static class CliCommandTree
         };
     }
 
-    private static Option<string> ProjectIdOption() =>
-        new("--project-id") { Description = "The project the decisions belong to", HelpName = "id", Required = true };
+    private static Option<string> ProjectIdOption() => new("--project-id") { Description = "The project the decisions belong to", HelpName = "id", Required = true };
 
     private static Option<string> ChoiceOption(string name, string defaultValue, params string[] choices)
     {
@@ -635,7 +637,7 @@ internal static class CliCommandTree
         command.Add(taskIds);
         command.Validators.Add(result =>
         {
-            var chosen = new OptionResult?[] { result.GetResult(tasks), result.GetResult(all), result.GetResult(taskIds) }
+            var chosen = new[] { result.GetResult(tasks), result.GetResult(all), result.GetResult(taskIds) }
                 .Where(option => option is { Implicit: false })
                 .ToArray();
             if (chosen.Length > 1)
@@ -704,7 +706,8 @@ internal static class CliCommandTree
                 { new Argument<string>("minutes") { HelpName = "minutes" } },
             new Command("capacity", "Sets the propose-tier queue capacity (positive integer; default 1000) — the total queued candidates across projects, split into per-project reservations")
                 { new Argument<string>("capacity") { HelpName = "capacity" } },
-            new Command("auto-promote-threshold", "Sets the score-gated auto-promote threshold (0..4, e.g. 3.5) or 'off' (default): in promote mode, queued candidates scoring at or above share automatically and nothing below is queued")
+            new Command("auto-promote-threshold",
+                    "Sets the score-gated auto-promote threshold (0..4, e.g. 3.5) or 'off' (default): in promote mode, queued candidates scoring at or above share automatically and nothing below is queued")
                 { new Argument<string>("threshold") { HelpName = "score|off" } },
             new Command("exclude", "Excludes source_file prefixes from shared-extraction candidacy (extract.exclude.prefixes; e.g. 'scratch/' keeps agent scratch files out of the shared tier)")
             {
@@ -821,7 +824,8 @@ internal static class CliCommandTree
         var kind = new Argument<string>("kind")
         {
             HelpName = "counters|trace|otlp|pid",
-            Description = "What to print: counters (a dotnet-counters command naming every exported counter), trace (a dotnet-trace command naming every activity source), otlp (the OTLP endpoint the server exports to), pid (the server's process id)"
+            Description =
+                "What to print: counters (a dotnet-counters command naming every exported counter), trace (a dotnet-trace command naming every activity source), otlp (the OTLP endpoint the server exports to), pid (the server's process id)"
         };
         kind.Validators.Add(result =>
         {

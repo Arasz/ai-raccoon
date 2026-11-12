@@ -107,19 +107,19 @@ public sealed class ProjectIdsFoldPlan(
                 // while they exist would strand live scratch under the loser id (review #614).
                 if (HasOpenWorkspaces(row))
                 {
-                    pinned.Add(PinUnmoveable(row.ProjectId, winner!, row));
+                    pinned.Add(PinUnmoveable(row.ProjectId, winner, row));
                     continue;
                 }
 
                 if (OwnsMoveableContent(row))
                 {
-                    folds.Add(new ProjectIdFold(row.ProjectId, winner!));
+                    folds.Add(new ProjectIdFold(row.ProjectId, winner));
                     continue;
                 }
 
                 if (!IsRetireEligible(row))
                 {
-                    pinned.Add(PinUnmoveable(row.ProjectId, winner!, row));
+                    pinned.Add(PinUnmoveable(row.ProjectId, winner, row));
                     continue;
                 }
 
@@ -143,19 +143,19 @@ public sealed class ProjectIdsFoldPlan(
                 // D3: same workspace block on the name-attributed path (review #614).
                 if (HasOpenWorkspaces(row))
                 {
-                    pinned.Add(PinUnmoveable(row.ProjectId, named!, row));
+                    pinned.Add(PinUnmoveable(row.ProjectId, named, row));
                     continue;
                 }
 
                 if (OwnsMoveableContent(row))
                 {
-                    folds.Add(new ProjectIdFold(row.ProjectId, named!));
+                    folds.Add(new ProjectIdFold(row.ProjectId, named));
                     continue;
                 }
 
                 if (!IsRetireEligible(row))
                 {
-                    pinned.Add(PinUnmoveable(row.ProjectId, named!, row));
+                    pinned.Add(PinUnmoveable(row.ProjectId, named, row));
                     continue;
                 }
 
@@ -212,28 +212,23 @@ public sealed class ProjectIdsFoldPlan(
     ///     Tombstones alone don't schedule either: no dropped step deletes them — repair-created
     ///     tombstones for dropped hashes are load-bearing suppression and must linger.
     /// </summary>
-    private static bool OwnsDeletableContent(ProjectIdCensusRow row)
-    {
-        return row.EntryTotal > 0
-            || row.CodeEntries > 0
-            || row.Queued > 0
-            || row.Discards > 0
-            || row.QualityRows > 0
-            || row.Watches > 0
-            || row.WatchFiles > 0
-            || row.DigestClaims > 0
-            || row.SettingsKeys.Count > 0;
-    }
+    private static bool OwnsDeletableContent(ProjectIdCensusRow row) =>
+        row.EntryTotal > 0
+        || row.CodeEntries > 0
+        || row.Queued > 0
+        || row.Discards > 0
+        || row.QualityRows > 0
+        || row.Watches > 0
+        || row.WatchFiles > 0
+        || row.DigestClaims > 0
+        || row.SettingsKeys.Count > 0;
 
     /// <summary>
     ///     The retire shape: registered with nothing on any surface. Checked before pinning so a
     ///     registered-empty id attributed by the map still retires — one predicate, no drift
     ///     between the attribution branches and the verdict below.
     /// </summary>
-    private static bool IsRetireEligible(ProjectIdCensusRow row)
-    {
-        return row.Registered && row.EntryTotal == 0 && row.AttachmentCount == 0;
-    }
+    private static bool IsRetireEligible(ProjectIdCensusRow row) => row.Registered && row.EntryTotal == 0 && row.AttachmentCount == 0;
 
     /// <summary>
     ///     True when the row owns a surface the repair rewrites: committed entries (project/custom
@@ -244,20 +239,18 @@ public sealed class ProjectIdsFoldPlan(
     ///     schedules one, and workspace scratch never moves — owning only those pins with a reason
     ///     (D2 planner honesty).
     /// </summary>
-    private static bool OwnsMoveableContent(ProjectIdCensusRow row)
-    {
-        return row.ProjectEntries > 0
-            || row.CustomEntries > 0
-            || row.CodeEntries > 0
-            || row.Queued > 0
-            || row.Discards > 0
-            || row.QualityRows > 0
-            || row.Watches > 0
-            || row.WatchFiles > 0
-            || row.DigestClaims > 0
-            || row.Tombstones > 0
-            || row.SettingsKeys.Count > 0;
-    }
+    private static bool OwnsMoveableContent(ProjectIdCensusRow row) =>
+        row.ProjectEntries > 0
+        || row.CustomEntries > 0
+        || row.CodeEntries > 0
+        || row.Queued > 0
+        || row.Discards > 0
+        || row.QualityRows > 0
+        || row.Watches > 0
+        || row.WatchFiles > 0
+        || row.DigestClaims > 0
+        || row.Tombstones > 0
+        || row.SettingsKeys.Count > 0;
 
     /// <summary>
     ///     True when the id owns metrics, noise or search-quality rows and nothing else. Quality rows
@@ -272,17 +265,14 @@ public sealed class ProjectIdsFoldPlan(
     /// <summary>Telemetry-only pin: regenerable derived data the repair never moves (D3, convergence-neutral).</summary>
     private static ProjectIdPin PinTelemetryOnly(string projectId, ProjectIdCensusRow row) =>
         new(projectId, PinnedTelemetryOnly,
-            $"owns only telemetry ({row.MetricsRows} metrics + {row.NoiseRows} noise" +
-            (row.QualityRows > 0 ? $" + {row.QualityRows} search-quality" : string.Empty) + " rows) — " +
-            "regenerable derived data the repair never moves");
+            $"owns only telemetry ({row.MetricsRows} metrics + {row.NoiseRows} noise{(row.QualityRows > 0 ? $" + {row.QualityRows} search-quality" : "")} rows) — regenerable derived data the repair never moves");
 
     private static bool OwnsDecisionGraph(ProjectIdCensusRow row) => row.DecisionRows > 0;
 
     /// <summary>Decision-graph pin: the repair neither merges nor deletes a native decision graph.</summary>
     private static ProjectIdPin PinDecisionGraph(ProjectIdCensusRow row) =>
         new(row.ProjectId, PinnedDecisionGraph,
-            $"owns {row.DecisionRows} decision graph row(s) — native graph merging and deletion are not supported, " +
-            "so the id stays where it is until a graph repair exists");
+            $"owns {row.DecisionRows} decision graph row(s) — native graph merging and deletion are not supported, so the id stays where it is until a graph repair exists");
 
     /// <summary>
     ///     True when the row owns live workspace scratch that never moves across projects (D3 block).
@@ -291,8 +281,7 @@ public sealed class ProjectIdsFoldPlan(
     ///     ROWS here pinned such ids forever and stranded their committed rows under a spelling no
     ///     read path resolves.
     /// </summary>
-    private static bool HasOpenWorkspaces(ProjectIdCensusRow row) =>
-        row.OpenWorkspaces > 0 || row.OpenWorkspaceEntries > 0;
+    private static bool HasOpenWorkspaces(ProjectIdCensusRow row) => row.OpenWorkspaces > 0 || row.OpenWorkspaceEntries > 0;
 
     /// <summary>
     ///     Classifies an attributed-but-unmovable id into its waiting bucket with an ownership
@@ -304,8 +293,7 @@ public sealed class ProjectIdsFoldPlan(
         if (HasOpenWorkspaces(row))
         {
             return new ProjectIdPin(loser, PinnedOpenWorkspaces,
-                $"owns {row.OpenWorkspaces} open workspace(s) with {row.OpenWorkspaceEntries} live scratch row(s) — " +
-                "workspaces never move across projects, so the id waits for its workspaces to close");
+                $"owns {row.OpenWorkspaces} open workspace(s) with {row.OpenWorkspaceEntries} live scratch row(s) — workspaces never move across projects, so the id waits for its workspaces to close");
         }
 
         if (row.SharedEntries > 0)
@@ -320,8 +308,6 @@ public sealed class ProjectIdsFoldPlan(
         }
 
         return new ProjectIdPin(loser, PinnedNoMoveableContent,
-            $"is attributed to '{winner}' but owns no committed rows or other foldable surfaces" +
-            (row.Workspaces > 0 ? $" ({row.Workspaces} closed workspace(s) never move)" : string.Empty) +
-            " — nothing to move");
+            $"is attributed to '{winner}' but owns no committed rows or other foldable surfaces{(row.Workspaces > 0 ? $" ({row.Workspaces} closed workspace(s) never move)" : "")} — nothing to move");
     }
 }

@@ -336,11 +336,11 @@ public sealed class DecisionApiTests : IAsyncLifetime
     public async Task Export_OverTheMcpCap_IsRefusedOverMcpAndServedOverHttp()
     {
         var root = $"/decisions/projects/{_project}";
-        (await _host.Http.PostAsJsonAsync(root + "/tasks", new { taskId = "big", sessionId = "s", requestId = "big", title = "Big" }, Ct)).EnsureSuccessStatusCode();
+        (await _host.Http.PostAsJsonAsync($"{root}/tasks", new { taskId = "big", sessionId = "s", requestId = "big", title = "Big" }, Ct)).EnsureSuccessStatusCode();
         var text = new string('x', 16000);
         for (var i = 0; i < 25; i++)
         {
-            (await _host.Http.PostAsJsonAsync(root + "/records", new
+            (await _host.Http.PostAsJsonAsync($"{root}/records", new
             {
                 taskId = "big", sessionId = "s", requestId = $"big-{i}", title = $"Decision {i}", category = "architecture",
                 scenario = text, outcome = text, reasoning = text

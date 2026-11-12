@@ -27,7 +27,7 @@ public sealed record SemanticaExport(IReadOnlyList<SemanticaEntity> Entities, IR
         }
 
         var data = SemanticaJson.ReadString(envelope.RootElement.GetProperty("data"))
-            ?? throw new ArgumentException("The envelope data must be a JSON string holding the graph.", Parameter);
+                   ?? throw new ArgumentException("The envelope data must be a JSON string holding the graph.", Parameter);
         using var inner = SemanticaJson.ParseText(data, Parameter);
         var root = inner.RootElement;
         SemanticaJson.RequireExactKeys(root, "The graph data", Parameter, "entities", "relationships", "statistics");
@@ -56,14 +56,14 @@ public sealed record SemanticaExport(IReadOnlyList<SemanticaEntity> Entities, IR
     private static SemanticaEntity Entity(JsonElement item, int index)
     {
         var where = $"entities[{index}]";
-        return new SemanticaEntity(index, Text(item, "id", where, identifier: true), Text(item, "type", where), item.GetRawText(), item.Clone());
+        return new SemanticaEntity(index, Text(item, "id", where, true), Text(item, "type", where), item.GetRawText(), item.Clone());
     }
 
     private static SemanticaRelationship Relationship(JsonElement item, int index)
     {
         var where = $"relationships[{index}]";
-        return new SemanticaRelationship(index, Text(item, "id", where, identifier: true), Text(item, "source_id", where, identifier: true),
-            Text(item, "target_id", where, identifier: true), Text(item, "type", where), item.GetRawText(), item.Clone());
+        return new SemanticaRelationship(index, Text(item, "id", where, true), Text(item, "source_id", where, true),
+            Text(item, "target_id", where, true), Text(item, "type", where), item.GetRawText(), item.Clone());
     }
 
     private static string Text(JsonElement item, string name, string where, bool identifier = false)

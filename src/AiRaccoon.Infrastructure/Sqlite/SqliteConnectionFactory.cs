@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using AiRaccoon.Core.Encryption;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
@@ -6,7 +7,6 @@ using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using SQLitePCL;
-using System.Runtime.CompilerServices;
 
 namespace AiRaccoon.Infrastructure.Sqlite;
 
@@ -20,24 +20,25 @@ public sealed partial class SqliteConnectionFactory(
     IEncryptionKeyResolver keyResolver,
     ILogger<SqliteConnectionFactory>? logger = null) : ISqliteConnectionFactory
 {
-    /// <summary>
-    ///     Native handles this process has initialised, with the bank state their last schema pass saw. The pool hands a handle back on every open; reloading vec0 (a dlopen) and repeating
-    ///     the schema pass dominated the idle reconcile loop's CPU. Weak keys: a handle the pool closes
-    ///     drops out on its own.
-    /// </summary>
-    private static readonly ConditionalWeakTable<sqlite3, StrongBox<BankState>> InitializedHandles = new();
-
     private const string BankStateSql =
         "SELECT (SELECT data_version FROM pragma_data_version) AS DataVersion, " +
         "(SELECT schema_version FROM pragma_schema_version) AS SchemaVersion, " +
         "(SELECT user_version FROM pragma_user_version) AS UserVersion, " +
         "(SELECT application_id FROM pragma_application_id) AS ApplicationId";
 
-    /// <summary>What the schema pass's work depends on; equal values mean it would find nothing to do.</summary>
-    private readonly record struct BankState(long DataVersion, long SchemaVersion, long UserVersion, long ApplicationId);
-
     /// <summary>SQLITE_NOTADB (26): the file exists but is not a database (or not this key's database).</summary>
     private const int NotADatabaseErrorCode = 26;
+
+    /// <summary>The remedy shared by every "the resolved key does not open the bank, and there is nothing else to try" message.</summary>
+    private const string NoOtherKeyToTryRemedy =
+        "it is corrupt, or keyed to a different secret. It has not been modified; restore it from a backup or check that the encryption source is right.";
+
+    /// <summary>
+    ///     Native handles this process has initialised, with the bank state their last schema pass saw. The pool hands a handle back on every open; reloading vec0 (a dlopen) and repeating
+    ///     the schema pass dominated the idle reconcile loop's CPU. Weak keys: a handle the pool closes
+    ///     drops out on its own.
+    /// </summary>
+    private static readonly ConditionalWeakTable<sqlite3, StrongBox<BankState>> InitializedHandles = new();
 
     static SqliteConnectionFactory()
     {
@@ -70,7 +71,7 @@ public sealed partial class SqliteConnectionFactory(
             if (resolvedKey.LegacyPassphrase is null || resolvedKey.Passphrase is null)
             {
                 var classified = TryDiagnoseWithKeyCheck(resolvedKey.Passphrase, openFailure) ??
-                    NoLegacyDerivationToFallBackTo(resolvedKey, openFailure);
+                                 NoLegacyDerivationToFallBackTo(resolvedKey, openFailure);
                 if (ReferenceEquals(classified, openFailure))
                 {
                     throw;
@@ -243,7 +244,7 @@ public sealed partial class SqliteConnectionFactory(
 
         return new BankKeyMismatchException(
             $"the bank at '{BankPath}' is still encrypted under the pre-ADR-0012 key derivation — run 'ai-raccoon encryption migrate' to rekey it",
-            openFailure, legacyDerivation: true);
+            openFailure, true);
     }
 
     private Exception NotLegacyKeyed(ResolvedKey resolvedKey, SqliteException openFailure) =>
@@ -281,8 +282,7 @@ public sealed partial class SqliteConnectionFactory(
     ///     failure are not key problems and must propagate unchanged, or the CLI misreports
     ///     Bank.Busy/Bank.Corrupted/Bank.OpenFailed as a key mismatch.
     /// </summary>
-    internal Exception ClassifyNoLegacySourceFailure(ResolvedKey resolvedKey, SqliteException openFailure) =>
-        NoLegacyDerivationToTry(resolvedKey, openFailure);
+    internal Exception ClassifyNoLegacySourceFailure(ResolvedKey resolvedKey, SqliteException openFailure) => NoLegacyDerivationToTry(resolvedKey, openFailure);
 
     /// <summary>
     ///     The one shape a wrong key and a genuine corruption share (ADR-0107 PC.0): SQLITE_NOTADB
@@ -292,12 +292,7 @@ public sealed partial class SqliteConnectionFactory(
     ///     message builder above shares this one rule, the same one <see cref="OpenBankWithKeyAsync" />
     ///     already applies via its own <c>?? openFailure</c>.
     /// </summary>
-    private static bool IsKeyMismatchShape(ResolvedKey resolvedKey, SqliteException openFailure) =>
-        resolvedKey.Passphrase is not null && openFailure.SqliteErrorCode == NotADatabaseErrorCode;
-
-    /// <summary>The remedy shared by every "the resolved key does not open the bank, and there is nothing else to try" message.</summary>
-    private const string NoOtherKeyToTryRemedy =
-        "it is corrupt, or keyed to a different secret. It has not been modified; restore it from a backup or check that the encryption source is right.";
+    private static bool IsKeyMismatchShape(ResolvedKey resolvedKey, SqliteException openFailure) => resolvedKey.Passphrase is not null && openFailure.SqliteErrorCode == NotADatabaseErrorCode;
 
     /// <summary>
     ///     A confident verdict from the key-check sidecar (ADR-0111) for a SQLITE_NOTADB open
@@ -587,6 +582,9 @@ public sealed partial class SqliteConnectionFactory(
             throw;
         }
     }
+
+    /// <summary>What the schema pass's work depends on; equal values mean it would find nothing to do.</summary>
+    private readonly record struct BankState(long DataVersion, long SchemaVersion, long UserVersion, long ApplicationId);
 
     private static partial class Log
     {

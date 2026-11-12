@@ -18,10 +18,10 @@ public sealed partial class WatchHostedService : BackgroundService
     internal const string OperationName = "watch.reconcile";
 
     private readonly HashSet<WatchKey> _active = [];
-    private readonly HashSet<WatchKey> _heldRescans = [];
     private readonly Lock _activeGate = new();
     private readonly WatchCatchUp _catchUp;
     private readonly WatchEventSource _eventSource;
+    private readonly HashSet<WatchKey> _heldRescans = [];
     private readonly ILogger<WatchHostedService> _logger;
     private readonly IMemoryStore _memory;
     private readonly WatchPipeline _pipeline;
@@ -196,10 +196,7 @@ public sealed partial class WatchHostedService : BackgroundService
     ///     One reconcile pass: every registration gets pipeline runtime state; enabled ones get a
     ///     watcher + catch-up scan on first sight; removed/disabled ones drop their watcher.
     /// </summary>
-    internal async Task ReconcileAsync(CancellationToken cancellationToken = default)
-    {
-        await _telemetry.RunPassAsync(OperationName, ReconcilePassAsync, cancellationToken);
-    }
+    internal async Task ReconcileAsync(CancellationToken cancellationToken = default) => await _telemetry.RunPassAsync(OperationName, ReconcilePassAsync, cancellationToken);
 
     private async Task ReconcilePassAsync(IOperationScope pass, CancellationToken cancellationToken)
     {

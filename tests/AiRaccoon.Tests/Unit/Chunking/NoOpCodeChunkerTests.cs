@@ -28,7 +28,7 @@ public sealed class NoOpCodeChunkerTests
     {
         var chunker = new NoOpCodeChunker(new FakeLogger<NoOpCodeChunker>());
 
-        chunker.Chunk(string.Empty).ShouldBeEmpty();
+        chunker.Chunk("").ShouldBeEmpty();
     }
 
     [Fact]
@@ -45,6 +45,6 @@ public sealed class NoOpCodeChunkerTests
         records.Count(r => r.Id.Id == 420).ShouldBe(1);
         var record = records.Single(r => r.Id.Id == 420);
         record.Level.ShouldBe(LogLevel.Information);
-        record.Message.ShouldContain("code engine wave", Case.Insensitive);
+        record.Message.ShouldContain("code engine wave");
     }
 }

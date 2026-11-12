@@ -196,7 +196,7 @@ public class MarkdownChunkerHeadingPathTests
     {
         var text = $"# T\n\n## A\nAAAA\n\n## B\n{string.Concat(Enumerable.Repeat("BBBB\n", 6))}";
 
-        var chunks = new MarkdownChunker(CharCount).ChunkWithHeadings(text, 24, 0);
+        var chunks = new MarkdownChunker(CharCount).ChunkWithHeadings(text, 24);
 
         chunks.Select(c => string.Join("|", c.Sections)).ShouldBe(["A", "B", "B"]);
     }

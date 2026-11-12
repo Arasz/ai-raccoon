@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Sqlite.Decisions;
 using Dapper;
 using Microsoft.Data.Sqlite;
 
@@ -93,6 +94,43 @@ internal static class MemorySchema
     internal const long SearchQualityKindBackfillCutoff = 1788447366;
 
     /// <summary>
+    ///     The <c>search_quality</c> table shape, declared once: the digest-gated <see cref="Ddl" />
+    ///     block interpolates it for fresh banks, and the v12 ladder step executes it for the
+    ///     staged-absence branch (a runtime DROP the digest gate cannot see) — one definition,
+    ///     two call sites, never a copy. ADR-0097 adds the nullable <c>kind</c> column with
+    ///     <c>CHECK(kind IN ('memory','code','both'))</c>; legacy NULLs backfill in the ladder.
+    /// </summary>
+    private const string SearchQualityTableDdl = """
+                                                 CREATE TABLE IF NOT EXISTS search_quality (
+                                                     id                INTEGER PRIMARY KEY,
+                                                     correlation_id    TEXT NOT NULL UNIQUE,
+                                                     query             TEXT NOT NULL,
+                                                     scope             TEXT,
+                                                     project_id        TEXT,
+                                                     session_id        TEXT,
+                                                     kind              TEXT CHECK(kind IN ('memory','code','both')),
+                                                     -- The entry types a query asked for, as a bitmask of the query parameter's flag set
+                                                     -- (Memory | Code | File). Beside the old corpus kind, not instead of it: the old
+                                                     -- vocabulary is still what the runtime records, and the old rows' meaning is carried
+                                                     -- here by the ladder's backfill.
+                                                     kind_mask         INTEGER,
+                                                     result_count      INTEGER,
+                                                     top_source_files  TEXT,       -- JSON array of SourceFile paths
+                                                     -- Stage-1 per-result features (P6b): compact JSON array, one
+                                                     -- hash/strength/legs/cosine object per served row -- features
+                                                     -- only, never values/snippets. NULL when evidence was absent.
+                                                     result_features   TEXT,
+                                                     follow_through_count INTEGER  DEFAULT 0,
+                                                     follow_through_files TEXT,    -- JSON array of files read after search
+                                                     usefulness_grade  INTEGER     CHECK(usefulness_grade BETWEEN 1 AND 5),
+                                                     grade_note        TEXT,
+                                                     created_at        INTEGER NOT NULL
+                                                 );
+
+                                                 CREATE INDEX IF NOT EXISTS idx_sq_project_time ON search_quality(project_id, created_at);
+                                                 """;
+
+    /// <summary>
     ///     The promotion_queue_entries_ad body (ADR-0023, amended by H4 and again by ADR-0046):
     ///     "still backed" means a row inside the project, which is <see cref="ProjectRows" /> — the
     ///     one definition ShareAsync resolves through.
@@ -115,67 +153,30 @@ internal static class MemorySchema
     ///     (ADR-0124, same reasoning as <see cref="PromotionQueueTriggerDdl" />).
     /// </summary>
     private static readonly string VecEntriesUpdateTriggerDdl = $"""
-                                                               CREATE TRIGGER IF NOT EXISTS vec_entries_au AFTER UPDATE OF embed_state ON entries
-                                                               WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
-                                                               BEGIN
-                                                                   DELETE FROM vec_entries WHERE rowid = NEW.id;
-                                                                   INSERT INTO vec_entries(rowid, ctx, type, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.entry_type, NEW.embedding);
-                                                               END;
-                                                               """;
-
-    /// <summary>The <c>vec_structure_au</c> twin of <see cref="VecEntriesUpdateTriggerDdl" />.</summary>
-    private static readonly string VecStructureUpdateTriggerDdl = $"""
-                                                                 CREATE TRIGGER IF NOT EXISTS vec_structure_au AFTER UPDATE OF structure_embedding ON entries
-                                                                 WHEN NEW.structure_embedding IS NOT NULL
+                                                                 CREATE TRIGGER IF NOT EXISTS vec_entries_au AFTER UPDATE OF embed_state ON entries
+                                                                 WHEN NEW.embed_state = 'embedded' AND NEW.embedding IS NOT NULL
                                                                  BEGIN
-                                                                     DELETE FROM vec_structure WHERE rowid = NEW.id;
-                                                                     INSERT INTO vec_structure(rowid, ctx, type, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.entry_type, NEW.structure_embedding);
+                                                                     DELETE FROM vec_entries WHERE rowid = NEW.id;
+                                                                     INSERT INTO vec_entries(rowid, ctx, type, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.entry_type, NEW.embedding);
                                                                  END;
                                                                  """;
 
-    /// <summary>
-    ///     The <c>search_quality</c> table shape, declared once: the digest-gated <see cref="Ddl" />
-    ///     block interpolates it for fresh banks, and the v12 ladder step executes it for the
-    ///     staged-absence branch (a runtime DROP the digest gate cannot see) — one definition,
-    ///     two call sites, never a copy. ADR-0097 adds the nullable <c>kind</c> column with
-    ///     <c>CHECK(kind IN ('memory','code','both'))</c>; legacy NULLs backfill in the ladder.
-    /// </summary>
-    private const string SearchQualityTableDdl = """
-        CREATE TABLE IF NOT EXISTS search_quality (
-            id                INTEGER PRIMARY KEY,
-            correlation_id    TEXT NOT NULL UNIQUE,
-            query             TEXT NOT NULL,
-            scope             TEXT,
-            project_id        TEXT,
-            session_id        TEXT,
-            kind              TEXT CHECK(kind IN ('memory','code','both')),
-            -- The entry types a query asked for, as a bitmask of the query parameter's flag set
-            -- (Memory | Code | File). Beside the old corpus kind, not instead of it: the old
-            -- vocabulary is still what the runtime records, and the old rows' meaning is carried
-            -- here by the ladder's backfill.
-            kind_mask         INTEGER,
-            result_count      INTEGER,
-            top_source_files  TEXT,       -- JSON array of SourceFile paths
-            -- Stage-1 per-result features (P6b): compact JSON array, one
-            -- hash/strength/legs/cosine object per served row -- features
-            -- only, never values/snippets. NULL when evidence was absent.
-            result_features   TEXT,
-            follow_through_count INTEGER  DEFAULT 0,
-            follow_through_files TEXT,    -- JSON array of files read after search
-            usefulness_grade  INTEGER     CHECK(usefulness_grade BETWEEN 1 AND 5),
-            grade_note        TEXT,
-            created_at        INTEGER NOT NULL
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_sq_project_time ON search_quality(project_id, created_at);
-        """;
+    /// <summary>The <c>vec_structure_au</c> twin of <see cref="VecEntriesUpdateTriggerDdl" />.</summary>
+    private static readonly string VecStructureUpdateTriggerDdl = $"""
+                                                                   CREATE TRIGGER IF NOT EXISTS vec_structure_au AFTER UPDATE OF structure_embedding ON entries
+                                                                   WHEN NEW.structure_embedding IS NOT NULL
+                                                                   BEGIN
+                                                                       DELETE FROM vec_structure WHERE rowid = NEW.id;
+                                                                       INSERT INTO vec_structure(rowid, ctx, type, embedding) VALUES (NEW.id, {MemorySql.ContextKeyExpression("NEW.")}, NEW.entry_type, NEW.structure_embedding);
+                                                                   END;
+                                                                   """;
 
     // workspace_id carries its own FK to workspaces and a CHECK enforcing "workspace XOR
     // committed scope": an entry is either workspace-scratch or one of shared/project/custom, never
     // both AND NEVER NEITHER (F34) — `scope IS NOT NULL` in the workspace-less arm is load-bearing:
     // without it, a NULL/NULL row makes the whole CHECK evaluate NULL, which SQLite passes.
     private static readonly string Ddl = $"""
-                                          {Decisions.DecisionSchema.Ddl}
+                                          {DecisionSchema.Ddl}
                                           CREATE TABLE IF NOT EXISTS workspaces (
                                               id TEXT PRIMARY KEY,
                                               project_id TEXT NOT NULL,
@@ -994,9 +995,9 @@ internal static class MemorySchema
     private static async Task<bool> MigrateToV7Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var hasWorkspaceIndex = await connection.ExecuteScalarAsync<long?>(
-                new CommandDefinition(
-                    "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_workspace_bucket'",
-                    cancellationToken: cancellationToken)) is not null;
+            new CommandDefinition(
+                "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_workspace_bucket'",
+                cancellationToken: cancellationToken)) is not null;
         if (hasWorkspaceIndex)
         {
             return true;
@@ -1007,20 +1008,20 @@ internal static class MemorySchema
             await connection.InWriteTransactionAsync(async () =>
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            """
-                            DELETE FROM entries
-                            WHERE workspace_id IS NOT NULL
-                              AND path IS NOT NULL AND hash IS NOT NULL
-                              AND id NOT IN (SELECT MIN(id) FROM entries
-                                             WHERE workspace_id IS NOT NULL
-                                             GROUP BY path, hash, workspace_id);
+                    new CommandDefinition(
+                        """
+                        DELETE FROM entries
+                        WHERE workspace_id IS NOT NULL
+                          AND path IS NOT NULL AND hash IS NOT NULL
+                          AND id NOT IN (SELECT MIN(id) FROM entries
+                                         WHERE workspace_id IS NOT NULL
+                                         GROUP BY path, hash, workspace_id);
 
-                            CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_workspace_bucket
-                                ON entries(path, hash, workspace_id)
-                                WHERE workspace_id IS NOT NULL;
-                            """,
-                            cancellationToken: cancellationToken));
+                        CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_workspace_bucket
+                            ON entries(path, hash, workspace_id)
+                            WHERE workspace_id IS NOT NULL;
+                        """,
+                        cancellationToken: cancellationToken));
             }, cancellationToken);
         }
         catch
@@ -1042,15 +1043,15 @@ internal static class MemorySchema
     private static async Task MigrateToV8Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var columns = (await connection.QueryAsync<string>(
-                new CommandDefinition(
-                    "SELECT name FROM pragma_table_info('promotion_queue')",
-                    cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
+            new CommandDefinition(
+                "SELECT name FROM pragma_table_info('promotion_queue')",
+                cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
         if (!columns.Contains("claimed_at"))
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        "ALTER TABLE promotion_queue ADD COLUMN claimed_at INTEGER NULL",
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    "ALTER TABLE promotion_queue ADD COLUMN claimed_at INTEGER NULL",
+                    cancellationToken: cancellationToken));
         }
     }
 
@@ -1068,9 +1069,9 @@ internal static class MemorySchema
         await connection.InWriteTransactionAsync(async () =>
         {
             await RebuildVecTableAsync(connection, "vec_entries", entriesDimension, "embedding",
-                    "embed_state = 'embedded' AND embedding IS NOT NULL", cancellationToken);
+                "embed_state = 'embedded' AND embedding IS NOT NULL", cancellationToken);
             await RebuildVecTableAsync(connection, "vec_structure", structureDimension, "structure_embedding",
-                    "structure_embedding IS NOT NULL", cancellationToken);
+                "structure_embedding IS NOT NULL", cancellationToken);
         }, cancellationToken);
 
         await VacuumBestEffortAsync(connection, cancellationToken);
@@ -1100,13 +1101,13 @@ internal static class MemorySchema
     /// <summary>Ladder step 10 (ADR-0070): the maintenance job ledger, so the cadence clock lives in the bank.</summary>
     private static async Task MigrateToV10Async(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteAsync(new CommandDefinition(
-                """
-                CREATE TABLE IF NOT EXISTS maintenance_jobs (
-                    name        TEXT PRIMARY KEY,
-                    last_run_at INTEGER NOT NULL,
-                    run_count   INTEGER NOT NULL DEFAULT 0
-                )
-                """, cancellationToken: cancellationToken));
+            """
+            CREATE TABLE IF NOT EXISTS maintenance_jobs (
+                name        TEXT PRIMARY KEY,
+                last_run_at INTEGER NOT NULL,
+                run_count   INTEGER NOT NULL DEFAULT 0
+            )
+            """, cancellationToken: cancellationToken));
 
     /// <summary>
     ///     Ladder step 11: the <c>sync_tombstones</c> table must carry the v11-era exact composite
@@ -1123,8 +1124,8 @@ internal static class MemorySchema
     private static async Task MigrateToV11Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'sync_tombstones'",
-                cancellationToken: cancellationToken)) > 0;
+            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'sync_tombstones'",
+            cancellationToken: cancellationToken)) > 0;
         if (!hasTable)
         {
             return;
@@ -1133,9 +1134,9 @@ internal static class MemorySchema
         await connection.InWriteTransactionAsync(async () =>
         {
             var columnRows = (await connection.QueryAsync<PragmaColumnRow>(
-                    new CommandDefinition(
-                        "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
-                        cancellationToken: cancellationToken))).ToList();
+                new CommandDefinition(
+                    "SELECT name, type, \"notnull\", pk FROM pragma_table_info('sync_tombstones')",
+                    cancellationToken: cancellationToken))).ToList();
 
             // Full-shape check, not just project_id: every column's declared type must match the
             // Ddl and all three key members must be part of the composite PRIMARY KEY (pk 1..3).
@@ -1158,16 +1159,16 @@ internal static class MemorySchema
             if (columnRows.Any(c => c.Name == "project_id"))
             {
                 var raw = (await connection.QueryAsync(
-                        new CommandDefinition(
-                            """
-                            SELECT CAST(project_id AS TEXT) AS ProjectId,
-                                   CAST(hash AS TEXT) AS Hash,
-                                   CAST(scope AS TEXT) AS Scope,
-                                   CAST(deleted_at AS INTEGER) AS DeletedAt
-                            FROM sync_tombstones
-                            WHERE project_id IS NOT NULL AND project_id != ''
-                            """,
-                            cancellationToken: cancellationToken))).ToList();
+                    new CommandDefinition(
+                        """
+                        SELECT CAST(project_id AS TEXT) AS ProjectId,
+                               CAST(hash AS TEXT) AS Hash,
+                               CAST(scope AS TEXT) AS Scope,
+                               CAST(deleted_at AS INTEGER) AS DeletedAt
+                        FROM sync_tombstones
+                        WHERE project_id IS NOT NULL AND project_id != ''
+                        """,
+                        cancellationToken: cancellationToken))).ToList();
                 existingRows = raw.Select(r => new TombstoneRow(
                     (string)r.ProjectId, (string)r.Hash, (string)r.Scope, (long)r.DeletedAt)).ToList();
             }
@@ -1177,40 +1178,41 @@ internal static class MemorySchema
             }
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("DROP TABLE sync_tombstones", cancellationToken: cancellationToken));
+                new CommandDefinition("DROP TABLE sync_tombstones", cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        """
-                        CREATE TABLE sync_tombstones (
-                            project_id TEXT NOT NULL,
-                            hash TEXT NOT NULL,
-                            scope TEXT NOT NULL,
-                            deleted_at INTEGER NOT NULL,
-                            PRIMARY KEY (project_id, hash, scope)
-                        )
-                        """,
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    """
+                    CREATE TABLE sync_tombstones (
+                        project_id TEXT NOT NULL,
+                        hash TEXT NOT NULL,
+                        scope TEXT NOT NULL,
+                        deleted_at INTEGER NOT NULL,
+                        PRIMARY KEY (project_id, hash, scope)
+                    )
+                    """,
+                    cancellationToken: cancellationToken));
 
             foreach (var row in existingRows)
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            "INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@ProjectId, @Hash, @Scope, @DeletedAt)",
-                            row,
-                            cancellationToken: cancellationToken));
+                    new CommandDefinition(
+                        "INSERT OR IGNORE INTO sync_tombstones (project_id, hash, scope, deleted_at) VALUES (@ProjectId, @Hash, @Scope, @DeletedAt)",
+                        row,
+                        cancellationToken: cancellationToken));
             }
 
             // Drop the legacy unique index if it survived the table drop (it did not — SQLite
             // drops indexes on the table — but be explicit for clarity).
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        "DROP INDEX IF EXISTS uq_sync_tombstones_project_identity",
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    "DROP INDEX IF EXISTS uq_sync_tombstones_project_identity",
+                    cancellationToken: cancellationToken));
         }, cancellationToken);
     }
 
-    /// <summary>Ladder step 12 (ADR-0097): the <c>search_quality.kind</c> column — nullable
+    /// <summary>
+    ///     Ladder step 12 (ADR-0097): the <c>search_quality.kind</c> column — nullable
     ///     <c>TEXT CHECK(kind IN ('memory','code','both'))</c> — with a cutoff backfill to
     ///     <c>'memory'</c> for rows older than <see cref="SearchQualityKindBackfillCutoff" />
     ///     (the <c>356afe95</c> landing: every pre-kind row ran the memory leg). The whole step
@@ -1224,72 +1226,68 @@ internal static class MemorySchema
     ///     explicit kinds never clobbered, and a no-op on an empty table (no row reads at all,
     ///     so emptiness cannot trip a materializer).
     /// </summary>
-    private static async Task MigrateToV12Async(SqliteConnection connection, CancellationToken cancellationToken)
-    {
+    private static async Task MigrateToV12Async(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.InWriteTransactionAsync(async () =>
         {
             // Re-probed under the write lock — another opener may have migrated between the
             // ladder's version read and this BEGIN.
             var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                    "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'search_quality'",
-                    cancellationToken: cancellationToken)) > 0;
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'search_quality'",
+                cancellationToken: cancellationToken)) > 0;
             if (!hasTable)
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition(SearchQualityTableDdl, cancellationToken: cancellationToken));
+                    new CommandDefinition(SearchQualityTableDdl, cancellationToken: cancellationToken));
                 return;
             }
 
             var columns = (await connection.QueryAsync<string>(
-                    new CommandDefinition(
-                        "SELECT name FROM pragma_table_info('search_quality')",
-                        cancellationToken: cancellationToken))).ToList();
+                new CommandDefinition(
+                    "SELECT name FROM pragma_table_info('search_quality')",
+                    cancellationToken: cancellationToken))).ToList();
             if (!columns.Contains("kind", StringComparer.Ordinal))
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            "ALTER TABLE search_quality ADD COLUMN kind TEXT CHECK(kind IN ('memory','code','both'))",
-                            cancellationToken: cancellationToken));
+                    new CommandDefinition(
+                        "ALTER TABLE search_quality ADD COLUMN kind TEXT CHECK(kind IN ('memory','code','both'))",
+                        cancellationToken: cancellationToken));
             }
 
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        "UPDATE search_quality SET kind = 'memory' WHERE kind IS NULL AND created_at < @Cutoff",
-                        new { Cutoff = SearchQualityKindBackfillCutoff },
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    "UPDATE search_quality SET kind = 'memory' WHERE kind IS NULL AND created_at < @Cutoff",
+                    new { Cutoff = SearchQualityKindBackfillCutoff },
+                    cancellationToken: cancellationToken));
         }, cancellationToken);
-    }
 
     /// <summary>
     ///     v12→v13 (ADR-0099): adds <c>repair_requests.map_json</c> (nullable, one-shot project-ids
     ///     alias map). Existing rows keep working with no backfill — null/empty means the empty map.
     ///     Same tolerant shape as the v12 step: re-probed under the write lock, COMMIT/ROLLBACK paired.
     /// </summary>
-    private static async Task MigrateToV13Async(SqliteConnection connection, CancellationToken cancellationToken)
-    {
+    private static async Task MigrateToV13Async(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.InWriteTransactionAsync(async () =>
         {
             var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                    "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'repair_requests'",
-                    cancellationToken: cancellationToken)) > 0;
+                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'repair_requests'",
+                cancellationToken: cancellationToken)) > 0;
             if (!hasTable)
             {
                 return;
             }
 
             var columns = (await connection.QueryAsync<string>(
-                    new CommandDefinition(
-                        "SELECT name FROM pragma_table_info('repair_requests')",
-                        cancellationToken: cancellationToken))).ToList();
+                new CommandDefinition(
+                    "SELECT name FROM pragma_table_info('repair_requests')",
+                    cancellationToken: cancellationToken))).ToList();
             if (!columns.Contains("map_json", StringComparer.Ordinal))
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            "ALTER TABLE repair_requests ADD COLUMN map_json TEXT NULL",
-                            cancellationToken: cancellationToken));
+                    new CommandDefinition(
+                        "ALTER TABLE repair_requests ADD COLUMN map_json TEXT NULL",
+                        cancellationToken: cancellationToken));
             }
         }, cancellationToken);
-    }
 
     /// <summary>
     ///     v13→v14 (Package D, D4 storage): creates <c>project_id_aliases</c> (shape declared once
@@ -1303,14 +1301,12 @@ internal static class MemorySchema
     ///     (witnessed by <c>EnsureAsync_WhenStoredVersionIsAheadOfCurrent_ThrowsNamingBothVersions</c>),
     ///     never by silently misreading the bank.
     /// </summary>
-    private static async Task MigrateToV14Async(SqliteConnection connection, CancellationToken cancellationToken)
-    {
+    private static async Task MigrateToV14Async(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.InWriteTransactionAsync(async () =>
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition(ProjectIdAliases.TableDdl, cancellationToken: cancellationToken));
+                new CommandDefinition(ProjectIdAliases.TableDdl, cancellationToken: cancellationToken));
         }, cancellationToken);
-    }
 
     /// <summary>
     ///     v14→v15 (label-aware tombstones): <c>sync_tombstones</c> gains <c>context_label</c> and
@@ -1325,40 +1321,40 @@ internal static class MemorySchema
             // Re-probed under the write lock: another opener may have migrated between the
             // ladder's version read and this BEGIN.
             var columns = (await connection.QueryAsync<string>(
-                    new CommandDefinition(
-                        "SELECT name FROM pragma_table_info('sync_tombstones')",
-                        cancellationToken: cancellationToken))).ToList();
+                new CommandDefinition(
+                    "SELECT name FROM pragma_table_info('sync_tombstones')",
+                    cancellationToken: cancellationToken))).ToList();
 
             if (!columns.Contains("context_label", StringComparer.Ordinal))
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition("ALTER TABLE sync_tombstones RENAME TO sync_tombstones_v14",
-                            cancellationToken: cancellationToken));
+                    new CommandDefinition("ALTER TABLE sync_tombstones RENAME TO sync_tombstones_v14",
+                        cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            """
-                            CREATE TABLE sync_tombstones (
-                                project_id TEXT NOT NULL,
-                                hash TEXT NOT NULL,
-                                scope TEXT NOT NULL,
-                                context_label TEXT NULL,
-                                deleted_at INTEGER NOT NULL
-                            )
-                            """,
-                            cancellationToken: cancellationToken));
+                    new CommandDefinition(
+                        """
+                        CREATE TABLE sync_tombstones (
+                            project_id TEXT NOT NULL,
+                            hash TEXT NOT NULL,
+                            scope TEXT NOT NULL,
+                            context_label TEXT NULL,
+                            deleted_at INTEGER NOT NULL
+                        )
+                        """,
+                        cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            """
-                            INSERT INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at)
-                            SELECT project_id, hash, scope, NULL, deleted_at FROM sync_tombstones_v14
-                            """,
-                            cancellationToken: cancellationToken));
+                    new CommandDefinition(
+                        """
+                        INSERT INTO sync_tombstones (project_id, hash, scope, context_label, deleted_at)
+                        SELECT project_id, hash, scope, NULL, deleted_at FROM sync_tombstones_v14
+                        """,
+                        cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
-                        new CommandDefinition("DROP TABLE sync_tombstones_v14", cancellationToken: cancellationToken));
+                    new CommandDefinition("DROP TABLE sync_tombstones_v14", cancellationToken: cancellationToken));
             }
 
             await connection.ExecuteAsync(
-                    new CommandDefinition(TombstoneIndexDdl, cancellationToken: cancellationToken));
+                new CommandDefinition(TombstoneIndexDdl, cancellationToken: cancellationToken));
         }, cancellationToken);
 
         // The rebuild's DROP frees the old table's pages only after the new table allocated its own
@@ -1369,43 +1365,44 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     v15→v16 (F36): <c>sync_tombstones</c> gains <c>received_at</c> — a plain <c>ALTER TABLE
-    ///     ADD COLUMN</c>, no rebuild, since the v15 table already carries no PK for this to conflict
+    ///     v15→v16 (F36): <c>sync_tombstones</c> gains <c>received_at</c> — a plain
+    ///     <c>
+    ///         ALTER TABLE
+    ///         ADD COLUMN
+    ///     </c>
+    ///     , no rebuild, since the v15 table already carries no PK for this to conflict
     ///     with. Existing rows backfill <c>received_at = deleted_at</c>: the best available answer for
     ///     a row this binary cannot ask "when did THIS bank first learn of you" — same clock, so GC's
     ///     old (buggy) comparison is exactly what a pre-fix row keeps until it is next refreshed by a
     ///     local delete or a pull merge.
     /// </summary>
-    private static async Task MigrateToV16Async(SqliteConnection connection, CancellationToken cancellationToken)
-    {
+    private static async Task MigrateToV16Async(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.InWriteTransactionAsync(async () =>
         {
             var columns = (await connection.QueryAsync<string>(
-                    new CommandDefinition(
-                        "SELECT name FROM pragma_table_info('sync_tombstones')",
-                        cancellationToken: cancellationToken))).ToList();
+                new CommandDefinition(
+                    "SELECT name FROM pragma_table_info('sync_tombstones')",
+                    cancellationToken: cancellationToken))).ToList();
 
             if (!columns.Contains("received_at", StringComparer.Ordinal))
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            "ALTER TABLE sync_tombstones ADD COLUMN received_at INTEGER NULL",
-                            cancellationToken: cancellationToken));
+                    new CommandDefinition(
+                        "ALTER TABLE sync_tombstones ADD COLUMN received_at INTEGER NULL",
+                        cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            "UPDATE sync_tombstones SET received_at = deleted_at WHERE received_at IS NULL",
-                            cancellationToken: cancellationToken));
+                    new CommandDefinition(
+                        "UPDATE sync_tombstones SET received_at = deleted_at WHERE received_at IS NULL",
+                        cancellationToken: cancellationToken));
             }
         }, cancellationToken);
-    }
 
     /// <summary>
     ///     v17→v18: drops every watch fingerprint whose own project holds no memory or code rows for
     ///     the path. Builds before skip reporting fingerprinted files they could not index, which then
     ///     hash-skipped forever; without the fingerprint the next catch-up re-digests them.
     /// </summary>
-    private static async Task MigrateToV18Async(SqliteConnection connection, CancellationToken cancellationToken)
-    {
+    private static async Task MigrateToV18Async(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.InWriteTransactionAsync(async () =>
         {
             await connection.ExecuteAsync(new CommandDefinition(
@@ -1417,7 +1414,6 @@ internal static class MemorySchema
                                   WHERE c.project_id = watch_files.project_id AND c.path = watch_files.path)
                 """, cancellationToken: cancellationToken));
         }, cancellationToken);
-    }
 
     /// <summary>
     ///     v19→v20: the entry KIND a row holds, denormalised onto <c>entries.entry_type</c> so the
@@ -1443,25 +1439,18 @@ internal static class MemorySchema
         // typed query can place.
         await connection.ExecuteAsync(new CommandDefinition(
             $"""
-            UPDATE entries
-            SET entry_type = {MemorySql.EntryTypeFromShape("entries.")}
-            WHERE entry_type IS NULL OR entry_type = 'none'
-            """, cancellationToken: cancellationToken));
+             UPDATE entries
+             SET entry_type = {MemorySql.EntryTypeFromShape("entries.")}
+             WHERE entry_type IS NULL OR entry_type = 'none'
+             """, cancellationToken: cancellationToken));
     }
-
-    /// <summary>
-    ///     One vec table the v19 step rebuilds: which table, the columns it copies, and the
-    ///     dimension read from it. The dimension is read from the table itself, so a spec carries
-    ///     it unset until the read fills it; only a read spec reaches the rebuild.
-    /// </summary>
-    private sealed record VecRebuild(string Table, string Source, string Ctx, string Column, string Where, int Dimension = 0);
 
     /// <summary>Preserves historical corpus selections as entry-type masks beside the original value.</summary>
     private static async Task MigrateToV22Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'search_quality'",
-                cancellationToken: cancellationToken)) > 0;
+            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'search_quality'",
+            cancellationToken: cancellationToken)) > 0;
         if (!hasTable)
         {
             return;
@@ -1476,8 +1465,8 @@ internal static class MemorySchema
             try
             {
                 await connection.ExecuteAsync(new CommandDefinition(
-                        "ALTER TABLE search_quality ADD COLUMN kind_mask INTEGER NULL",
-                        cancellationToken: cancellationToken));
+                    "ALTER TABLE search_quality ADD COLUMN kind_mask INTEGER NULL",
+                    cancellationToken: cancellationToken));
             }
             catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
             {
@@ -1634,8 +1623,12 @@ internal static class MemorySchema
     }
 
     /// <summary>
-    ///     v16→v17 (F34): the workspace-XOR-scope CHECK reads <c>(workspace_id IS NULL AND scope IN
-    ///     (...)) OR (workspace_id IS NOT NULL AND scope IS NULL)</c> — SQLite passes a CHECK that
+    ///     v16→v17 (F34): the workspace-XOR-scope CHECK reads
+    ///     <c>
+    ///         (workspace_id IS NULL AND scope IN
+    ///         (...)) OR (workspace_id IS NOT NULL AND scope IS NULL)
+    ///     </c>
+    ///     — SQLite passes a CHECK that
     ///     evaluates to NULL, so a row with BOTH null (neither tier) slips through: unreachable by
     ///     every tier's own predicates, uncounted, never tombstoned, and exactly the shape the sync
     ///     merge's <c>WHERE r.workspace_id IS NULL</c> guard admits from a remote. Fixed by adding
@@ -1657,143 +1650,143 @@ internal static class MemorySchema
         var scopelessCount = await connection.InWriteTransactionAsync(async () =>
         {
             var scopeless = await connection.ExecuteScalarAsync<long>(
-                    new CommandDefinition(
-                        "SELECT count(*) FROM entries WHERE scope IS NULL AND workspace_id IS NULL",
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    "SELECT count(*) FROM entries WHERE scope IS NULL AND workspace_id IS NULL",
+                    cancellationToken: cancellationToken));
             if (scopeless > 0)
             {
                 // Fires entries_fts_ad / vec_entries_ad / vec_structure_ad / promotion_queue_entries_ad
                 // exactly as a normal delete would — the row is unreachable by every tier, so nothing
                 // in the copy below needs to filter it out again.
                 await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            "DELETE FROM entries WHERE scope IS NULL AND workspace_id IS NULL",
-                            cancellationToken: cancellationToken));
+                    new CommandDefinition(
+                        "DELETE FROM entries WHERE scope IS NULL AND workspace_id IS NULL",
+                        cancellationToken: cancellationToken));
             }
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("ALTER TABLE entries RENAME TO entries_v16", cancellationToken: cancellationToken));
+                new CommandDefinition("ALTER TABLE entries RENAME TO entries_v16", cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        """
-                        CREATE TABLE entries (
-                            id INTEGER PRIMARY KEY,
-                            hash TEXT,
-                            path TEXT,
-                            value TEXT,
-                            source_file TEXT,
-                            section TEXT,
-                            scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
-                            project_id TEXT NULL,
-                            context_label TEXT NULL,
-                            workspace_id TEXT NULL,
-                            agent_id TEXT NULL,
-                            created_at INTEGER NOT NULL,
-                            updated_at INTEGER NOT NULL,
-                            access_count INTEGER NOT NULL DEFAULT 0,
-                            last_accessed_at INTEGER NULL,
-                            rating REAL NOT NULL DEFAULT 0.5,
-                            ttl_days INTEGER NULL,
-                            embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
-                            embedding BLOB NULL,
-                            heading_path TEXT NULL,
-                            structure_embedding BLOB NULL,
-                            chunk_index INTEGER NOT NULL DEFAULT -1,
-                            total_chunks INTEGER NOT NULL DEFAULT 0,
-                            source_id INTEGER NULL,
-                            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
-                            CHECK ((workspace_id IS NULL AND scope IS NOT NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
-                        )
-                        """,
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    """
+                    CREATE TABLE entries (
+                        id INTEGER PRIMARY KEY,
+                        hash TEXT,
+                        path TEXT,
+                        value TEXT,
+                        source_file TEXT,
+                        section TEXT,
+                        scope TEXT CHECK(scope IN ('shared','project','custom')) NULL,
+                        project_id TEXT NULL,
+                        context_label TEXT NULL,
+                        workspace_id TEXT NULL,
+                        agent_id TEXT NULL,
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL,
+                        access_count INTEGER NOT NULL DEFAULT 0,
+                        last_accessed_at INTEGER NULL,
+                        rating REAL NOT NULL DEFAULT 0.5,
+                        ttl_days INTEGER NULL,
+                        embed_state TEXT NOT NULL DEFAULT 'pending' CHECK(embed_state IN ('pending','embedded')),
+                        embedding BLOB NULL,
+                        heading_path TEXT NULL,
+                        structure_embedding BLOB NULL,
+                        chunk_index INTEGER NOT NULL DEFAULT -1,
+                        total_chunks INTEGER NOT NULL DEFAULT 0,
+                        source_id INTEGER NULL,
+                        FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
+                        CHECK ((workspace_id IS NULL AND scope IS NOT NULL AND scope IN ('shared','project','custom')) OR (workspace_id IS NOT NULL AND scope IS NULL))
+                    )
+                    """,
+                    cancellationToken: cancellationToken));
 
             // Explicit column list, id included: the rebuild must preserve every surviving row's
             // rowid, since entries_fts (content_rowid='id') and vec_entries/vec_structure
             // (rowid = entry id) address their rows by it.
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        """
-                        INSERT INTO entries (id, hash, path, value, source_file, section, scope, project_id,
-                                              context_label, workspace_id, agent_id, created_at, updated_at,
-                                              access_count, last_accessed_at, rating, ttl_days, embed_state,
-                                              embedding, heading_path, structure_embedding, chunk_index,
-                                              total_chunks, source_id)
-                        SELECT id, hash, path, value, source_file, section, scope, project_id,
-                               context_label, workspace_id, agent_id, created_at, updated_at,
-                               access_count, last_accessed_at, rating, ttl_days, embed_state,
-                               embedding, heading_path, structure_embedding, chunk_index,
-                               total_chunks, source_id
-                        FROM entries_v16
-                        """,
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    """
+                    INSERT INTO entries (id, hash, path, value, source_file, section, scope, project_id,
+                                          context_label, workspace_id, agent_id, created_at, updated_at,
+                                          access_count, last_accessed_at, rating, ttl_days, embed_state,
+                                          embedding, heading_path, structure_embedding, chunk_index,
+                                          total_chunks, source_id)
+                    SELECT id, hash, path, value, source_file, section, scope, project_id,
+                           context_label, workspace_id, agent_id, created_at, updated_at,
+                           access_count, last_accessed_at, rating, ttl_days, embed_state,
+                           embedding, heading_path, structure_embedding, chunk_index,
+                           total_chunks, source_id
+                    FROM entries_v16
+                    """,
+                    cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition("DROP TABLE entries_v16", cancellationToken: cancellationToken));
+                new CommandDefinition("DROP TABLE entries_v16", cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        $"""
-                         CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
-                             INSERT INTO entries_fts(rowid, value, source_file, section)
-                             VALUES (new.id, new.value, new.source_file, new.section);
-                         END;
+                new CommandDefinition(
+                    $"""
+                     CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+                         INSERT INTO entries_fts(rowid, value, source_file, section)
+                         VALUES (new.id, new.value, new.source_file, new.section);
+                     END;
 
-                         CREATE TRIGGER entries_fts_ad AFTER DELETE ON entries BEGIN
-                             INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
-                             VALUES ('delete', old.id, old.value, old.source_file, old.section);
-                         END;
+                     CREATE TRIGGER entries_fts_ad AFTER DELETE ON entries BEGIN
+                         INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                         VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                     END;
 
-                         CREATE TRIGGER entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
-                             INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
-                             VALUES ('delete', old.id, old.value, old.source_file, old.section);
-                             INSERT INTO entries_fts(rowid, value, source_file, section)
-                             VALUES (new.id, new.value, new.source_file, new.section);
-                         END;
+                     CREATE TRIGGER entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
+                         INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                         VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                         INSERT INTO entries_fts(rowid, value, source_file, section)
+                         VALUES (new.id, new.value, new.source_file, new.section);
+                     END;
 
-                         {VecEntriesUpdateTriggerDdl}
+                     {VecEntriesUpdateTriggerDdl}
 
-                         CREATE TRIGGER vec_entries_pending AFTER UPDATE OF embed_state ON entries
-                         WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
-                         BEGIN
-                             DELETE FROM vec_entries WHERE rowid = OLD.id;
-                         END;
+                     CREATE TRIGGER vec_entries_pending AFTER UPDATE OF embed_state ON entries
+                     WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+                     BEGIN
+                         DELETE FROM vec_entries WHERE rowid = OLD.id;
+                     END;
 
-                         CREATE TRIGGER vec_entries_ad AFTER DELETE ON entries BEGIN
-                             DELETE FROM vec_entries WHERE rowid = OLD.id;
-                         END;
+                     CREATE TRIGGER vec_entries_ad AFTER DELETE ON entries BEGIN
+                         DELETE FROM vec_entries WHERE rowid = OLD.id;
+                     END;
 
-                         CREATE TRIGGER vec_structure_ad AFTER DELETE ON entries BEGIN
-                             DELETE FROM vec_structure WHERE rowid = OLD.id;
-                         END;
+                     CREATE TRIGGER vec_structure_ad AFTER DELETE ON entries BEGIN
+                         DELETE FROM vec_structure WHERE rowid = OLD.id;
+                     END;
 
-                         {VecStructureUpdateTriggerDdl}
+                     {VecStructureUpdateTriggerDdl}
 
-                         CREATE TRIGGER vec_structure_pending AFTER UPDATE OF embed_state ON entries
-                         WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
-                         BEGIN
-                             DELETE FROM vec_structure WHERE rowid = OLD.id;
-                         END;
-                         """,
-                        cancellationToken: cancellationToken));
-
-            await connection.ExecuteAsync(
-                    new CommandDefinition(PromotionQueueTriggerDdl, cancellationToken: cancellationToken));
+                     CREATE TRIGGER vec_structure_pending AFTER UPDATE OF embed_state ON entries
+                     WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+                     BEGIN
+                         DELETE FROM vec_structure WHERE rowid = OLD.id;
+                     END;
+                     """,
+                    cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition(BucketIndexDdl, cancellationToken: cancellationToken));
+                new CommandDefinition(PromotionQueueTriggerDdl, cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        """
-                        CREATE INDEX idx_entries_scope_project ON entries(scope, project_id);
-                        CREATE INDEX idx_entries_hash ON entries(hash);
-                        CREATE INDEX idx_entries_project_path ON entries(project_id, path);
-                        CREATE INDEX idx_entries_workspace ON entries(workspace_id);
-                        CREATE INDEX idx_entries_embed_state ON entries(embed_state, project_id);
-                        CREATE INDEX idx_entries_source_id ON entries(source_id);
-                        """,
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(BucketIndexDdl, cancellationToken: cancellationToken));
+
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    """
+                    CREATE INDEX idx_entries_scope_project ON entries(scope, project_id);
+                    CREATE INDEX idx_entries_hash ON entries(hash);
+                    CREATE INDEX idx_entries_project_path ON entries(project_id, path);
+                    CREATE INDEX idx_entries_workspace ON entries(workspace_id);
+                    CREATE INDEX idx_entries_embed_state ON entries(embed_state, project_id);
+                    CREATE INDEX idx_entries_source_id ON entries(source_id);
+                    """,
+                    cancellationToken: cancellationToken));
 
             return scopeless;
         }, cancellationToken);
@@ -1847,9 +1840,9 @@ internal static class MemorySchema
         CancellationToken cancellationToken)
     {
         var rows = await connection.QueryAsync<WatchRow>(
-                new CommandDefinition(
-                    "SELECT project_id AS ProjectId, path AS Path, created_at AS CreatedAt FROM watches",
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                "SELECT project_id AS ProjectId, path AS Path, created_at AS CreatedAt FROM watches",
+                cancellationToken: cancellationToken));
 
         var resolver = new WatchOverlapResolver();
         var toPrune = new List<ProjectPrune>();
@@ -1883,11 +1876,11 @@ internal static class MemorySchema
             foreach (var (projectId, pruned) in toPrune)
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
-                            new { projectId, path = pruned.Path, subtreeLow = PathSubtree.Low(pruned.Path), subtreeHigh = PathSubtree.High(pruned.Path) }, cancellationToken: cancellationToken));
+                    new CommandDefinition(MemorySql.DeleteWatchFilesByProjectPathCascade,
+                        new { projectId, path = pruned.Path, subtreeLow = PathSubtree.Low(pruned.Path), subtreeHigh = PathSubtree.High(pruned.Path) }, cancellationToken: cancellationToken));
                 await connection.ExecuteAsync(
-                        new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path = pruned.Path },
-                            cancellationToken: cancellationToken));
+                    new CommandDefinition(MemorySql.DeleteWatch, new { projectId, path = pruned.Path },
+                        cancellationToken: cancellationToken));
             }
         }, cancellationToken);
 
@@ -1899,8 +1892,8 @@ internal static class MemorySchema
         CancellationToken cancellationToken)
     {
         var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'entries'",
-                cancellationToken: cancellationToken)) > 0;
+            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'entries'",
+            cancellationToken: cancellationToken)) > 0;
         if (!hasTable)
         {
             return; // the Ddl block creates the table with the column already in it
@@ -1917,7 +1910,7 @@ internal static class MemorySchema
         try
         {
             await connection.ExecuteAsync(new CommandDefinition(AddEntryTypeColumnSql,
-                    cancellationToken: cancellationToken));
+                cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
         {
@@ -1930,8 +1923,8 @@ internal static class MemorySchema
         CancellationToken cancellationToken)
     {
         var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = @table",
-                new { table }, cancellationToken: cancellationToken)) > 0;
+            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = @table",
+            new { table }, cancellationToken: cancellationToken)) > 0;
         if (!hasTable)
         {
             return; // the Ddl block just above creates the table; nothing to alter yet
@@ -1948,8 +1941,8 @@ internal static class MemorySchema
         try
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                    $"ALTER TABLE {table} ADD COLUMN embed_attempts INTEGER NOT NULL DEFAULT 0",
-                    cancellationToken: cancellationToken));
+                $"ALTER TABLE {table} ADD COLUMN embed_attempts INTEGER NOT NULL DEFAULT 0",
+                cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
         {
@@ -1975,7 +1968,7 @@ internal static class MemorySchema
         try
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                    "ALTER TABLE watch_files ADD COLUMN size INTEGER NULL", cancellationToken: cancellationToken));
+                "ALTER TABLE watch_files ADD COLUMN size INTEGER NULL", cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
         {
@@ -1992,15 +1985,15 @@ internal static class MemorySchema
     private static async Task EnsureCodeIdentifiersColumnAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'code_entries'",
-                cancellationToken: cancellationToken)) > 0;
+            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'code_entries'",
+            cancellationToken: cancellationToken)) > 0;
         if (!hasTable)
         {
             return; // the Ddl block just above creates code_entries; nothing to alter yet
         }
 
         var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
-                "SELECT name FROM pragma_table_info('code_entries')", cancellationToken: cancellationToken))).Contains("identifiers", StringComparer.Ordinal);
+            "SELECT name FROM pragma_table_info('code_entries')", cancellationToken: cancellationToken))).Contains("identifiers", StringComparer.Ordinal);
         if (hasColumn)
         {
             return;
@@ -2009,8 +2002,8 @@ internal static class MemorySchema
         try
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                    "ALTER TABLE code_entries ADD COLUMN identifiers TEXT NOT NULL DEFAULT ''",
-                    cancellationToken: cancellationToken));
+                "ALTER TABLE code_entries ADD COLUMN identifiers TEXT NOT NULL DEFAULT ''",
+                cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
         {
@@ -2034,7 +2027,7 @@ internal static class MemorySchema
     private static async Task<bool> CodeFtsHasIdentifiersAsync(SqliteConnection connection,
         CancellationToken cancellationToken) =>
         (await connection.QueryAsync<string>(new CommandDefinition(
-                "SELECT name FROM pragma_table_info('code_fts')", cancellationToken: cancellationToken))).Contains("identifiers", StringComparer.Ordinal);
+            "SELECT name FROM pragma_table_info('code_fts')", cancellationToken: cancellationToken))).Contains("identifiers", StringComparer.Ordinal);
 
     private static async Task EnsureCodeFtsIdentifiersAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
@@ -2053,48 +2046,48 @@ internal static class MemorySchema
             }
 
             var rows = (await connection.QueryAsync<(long Id, string Value)>(new CommandDefinition(
-                    "SELECT id, value FROM code_entries", cancellationToken: cancellationToken))).ToList();
+                "SELECT id, value FROM code_entries", cancellationToken: cancellationToken))).ToList();
             await connection.ExecuteAsync(new CommandDefinition(
-                    "UPDATE code_entries SET identifiers = @identifiers WHERE id = @id",
-                    rows.Select(row => new { id = row.Id, identifiers = IdentifierSplitter.Identifiers(row.Value) }),
-                    cancellationToken: cancellationToken));
+                "UPDATE code_entries SET identifiers = @identifiers WHERE id = @id",
+                rows.Select(row => new { id = row.Id, identifiers = IdentifierSplitter.Identifiers(row.Value) }),
+                cancellationToken: cancellationToken));
 
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        """
-                        DROP TRIGGER IF EXISTS code_fts_ai;
-                        DROP TRIGGER IF EXISTS code_fts_ad;
-                        DROP TRIGGER IF EXISTS code_fts_au;
-                        DROP TABLE IF EXISTS code_fts;
+                new CommandDefinition(
+                    """
+                    DROP TRIGGER IF EXISTS code_fts_ai;
+                    DROP TRIGGER IF EXISTS code_fts_ad;
+                    DROP TRIGGER IF EXISTS code_fts_au;
+                    DROP TABLE IF EXISTS code_fts;
 
-                        CREATE VIRTUAL TABLE code_fts USING fts5(
-                            value,
-                            source_file,
-                            identifiers,
-                            content='code_entries',
-                            content_rowid='id'
-                        );
+                    CREATE VIRTUAL TABLE code_fts USING fts5(
+                        value,
+                        source_file,
+                        identifiers,
+                        content='code_entries',
+                        content_rowid='id'
+                    );
 
-                        CREATE TRIGGER code_fts_ai AFTER INSERT ON code_entries BEGIN
-                            INSERT INTO code_fts(rowid, value, source_file, identifiers)
-                            VALUES (new.id, new.value, new.source_file, new.identifiers);
-                        END;
+                    CREATE TRIGGER code_fts_ai AFTER INSERT ON code_entries BEGIN
+                        INSERT INTO code_fts(rowid, value, source_file, identifiers)
+                        VALUES (new.id, new.value, new.source_file, new.identifiers);
+                    END;
 
-                        CREATE TRIGGER code_fts_ad AFTER DELETE ON code_entries BEGIN
-                            INSERT INTO code_fts(code_fts, rowid, value, source_file, identifiers)
-                            VALUES ('delete', old.id, old.value, old.source_file, old.identifiers);
-                        END;
+                    CREATE TRIGGER code_fts_ad AFTER DELETE ON code_entries BEGIN
+                        INSERT INTO code_fts(code_fts, rowid, value, source_file, identifiers)
+                        VALUES ('delete', old.id, old.value, old.source_file, old.identifiers);
+                    END;
 
-                        CREATE TRIGGER code_fts_au AFTER UPDATE OF value, source_file, identifiers ON code_entries BEGIN
-                            INSERT INTO code_fts(code_fts, rowid, value, source_file, identifiers)
-                            VALUES ('delete', old.id, old.value, old.source_file, old.identifiers);
-                            INSERT INTO code_fts(rowid, value, source_file, identifiers)
-                            VALUES (new.id, new.value, new.source_file, new.identifiers);
-                        END;
+                    CREATE TRIGGER code_fts_au AFTER UPDATE OF value, source_file, identifiers ON code_entries BEGIN
+                        INSERT INTO code_fts(code_fts, rowid, value, source_file, identifiers)
+                        VALUES ('delete', old.id, old.value, old.source_file, old.identifiers);
+                        INSERT INTO code_fts(rowid, value, source_file, identifiers)
+                        VALUES (new.id, new.value, new.source_file, new.identifiers);
+                    END;
 
-                        INSERT INTO code_fts(code_fts) VALUES('rebuild');
-                        """,
-                        cancellationToken: cancellationToken));
+                    INSERT INTO code_fts(code_fts) VALUES('rebuild');
+                    """,
+                    cancellationToken: cancellationToken));
         }, cancellationToken);
     }
 
@@ -2109,15 +2102,15 @@ internal static class MemorySchema
     private static async Task EnsureSearchQualityResultFeaturesColumnAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'search_quality'",
-                cancellationToken: cancellationToken)) > 0;
+            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'search_quality'",
+            cancellationToken: cancellationToken)) > 0;
         if (!hasTable)
         {
             return; // the Ddl block just above creates search_quality; nothing to alter yet
         }
 
         var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
-                "SELECT name FROM pragma_table_info('search_quality')", cancellationToken: cancellationToken))).Contains("result_features", StringComparer.Ordinal);
+            "SELECT name FROM pragma_table_info('search_quality')", cancellationToken: cancellationToken))).Contains("result_features", StringComparer.Ordinal);
         if (hasColumn)
         {
             return;
@@ -2126,8 +2119,8 @@ internal static class MemorySchema
         try
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                    "ALTER TABLE search_quality ADD COLUMN result_features TEXT",
-                    cancellationToken: cancellationToken));
+                "ALTER TABLE search_quality ADD COLUMN result_features TEXT",
+                cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
         {
@@ -2144,15 +2137,15 @@ internal static class MemorySchema
     private static async Task EnsureRepairRequestsMapJsonColumnAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var hasTable = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'repair_requests'",
-                cancellationToken: cancellationToken)) > 0;
+            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'repair_requests'",
+            cancellationToken: cancellationToken)) > 0;
         if (!hasTable)
         {
             return; // the Ddl block just above creates repair_requests; nothing to alter yet
         }
 
         var hasColumn = (await connection.QueryAsync<string>(new CommandDefinition(
-                "SELECT name FROM pragma_table_info('repair_requests')", cancellationToken: cancellationToken))).Contains("map_json", StringComparer.Ordinal);
+            "SELECT name FROM pragma_table_info('repair_requests')", cancellationToken: cancellationToken))).Contains("map_json", StringComparer.Ordinal);
         if (hasColumn)
         {
             return;
@@ -2161,8 +2154,8 @@ internal static class MemorySchema
         try
         {
             await connection.ExecuteAsync(new CommandDefinition(
-                    "ALTER TABLE repair_requests ADD COLUMN map_json TEXT NULL",
-                    cancellationToken: cancellationToken));
+                "ALTER TABLE repair_requests ADD COLUMN map_json TEXT NULL",
+                cancellationToken: cancellationToken));
         }
         catch (SqliteException ex) when (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
         {
@@ -2179,23 +2172,23 @@ internal static class MemorySchema
         // Probe first: this runs on every bank open, and an unconditional write would take a
         // write lock every time — enough to change how a busy bank behaves under maintenance.
         var legacyScopeRows = await connection.ExecuteScalarAsync<long>(
-                new CommandDefinition(
-                    "SELECT count(*) FROM settings WHERE key LIKE 'watch.scope.%'",
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                "SELECT count(*) FROM settings WHERE key LIKE 'watch.scope.%'",
+                cancellationToken: cancellationToken));
         if (legacyScopeRows == 0)
         {
             return;
         }
 
         await connection.ExecuteAsync(
-                new CommandDefinition(
-                    """
-                    UPDATE OR IGNORE settings
-                       SET key = 'ingest.scope.' || substr(key, length('watch.scope.') + 1)
-                     WHERE key LIKE 'watch.scope.%';
-                    DELETE FROM settings WHERE key LIKE 'watch.scope.%';
-                    """,
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                """
+                UPDATE OR IGNORE settings
+                   SET key = 'ingest.scope.' || substr(key, length('watch.scope.') + 1)
+                 WHERE key LIKE 'watch.scope.%';
+                DELETE FROM settings WHERE key LIKE 'watch.scope.%';
+                """,
+                cancellationToken: cancellationToken));
     }
 
     /// <summary>
@@ -2218,9 +2211,9 @@ internal static class MemorySchema
     private static async Task EnsurePromotionQueueTriggerScopeGuardAsync(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var storedSql = await connection.ExecuteScalarAsync<string?>(
-                new CommandDefinition(
-                    "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'promotion_queue_entries_ad'",
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'promotion_queue_entries_ad'",
+                cancellationToken: cancellationToken));
         // Compared against the body we intend, not sniffed for a substring: the previous probe
         // asked whether the stored SQL mentioned "scope" at all, so the ADR-0046 widening would
         // have left every existing bank on the old body forever while reading as up to date.
@@ -2230,13 +2223,13 @@ internal static class MemorySchema
         }
 
         await connection.ExecuteAsync(
-                new CommandDefinition(
-                    $"""
-                     DROP TRIGGER IF EXISTS promotion_queue_entries_ad;
+            new CommandDefinition(
+                $"""
+                 DROP TRIGGER IF EXISTS promotion_queue_entries_ad;
 
-                     {PromotionQueueTriggerDdl}
-                     """,
-                    cancellationToken: cancellationToken));
+                 {PromotionQueueTriggerDdl}
+                 """,
+                cancellationToken: cancellationToken));
     }
 
     /// <summary>
@@ -2266,7 +2259,7 @@ internal static class MemorySchema
             .ToList();
 
         var tables = objects.Where(o => o.Type == "table")
-            .ToDictionary(o => o.Name, o => o.Sql ?? string.Empty, StringComparer.Ordinal);
+            .ToDictionary(o => o.Name, o => o.Sql ?? "", StringComparer.Ordinal);
         if (tables.Count != 2
             || !tables["vec_entries"].Contains("type TEXT partition key", StringComparison.OrdinalIgnoreCase)
             || !tables["vec_structure"].Contains("type TEXT partition key", StringComparison.OrdinalIgnoreCase))
@@ -2285,16 +2278,16 @@ internal static class MemorySchema
         }
 
         await connection.ExecuteAsync(
-                new CommandDefinition(
-                    $"""
-                     DROP TRIGGER IF EXISTS vec_entries_au;
-                     DROP TRIGGER IF EXISTS vec_structure_au;
+            new CommandDefinition(
+                $"""
+                 DROP TRIGGER IF EXISTS vec_entries_au;
+                 DROP TRIGGER IF EXISTS vec_structure_au;
 
-                     {VecEntriesUpdateTriggerDdl}
+                 {VecEntriesUpdateTriggerDdl}
 
-                     {VecStructureUpdateTriggerDdl}
-                     """,
-                    cancellationToken: cancellationToken));
+                 {VecStructureUpdateTriggerDdl}
+                 """,
+                cancellationToken: cancellationToken));
     }
 
     /// <summary>
@@ -2328,7 +2321,7 @@ internal static class MemorySchema
     /// <summary>PRAGMA user_version takes no parameter binding, hence the interpolation of an int constant.</summary>
     private static async Task StampAsync(SqliteConnection connection, int version, CancellationToken cancellationToken) =>
         await connection.ExecuteAsync(
-                new CommandDefinition($"PRAGMA user_version = {version}", cancellationToken: cancellationToken));
+            new CommandDefinition($"PRAGMA user_version = {version}", cancellationToken: cancellationToken));
 
     private static async Task<int> ReadApplicationIdAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteScalarAsync<int>(
@@ -2337,7 +2330,7 @@ internal static class MemorySchema
     /// <summary>PRAGMA application_id takes no parameter binding, hence the interpolation of an int constant.</summary>
     private static async Task StampSchemaDigestAsync(SqliteConnection connection, CancellationToken cancellationToken) =>
         await connection.ExecuteAsync(
-                new CommandDefinition($"PRAGMA application_id = {SchemaDigest}", cancellationToken: cancellationToken));
+            new CommandDefinition($"PRAGMA application_id = {SchemaDigest}", cancellationToken: cancellationToken));
 
     /// <summary>
     ///     Ladder step 1 — everything shipped before the version marker existed: entries/watch-lease
@@ -2348,67 +2341,67 @@ internal static class MemorySchema
     private static async Task<bool> MigrateToV1Async(SqliteConnection connection, CancellationToken cancellationToken)
     {
         var columns = (await connection.QueryAsync<string>(
-                new CommandDefinition(
-                    "SELECT name FROM pragma_table_info('entries')",
-                    cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
+            new CommandDefinition(
+                "SELECT name FROM pragma_table_info('entries')",
+                cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
         if (!columns.Contains("source_file"))
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        "ALTER TABLE entries ADD COLUMN source_file TEXT",
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    "ALTER TABLE entries ADD COLUMN source_file TEXT",
+                    cancellationToken: cancellationToken));
         }
 
         if (!columns.Contains("section"))
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        "ALTER TABLE entries ADD COLUMN section TEXT",
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    "ALTER TABLE entries ADD COLUMN section TEXT",
+                    cancellationToken: cancellationToken));
         }
 
         if (!columns.Contains("heading_path"))
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        "ALTER TABLE entries ADD COLUMN heading_path TEXT",
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    "ALTER TABLE entries ADD COLUMN heading_path TEXT",
+                    cancellationToken: cancellationToken));
         }
 
         if (!columns.Contains("structure_embedding"))
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        "ALTER TABLE entries ADD COLUMN structure_embedding BLOB",
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    "ALTER TABLE entries ADD COLUMN structure_embedding BLOB",
+                    cancellationToken: cancellationToken));
         }
 
         // Cross-process scan lease (docs/plans/2026-08-07-watch-scan-runaway-fix.md): the lease
         // lives on the watches row, so DELETE FROM watches is lease release.
         var watchColumns = (await connection.QueryAsync<string>(
-                new CommandDefinition(
-                    "SELECT name FROM pragma_table_info('watches')",
-                    cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
+            new CommandDefinition(
+                "SELECT name FROM pragma_table_info('watches')",
+                cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
         if (!watchColumns.Contains("scan_owner"))
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        "ALTER TABLE watches ADD COLUMN scan_owner TEXT",
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    "ALTER TABLE watches ADD COLUMN scan_owner TEXT",
+                    cancellationToken: cancellationToken));
         }
 
         if (!watchColumns.Contains("scan_lease_expires_at"))
         {
             await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        "ALTER TABLE watches ADD COLUMN scan_lease_expires_at INTEGER NOT NULL DEFAULT 0",
-                        cancellationToken: cancellationToken));
+                new CommandDefinition(
+                    "ALTER TABLE watches ADD COLUMN scan_lease_expires_at INTEGER NOT NULL DEFAULT 0",
+                    cancellationToken: cancellationToken));
         }
 
         var ftsSql = await connection.ExecuteScalarAsync<string?>(
-                new CommandDefinition(
-                    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entries_fts'",
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'entries_fts'",
+                cancellationToken: cancellationToken));
         var ftsNeedsRebuild = ftsSql is null
                               || !ftsSql.Contains("source_file", StringComparison.Ordinal)
                               || !ftsSql.Contains("section", StringComparison.Ordinal);
@@ -2417,9 +2410,9 @@ internal static class MemorySchema
             // New shape in place; verify it is not an empty shell left by a crash between the
             // DROP/CREATE and the repopulate — the triggers keep it in sync only from here on.
             var ftsRows = await connection.ExecuteScalarAsync<long>(
-                    new CommandDefinition("SELECT count(*) FROM entries_fts", cancellationToken: cancellationToken));
+                new CommandDefinition("SELECT count(*) FROM entries_fts", cancellationToken: cancellationToken));
             var entryRows = await connection.ExecuteScalarAsync<long>(
-                    new CommandDefinition("SELECT count(*) FROM entries", cancellationToken: cancellationToken));
+                new CommandDefinition("SELECT count(*) FROM entries", cancellationToken: cancellationToken));
             if (ftsRows != entryRows)
             {
                 ftsNeedsRebuild = true;
@@ -2435,312 +2428,6 @@ internal static class MemorySchema
             await connection.InWriteTransactionAsync(async () =>
             {
                 await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            """
-                            DROP TRIGGER IF EXISTS entries_fts_ai;
-                            DROP TRIGGER IF EXISTS entries_fts_ad;
-                            DROP TRIGGER IF EXISTS entries_fts_au;
-                            DROP TABLE IF EXISTS entries_fts;
-
-                            CREATE VIRTUAL TABLE entries_fts USING fts5(
-                                value,
-                                source_file,
-                                section,
-                                content='entries',
-                                content_rowid='id'
-                            );
-
-                            CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
-                                INSERT INTO entries_fts(rowid, value, source_file, section)
-                                VALUES (new.id, new.value, new.source_file, new.section);
-                            END;
-
-                            CREATE TRIGGER entries_fts_ad AFTER DELETE ON entries BEGIN
-                                INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
-                                VALUES ('delete', old.id, old.value, old.source_file, old.section);
-                            END;
-
-                            CREATE TRIGGER entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
-                                INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
-                                VALUES ('delete', old.id, old.value, old.source_file, old.section);
-                                INSERT INTO entries_fts(rowid, value, source_file, section)
-                                VALUES (new.id, new.value, new.source_file, new.section);
-                            END;
-
-                            INSERT INTO entries_fts(rowid, value, source_file, section)
-                            SELECT id, value, source_file, section FROM entries;
-                            """,
-                            cancellationToken: cancellationToken));
-            }, cancellationToken);
-        }
-
-        // Bucket-uniqueness indexes (docs/work/archive/2026-08-06-extraction-followups-plan.md): one
-        // row per (path, hash) in the shared tier, and per (path, hash, project, scope,
-        // context-label) in the committed tiers. A violating legacy bank is deduped before the
-        // indexes are created (survivor = earliest row), so creation can never fail on a real bank;
-        // a dedupe failure leaves the bank open, degraded, retried on the next open — deliberately
-        // softer than the FTS rebuild above, which rethrows.
-        var hasSharedIndex = await connection.ExecuteScalarAsync<long?>(
-                new CommandDefinition(
-                    "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_shared_bucket'",
-                    cancellationToken: cancellationToken)) is not null;
-        var hasCommittedIndex = await connection.ExecuteScalarAsync<long?>(
-                new CommandDefinition(
-                    "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_committed_bucket'",
-                    cancellationToken: cancellationToken)) is not null;
-        if (!hasSharedIndex || !hasCommittedIndex)
-        {
-            try
-            {
-                await connection.InWriteTransactionAsync(async () =>
-                {
-                    // Dedupe first (survivor = earliest row; content is identical within a group by
-                    // construction). The GROUP BY mirrors the index expressions exactly (COALESCE
-                    // included); NULL path/hash are guarded since GROUP BY equates them but UNIQUE treats them as distinct.
-                    await connection.ExecuteAsync(
-                            new CommandDefinition(
-                                """
-                                DELETE FROM entries
-                                WHERE scope = 'shared'
-                                  AND path IS NOT NULL AND hash IS NOT NULL
-                                  AND id NOT IN (SELECT MIN(id) FROM entries
-                                                 WHERE scope = 'shared'
-                                                 GROUP BY path, hash);
-
-                                DELETE FROM entries
-                                WHERE scope IN ('project', 'custom')
-                                  AND path IS NOT NULL AND hash IS NOT NULL
-                                  AND id NOT IN (SELECT MIN(id) FROM entries
-                                                 WHERE scope IN ('project', 'custom')
-                                                 GROUP BY path, hash, project_id, scope,
-                                                          COALESCE(context_label, ''));
-
-                                CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_shared_bucket
-                                    ON entries(path, hash)
-                                    WHERE scope = 'shared';
-
-                                CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_committed_bucket
-                                    ON entries(path, hash, project_id, scope, COALESCE(context_label, ''))
-                                    WHERE scope IN ('project', 'custom');
-                                """,
-                                cancellationToken: cancellationToken));
-                }, cancellationToken);
-            }
-            catch
-            {
-                // Degraded but open; the next open retries the dedupe + index creation.
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /// <summary>
-    ///     Ladder step 2 (docs/plans/2026-08-08-search-knn-perf.md): persists chunk_index/total_chunks
-    ///     and rebuilds vec_entries/vec_structure with a `ctx` column. It shared its DDL with the v9
-    ///     step from the start, so it now creates the demoted shape directly — the end state after a
-    ///     full ladder run is identical either way, and one vec0 DDL beats two that can drift.
-    ///     Rethrows on failure —
-    ///     an empty-shell vec_entries answers every query with silence, worse than failing to open.
-    /// </summary>
-    private static async Task MigrateToV2Async(SqliteConnection connection, CancellationToken cancellationToken)
-    {
-        var columns = (await connection.QueryAsync<string>(
-                new CommandDefinition(
-                    "SELECT name FROM pragma_table_info('entries')",
-                    cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
-        if (!columns.Contains("chunk_index"))
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        // GH #371: -1, not 0 — 0 is a real, meaningful first-chunk position; a row
-                        // this migration cannot yet order needs its own "unknown" default so the
-                        // bank-wide recompute below (fill-unknown-only) actually fills it in.
-                        "ALTER TABLE entries ADD COLUMN chunk_index INTEGER NOT NULL DEFAULT -1",
-                        cancellationToken: cancellationToken));
-        }
-
-        if (!columns.Contains("total_chunks"))
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        "ALTER TABLE entries ADD COLUMN total_chunks INTEGER NOT NULL DEFAULT 0",
-                        cancellationToken: cancellationToken));
-        }
-
-        // The embedder owns the dimension when the model is not all-MiniLM (384); read each
-        // table's own declared dimension rather than re-hardcoding, so a bank on a different
-        // model keeps its vectors through the rebuild.
-        var entriesDimension = await ReadVecDimensionAsync(connection, "vec_entries", cancellationToken);
-        var structureDimension = await ReadVecDimensionAsync(connection, "vec_structure", cancellationToken);
-
-        await connection.InWriteTransactionAsync(async () =>
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition(MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken));
-
-            await RebuildVecTableAsync(connection, "vec_entries", entriesDimension, "embedding",
-                    "embed_state = 'embedded' AND embedding IS NOT NULL", cancellationToken);
-            await RebuildVecTableAsync(connection, "vec_structure", structureDimension, "structure_embedding",
-                    "structure_embedding IS NOT NULL", cancellationToken);
-
-            // vec_entries_pending/vec_entries_ad need no ctx and are unchanged in shape; dropped
-            // and recreated anyway so every trigger on the table comes from one place post-rebuild.
-            await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        $"""
-                         DROP TRIGGER IF EXISTS vec_entries_au;
-                         DROP TRIGGER IF EXISTS vec_entries_pending;
-                         DROP TRIGGER IF EXISTS vec_entries_ad;
-
-                         {VecEntriesUpdateTriggerDdl}
-
-                         CREATE TRIGGER vec_entries_pending AFTER UPDATE OF embed_state ON entries
-                         WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
-                         BEGIN
-                             DELETE FROM vec_entries WHERE rowid = OLD.id;
-                         END;
-
-                         CREATE TRIGGER vec_entries_ad AFTER DELETE ON entries BEGIN
-                             DELETE FROM vec_entries WHERE rowid = OLD.id;
-                         END;
-                         """,
-                        cancellationToken: cancellationToken));
-        }, cancellationToken);
-    }
-
-    /// <summary>
-    ///     Ladder step 3: a bank-wide self-heal recompute of chunk_index/total_chunks, reusing the
-    ///     exact SQL <see cref="AiRaccoon.Infrastructure.Sync.SyncService" />'s merge uses. Heals rows
-    ///     an older binary wrote without running the write-path recompute (docs/plans/2026-08-08-search-knn-perf.md §3.3).
-    /// </summary>
-    private static async Task MigrateToV3Async(SqliteConnection connection, CancellationToken cancellationToken)
-    {
-        await connection.InWriteTransactionAsync(async () =>
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition(MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken));
-        }, cancellationToken);
-    }
-
-    /// <summary>
-    ///     Ladder step 4 (ADR-0018): adds promotion_queue.scorer_version. DEFAULT 0 on the column
-    ///     covers a fresh bank; existing rows backfill to 0 by SQLite's own ADD COLUMN default —
-    ///     deliberately, since none of them were ever scored by a versioned scorer.
-    /// </summary>
-    private static async Task MigrateToV4Async(SqliteConnection connection, CancellationToken cancellationToken)
-    {
-        var columns = (await connection.QueryAsync<string>(
-                new CommandDefinition(
-                    "SELECT name FROM pragma_table_info('promotion_queue')",
-                    cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
-        if (!columns.Contains("scorer_version"))
-        {
-            await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        "ALTER TABLE promotion_queue ADD COLUMN scorer_version INTEGER NOT NULL DEFAULT 0",
-                        cancellationToken: cancellationToken));
-        }
-    }
-
-    /// <summary>
-    ///     Ladder step 5 (memory source normalization): creates memory_source table, adds source_id
-    ///     FK column to entries, backfills from existing source_file/section, and rebuilds FTS.
-    /// </summary>
-    private static async Task MigrateToV5Async(SqliteConnection connection, CancellationToken cancellationToken)
-    {
-        await connection.InWriteTransactionAsync(async () =>
-        {
-            // 1. Create memory_source table (idempotent via IF NOT EXISTS in Ddl, but the
-            //    migration needs it before the backfill so we ensure it here too).
-            await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        """
-                        CREATE TABLE IF NOT EXISTS memory_source (
-                            id            INTEGER PRIMARY KEY,
-                            source_type   TEXT NOT NULL CHECK(source_type IN ('file','transcript','manual')),
-                            source_locator TEXT NOT NULL,
-                            section       TEXT NULL,
-                            heading_path  TEXT NULL
-                        );
-
-                        CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source
-                            ON memory_source(source_type, source_locator, COALESCE(section, ''));
-                        """,
-                        cancellationToken: cancellationToken));
-
-            // 2. Populate from existing entries (deduplicated by the unique constraint).
-            await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        """
-                        INSERT OR IGNORE INTO memory_source (source_type, source_locator, section)
-                        SELECT
-                            CASE
-                                WHEN source_file LIKE 'hermes/%' OR source_file LIKE '%/hermes/%' THEN 'transcript'
-                                WHEN source_file IS NULL OR source_file = '' THEN 'manual'
-                                ELSE 'file'
-                            END,
-                            COALESCE(source_file, ''),
-                            section
-                        FROM entries
-                        WHERE source_file IS NOT NULL OR section IS NOT NULL;
-
-                        INSERT OR IGNORE INTO memory_source (source_type, source_locator, section)
-                        VALUES ('manual', '', NULL);
-                        """,
-                        cancellationToken: cancellationToken));
-
-            // 3. Add source_id column to entries.
-            var columns = (await connection.QueryAsync<string>(
-                    new CommandDefinition(
-                        "SELECT name FROM pragma_table_info('entries')",
-                        cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
-            if (!columns.Contains("source_id"))
-            {
-                await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            "ALTER TABLE entries ADD COLUMN source_id INTEGER NULL",
-                            cancellationToken: cancellationToken));
-            }
-
-            // 4. Backfill source_id.
-            await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        """
-                        UPDATE entries
-                        SET source_id = (
-                            SELECT ms.id FROM memory_source ms
-                            WHERE ms.source_locator = COALESCE(entries.source_file, '')
-                              AND ms.section IS entries.section
-                              AND ms.source_type = CASE
-                                  WHEN entries.source_file LIKE 'hermes/%' OR entries.source_file LIKE '%/hermes/%' THEN 'transcript'
-                                  WHEN entries.source_file IS NULL OR entries.source_file = '' THEN 'manual'
-                                  ELSE 'file'
-                              END
-                        );
-                        """,
-                        cancellationToken: cancellationToken));
-
-            // 5. Verify no NULL source_id remains.
-            var nullCount = await connection.ExecuteScalarAsync<long>(
-                    new CommandDefinition(
-                        "SELECT count(*) FROM entries WHERE source_id IS NULL",
-                        cancellationToken: cancellationToken));
-            if (nullCount > 0)
-            {
-                throw new InvalidOperationException(
-                    $"MigrateToV5Async: {nullCount} entries still have NULL source_id after backfill");
-            }
-
-            // 6. Create source_id index.
-            await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        "CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id)",
-                        cancellationToken: cancellationToken));
-
-            // 7. Rebuild FTS (same pattern as MigrateToV1Async).
-            await connection.ExecuteAsync(
                     new CommandDefinition(
                         """
                         DROP TRIGGER IF EXISTS entries_fts_ai;
@@ -2749,7 +2436,11 @@ internal static class MemorySchema
                         DROP TABLE IF EXISTS entries_fts;
 
                         CREATE VIRTUAL TABLE entries_fts USING fts5(
-                            value, source_file, section, content='entries', content_rowid='id'
+                            value,
+                            source_file,
+                            section,
+                            content='entries',
+                            content_rowid='id'
                         );
 
                         CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
@@ -2773,8 +2464,306 @@ internal static class MemorySchema
                         SELECT id, value, source_file, section FROM entries;
                         """,
                         cancellationToken: cancellationToken));
+            }, cancellationToken);
+        }
+
+        // Bucket-uniqueness indexes (docs/work/archive/2026-08-06-extraction-followups-plan.md): one
+        // row per (path, hash) in the shared tier, and per (path, hash, project, scope,
+        // context-label) in the committed tiers. A violating legacy bank is deduped before the
+        // indexes are created (survivor = earliest row), so creation can never fail on a real bank;
+        // a dedupe failure leaves the bank open, degraded, retried on the next open — deliberately
+        // softer than the FTS rebuild above, which rethrows.
+        var hasSharedIndex = await connection.ExecuteScalarAsync<long?>(
+            new CommandDefinition(
+                "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_shared_bucket'",
+                cancellationToken: cancellationToken)) is not null;
+        var hasCommittedIndex = await connection.ExecuteScalarAsync<long?>(
+            new CommandDefinition(
+                "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'uq_entries_committed_bucket'",
+                cancellationToken: cancellationToken)) is not null;
+        if (!hasSharedIndex || !hasCommittedIndex)
+        {
+            try
+            {
+                await connection.InWriteTransactionAsync(async () =>
+                {
+                    // Dedupe first (survivor = earliest row; content is identical within a group by
+                    // construction). The GROUP BY mirrors the index expressions exactly (COALESCE
+                    // included); NULL path/hash are guarded since GROUP BY equates them but UNIQUE treats them as distinct.
+                    await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            """
+                            DELETE FROM entries
+                            WHERE scope = 'shared'
+                              AND path IS NOT NULL AND hash IS NOT NULL
+                              AND id NOT IN (SELECT MIN(id) FROM entries
+                                             WHERE scope = 'shared'
+                                             GROUP BY path, hash);
+
+                            DELETE FROM entries
+                            WHERE scope IN ('project', 'custom')
+                              AND path IS NOT NULL AND hash IS NOT NULL
+                              AND id NOT IN (SELECT MIN(id) FROM entries
+                                             WHERE scope IN ('project', 'custom')
+                                             GROUP BY path, hash, project_id, scope,
+                                                      COALESCE(context_label, ''));
+
+                            CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_shared_bucket
+                                ON entries(path, hash)
+                                WHERE scope = 'shared';
+
+                            CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_committed_bucket
+                                ON entries(path, hash, project_id, scope, COALESCE(context_label, ''))
+                                WHERE scope IN ('project', 'custom');
+                            """,
+                            cancellationToken: cancellationToken));
+                }, cancellationToken);
+            }
+            catch
+            {
+                // Degraded but open; the next open retries the dedupe + index creation.
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Ladder step 2 (docs/plans/2026-08-08-search-knn-perf.md): persists chunk_index/total_chunks
+    ///     and rebuilds vec_entries/vec_structure with a `ctx` column. It shared its DDL with the v9
+    ///     step from the start, so it now creates the demoted shape directly — the end state after a
+    ///     full ladder run is identical either way, and one vec0 DDL beats two that can drift.
+    ///     Rethrows on failure —
+    ///     an empty-shell vec_entries answers every query with silence, worse than failing to open.
+    /// </summary>
+    private static async Task MigrateToV2Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var columns = (await connection.QueryAsync<string>(
+            new CommandDefinition(
+                "SELECT name FROM pragma_table_info('entries')",
+                cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
+        if (!columns.Contains("chunk_index"))
+        {
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    // GH #371: -1, not 0 — 0 is a real, meaningful first-chunk position; a row
+                    // this migration cannot yet order needs its own "unknown" default so the
+                    // bank-wide recompute below (fill-unknown-only) actually fills it in.
+                    "ALTER TABLE entries ADD COLUMN chunk_index INTEGER NOT NULL DEFAULT -1",
+                    cancellationToken: cancellationToken));
+        }
+
+        if (!columns.Contains("total_chunks"))
+        {
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "ALTER TABLE entries ADD COLUMN total_chunks INTEGER NOT NULL DEFAULT 0",
+                    cancellationToken: cancellationToken));
+        }
+
+        // The embedder owns the dimension when the model is not all-MiniLM (384); read each
+        // table's own declared dimension rather than re-hardcoding, so a bank on a different
+        // model keeps its vectors through the rebuild.
+        var entriesDimension = await ReadVecDimensionAsync(connection, "vec_entries", cancellationToken);
+        var structureDimension = await ReadVecDimensionAsync(connection, "vec_structure", cancellationToken);
+
+        await connection.InWriteTransactionAsync(async () =>
+        {
+            await connection.ExecuteAsync(
+                new CommandDefinition(MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken));
+
+            await RebuildVecTableAsync(connection, "vec_entries", entriesDimension, "embedding",
+                "embed_state = 'embedded' AND embedding IS NOT NULL", cancellationToken);
+            await RebuildVecTableAsync(connection, "vec_structure", structureDimension, "structure_embedding",
+                "structure_embedding IS NOT NULL", cancellationToken);
+
+            // vec_entries_pending/vec_entries_ad need no ctx and are unchanged in shape; dropped
+            // and recreated anyway so every trigger on the table comes from one place post-rebuild.
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    $"""
+                     DROP TRIGGER IF EXISTS vec_entries_au;
+                     DROP TRIGGER IF EXISTS vec_entries_pending;
+                     DROP TRIGGER IF EXISTS vec_entries_ad;
+
+                     {VecEntriesUpdateTriggerDdl}
+
+                     CREATE TRIGGER vec_entries_pending AFTER UPDATE OF embed_state ON entries
+                     WHEN NEW.embed_state = 'pending' AND OLD.embed_state = 'embedded'
+                     BEGIN
+                         DELETE FROM vec_entries WHERE rowid = OLD.id;
+                     END;
+
+                     CREATE TRIGGER vec_entries_ad AFTER DELETE ON entries BEGIN
+                         DELETE FROM vec_entries WHERE rowid = OLD.id;
+                     END;
+                     """,
+                    cancellationToken: cancellationToken));
         }, cancellationToken);
     }
+
+    /// <summary>
+    ///     Ladder step 3: a bank-wide self-heal recompute of chunk_index/total_chunks, reusing the
+    ///     exact SQL <see cref="AiRaccoon.Infrastructure.Sync.SyncService" />'s merge uses. Heals rows
+    ///     an older binary wrote without running the write-path recompute (docs/plans/2026-08-08-search-knn-perf.md §3.3).
+    /// </summary>
+    private static async Task MigrateToV3Async(SqliteConnection connection, CancellationToken cancellationToken) =>
+        await connection.InWriteTransactionAsync(async () =>
+        {
+            await connection.ExecuteAsync(
+                new CommandDefinition(MemorySql.RecomputeChunkColumnsBankWide, cancellationToken: cancellationToken));
+        }, cancellationToken);
+
+    /// <summary>
+    ///     Ladder step 4 (ADR-0018): adds promotion_queue.scorer_version. DEFAULT 0 on the column
+    ///     covers a fresh bank; existing rows backfill to 0 by SQLite's own ADD COLUMN default —
+    ///     deliberately, since none of them were ever scored by a versioned scorer.
+    /// </summary>
+    private static async Task MigrateToV4Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var columns = (await connection.QueryAsync<string>(
+            new CommandDefinition(
+                "SELECT name FROM pragma_table_info('promotion_queue')",
+                cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
+        if (!columns.Contains("scorer_version"))
+        {
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "ALTER TABLE promotion_queue ADD COLUMN scorer_version INTEGER NOT NULL DEFAULT 0",
+                    cancellationToken: cancellationToken));
+        }
+    }
+
+    /// <summary>
+    ///     Ladder step 5 (memory source normalization): creates memory_source table, adds source_id
+    ///     FK column to entries, backfills from existing source_file/section, and rebuilds FTS.
+    /// </summary>
+    private static async Task MigrateToV5Async(SqliteConnection connection, CancellationToken cancellationToken) =>
+        await connection.InWriteTransactionAsync(async () =>
+        {
+            // 1. Create memory_source table (idempotent via IF NOT EXISTS in Ddl, but the
+            //    migration needs it before the backfill so we ensure it here too).
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    """
+                    CREATE TABLE IF NOT EXISTS memory_source (
+                        id            INTEGER PRIMARY KEY,
+                        source_type   TEXT NOT NULL CHECK(source_type IN ('file','transcript','manual')),
+                        source_locator TEXT NOT NULL,
+                        section       TEXT NULL,
+                        heading_path  TEXT NULL
+                    );
+
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_memory_source
+                        ON memory_source(source_type, source_locator, COALESCE(section, ''));
+                    """,
+                    cancellationToken: cancellationToken));
+
+            // 2. Populate from existing entries (deduplicated by the unique constraint).
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    """
+                    INSERT OR IGNORE INTO memory_source (source_type, source_locator, section)
+                    SELECT
+                        CASE
+                            WHEN source_file LIKE 'hermes/%' OR source_file LIKE '%/hermes/%' THEN 'transcript'
+                            WHEN source_file IS NULL OR source_file = '' THEN 'manual'
+                            ELSE 'file'
+                        END,
+                        COALESCE(source_file, ''),
+                        section
+                    FROM entries
+                    WHERE source_file IS NOT NULL OR section IS NOT NULL;
+
+                    INSERT OR IGNORE INTO memory_source (source_type, source_locator, section)
+                    VALUES ('manual', '', NULL);
+                    """,
+                    cancellationToken: cancellationToken));
+
+            // 3. Add source_id column to entries.
+            var columns = (await connection.QueryAsync<string>(
+                new CommandDefinition(
+                    "SELECT name FROM pragma_table_info('entries')",
+                    cancellationToken: cancellationToken))).ToHashSet(StringComparer.Ordinal);
+            if (!columns.Contains("source_id"))
+            {
+                await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "ALTER TABLE entries ADD COLUMN source_id INTEGER NULL",
+                        cancellationToken: cancellationToken));
+            }
+
+            // 4. Backfill source_id.
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    """
+                    UPDATE entries
+                    SET source_id = (
+                        SELECT ms.id FROM memory_source ms
+                        WHERE ms.source_locator = COALESCE(entries.source_file, '')
+                          AND ms.section IS entries.section
+                          AND ms.source_type = CASE
+                              WHEN entries.source_file LIKE 'hermes/%' OR entries.source_file LIKE '%/hermes/%' THEN 'transcript'
+                              WHEN entries.source_file IS NULL OR entries.source_file = '' THEN 'manual'
+                              ELSE 'file'
+                          END
+                    );
+                    """,
+                    cancellationToken: cancellationToken));
+
+            // 5. Verify no NULL source_id remains.
+            var nullCount = await connection.ExecuteScalarAsync<long>(
+                new CommandDefinition(
+                    "SELECT count(*) FROM entries WHERE source_id IS NULL",
+                    cancellationToken: cancellationToken));
+            if (nullCount > 0)
+            {
+                throw new InvalidOperationException(
+                    $"MigrateToV5Async: {nullCount} entries still have NULL source_id after backfill");
+            }
+
+            // 6. Create source_id index.
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "CREATE INDEX IF NOT EXISTS idx_entries_source_id ON entries(source_id)",
+                    cancellationToken: cancellationToken));
+
+            // 7. Rebuild FTS (same pattern as MigrateToV1Async).
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    """
+                    DROP TRIGGER IF EXISTS entries_fts_ai;
+                    DROP TRIGGER IF EXISTS entries_fts_ad;
+                    DROP TRIGGER IF EXISTS entries_fts_au;
+                    DROP TABLE IF EXISTS entries_fts;
+
+                    CREATE VIRTUAL TABLE entries_fts USING fts5(
+                        value, source_file, section, content='entries', content_rowid='id'
+                    );
+
+                    CREATE TRIGGER entries_fts_ai AFTER INSERT ON entries BEGIN
+                        INSERT INTO entries_fts(rowid, value, source_file, section)
+                        VALUES (new.id, new.value, new.source_file, new.section);
+                    END;
+
+                    CREATE TRIGGER entries_fts_ad AFTER DELETE ON entries BEGIN
+                        INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                        VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                    END;
+
+                    CREATE TRIGGER entries_fts_au AFTER UPDATE OF value, source_file, section ON entries BEGIN
+                        INSERT INTO entries_fts(entries_fts, rowid, value, source_file, section)
+                        VALUES ('delete', old.id, old.value, old.source_file, old.section);
+                        INSERT INTO entries_fts(rowid, value, source_file, section)
+                        VALUES (new.id, new.value, new.source_file, new.section);
+                    END;
+
+                    INSERT INTO entries_fts(rowid, value, source_file, section)
+                    SELECT id, value, source_file, section FROM entries;
+                    """,
+                    cancellationToken: cancellationToken));
+        }, cancellationToken);
 
     /// <summary>Drops and recreates one memory vec0 table, repopulating it from <paramref name="sourceColumn" /> of entries.</summary>
     private static Task RebuildVecTableAsync(SqliteConnection connection, string table, int dimension,
@@ -2788,16 +2777,16 @@ internal static class MemorySchema
         CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
-                new CommandDefinition($"DROP TABLE IF EXISTS {table}", cancellationToken: cancellationToken));
+            new CommandDefinition($"DROP TABLE IF EXISTS {table}", cancellationToken: cancellationToken));
         await connection.ExecuteAsync(
-                new CommandDefinition(VecTableDdl(table, dimension), cancellationToken: cancellationToken));
+            new CommandDefinition(VecTableDdl(table, dimension), cancellationToken: cancellationToken));
         await connection.ExecuteAsync(
-                new CommandDefinition(
-                    $"""
-                     INSERT INTO {table}(rowid, ctx, embedding)
-                     SELECT id, {ctxExpression}, {sourceColumn} FROM {sourceTable} WHERE {wherePredicate}
-                     """,
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                $"""
+                 INSERT INTO {table}(rowid, ctx, embedding)
+                 SELECT id, {ctxExpression}, {sourceColumn} FROM {sourceTable} WHERE {wherePredicate}
+                 """,
+                cancellationToken: cancellationToken));
     }
 
     /// <summary>
@@ -2811,21 +2800,20 @@ internal static class MemorySchema
         CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
-                new CommandDefinition($"DROP TABLE IF EXISTS {table}", cancellationToken: cancellationToken));
+            new CommandDefinition($"DROP TABLE IF EXISTS {table}", cancellationToken: cancellationToken));
         await connection.ExecuteAsync(
-                new CommandDefinition(TypedVecTableDdl(table, dimension), cancellationToken: cancellationToken));
+            new CommandDefinition(TypedVecTableDdl(table, dimension), cancellationToken: cancellationToken));
         await connection.ExecuteAsync(
-                new CommandDefinition(
-                    $"""
-                     INSERT INTO {table}(rowid, ctx, type, embedding)
-                     SELECT id, {ctxExpression}, entry_type, {sourceColumn} FROM {sourceTable} WHERE {wherePredicate}
-                     """,
-                    cancellationToken: cancellationToken));
+            new CommandDefinition(
+                $"""
+                 INSERT INTO {table}(rowid, ctx, type, embedding)
+                 SELECT id, {ctxExpression}, entry_type, {sourceColumn} FROM {sourceTable} WHERE {wherePredicate}
+                 """,
+                cancellationToken: cancellationToken));
     }
 
     /// <summary>The one runtime DDL for a vec0 table: `ctx` partitions the chunks, cosine is explicit (ADR-0133).</summary>
-    internal static string VecTableDdl(string table, int dimension) =>
-        $"CREATE VIRTUAL TABLE {table} USING vec0(ctx TEXT partition key, embedding float[{dimension}] distance_metric=cosine)";
+    internal static string VecTableDdl(string table, int dimension) => $"CREATE VIRTUAL TABLE {table} USING vec0(ctx TEXT partition key, embedding float[{dimension}] distance_metric=cosine)";
 
     /// <summary>
     ///     The typed runtime DDL for a MEMORY vec0 table (ADR-0141): a second partition key for the
@@ -2841,9 +2829,9 @@ internal static class MemorySchema
         CancellationToken cancellationToken)
     {
         var sql = await connection.ExecuteScalarAsync<string?>(
-                new CommandDefinition(
-                    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = @table",
-                    new { table }, cancellationToken: cancellationToken));
+            new CommandDefinition(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = @table",
+                new { table }, cancellationToken: cancellationToken));
         if (sql is null)
         {
             return DefaultEmbeddingDimension;
@@ -2854,6 +2842,13 @@ internal static class MemorySchema
             ? int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)
             : DefaultEmbeddingDimension;
     }
+
+    /// <summary>
+    ///     One vec table the v19 step rebuilds: which table, the columns it copies, and the
+    ///     dimension read from it. The dimension is read from the table itself, so a spec carries
+    ///     it unset until the read fills it; only a read spec reaches the rebuild.
+    /// </summary>
+    private sealed record VecRebuild(string Table, string Source, string Ctx, string Column, string Where, int Dimension = 0);
 
     private sealed record PragmaColumnRow(string Name, string Type, long NotNull, long Pk);
 
@@ -2867,8 +2862,10 @@ internal static class MemorySchema
 
     private readonly record struct ProjectPrune(string ProjectId, PrunedWatch Pruned);
 
-    /// <summary>One project's watch-overlap resolution failed on this bank open and was skipped —
-    /// its watches are left untouched rather than risk failing the whole bank open (S8).</summary>
+    /// <summary>
+    ///     One project's watch-overlap resolution failed on this bank open and was skipped —
+    ///     its watches are left untouched rather than risk failing the whole bank open (S8).
+    /// </summary>
     internal sealed record WatchOverlapPruneWarning(string ProjectId, string Reason);
 
     /// <summary>

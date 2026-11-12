@@ -1,4 +1,3 @@
-using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Infrastructure.Ingestion;

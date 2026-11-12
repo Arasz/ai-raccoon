@@ -14,13 +14,13 @@ public sealed class EventPump<T> : IEventPump<T>
 {
     private readonly Channel<T> _channel;
     private readonly bool _coalesce;
-    private readonly HashSet<T> _inFlight;
     private readonly Lock _coalesceGate = new();
+    private readonly HashSet<T> _inFlight;
     private int _capacity;
-    private long _queued;
-    private long _enqueuedTotal;
-    private long _dropped;
     private long _coalesced;
+    private long _dropped;
+    private long _enqueuedTotal;
+    private long _queued;
 
     public EventPump(PumpTopic topic)
     {

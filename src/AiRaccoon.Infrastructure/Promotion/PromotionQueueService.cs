@@ -19,8 +19,10 @@ public sealed partial class PromotionQueueService(
 {
     private const string EvictionReason = "capacity";
 
-    /// <summary>A-F11: how long a claim survives before ReclaimStaleClaimsAsync treats its owner
-    /// as dead and returns the row to the queue.</summary>
+    /// <summary>
+    ///     A-F11: how long a claim survives before ReclaimStaleClaimsAsync treats its owner
+    ///     as dead and returns the row to the queue.
+    /// </summary>
     private static readonly TimeSpan StaleClaimAge = TimeSpan.FromMinutes(5);
 
     public async Task<ProposeOutcome> ProposeAsync(string projectId, IReadOnlyList<QueueCandidate> candidates,
@@ -221,7 +223,7 @@ public sealed partial class PromotionQueueService(
             // (docs/adr/0026). The claim path of PromoteAsync shares this store method and
             // never calls RememberDiscardsAsync — promotions are not rejections.
             await queue.RememberDiscardsAsync(projectId, [.. removed.Select(r => r.Hash)],
-                    cancellationToken);
+                cancellationToken);
 
             var stats = await queue.GetStatsAsync(cancellationToken);
             metrics.RecordSnapshot(stats, await ReadCapAsync(cancellationToken));

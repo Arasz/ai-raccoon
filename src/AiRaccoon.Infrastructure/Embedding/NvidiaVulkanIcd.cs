@@ -17,14 +17,16 @@ internal static class NvidiaVulkanIcd
     internal static readonly string[] DriverDirectories =
     [
         "/usr/lib/x86_64-linux-gnu", "/lib/x86_64-linux-gnu", "/usr/lib64", "/lib64", "/usr/lib",
-        "/usr/lib/aarch64-linux-gnu", "/lib/aarch64-linux-gnu",
+        "/usr/lib/aarch64-linux-gnu", "/lib/aarch64-linux-gnu"
     ];
 
     /// <summary>The directories the Vulkan loader searches for ICD manifests on Linux, in its order.</summary>
     internal static IReadOnlyList<string> ManifestDirectories(string home, Func<string, string?> env)
     {
-        static IEnumerable<string> Split(string? value, string fallback) =>
-            (string.IsNullOrEmpty(value) ? fallback : value).Split(':', StringSplitOptions.RemoveEmptyEntries);
+        static IEnumerable<string> Split(string? value, string fallback)
+        {
+            return (string.IsNullOrEmpty(value) ? fallback : value).Split(':', StringSplitOptions.RemoveEmptyEntries);
+        }
 
         var configHome = NonEmpty(env("XDG_CONFIG_HOME")) ?? $"{home}/.config";
         var dataHome = NonEmpty(env("XDG_DATA_HOME")) ?? $"{home}/.local/share";
@@ -34,17 +36,15 @@ internal static class NvidiaVulkanIcd
             .. Split(env("XDG_CONFIG_DIRS"), "/etc/xdg").Select(d => $"{d}/vulkan/icd.d"),
             "/etc/vulkan/icd.d",
             $"{dataHome}/vulkan/icd.d",
-            .. Split(env("XDG_DATA_DIRS"), "/usr/local/share:/usr/share").Select(d => $"{d}/vulkan/icd.d"),
+            .. Split(env("XDG_DATA_DIRS"), "/usr/local/share:/usr/share").Select(d => $"{d}/vulkan/icd.d")
         ];
     }
 
     /// <summary>True only when the driver is present and neither a manifest nor a driver variable reaches the loader.</summary>
-    internal static bool NeedsManifest(bool anyManifestFound, string? driverPath, bool driverVariableSet) =>
-        !anyManifestFound && driverPath is not null && !driverVariableSet;
+    internal static bool NeedsManifest(bool anyManifestFound, string? driverPath, bool driverVariableSet) => !anyManifestFound && driverPath is not null && !driverVariableSet;
 
     /// <summary>A Vulkan ICD manifest naming <paramref name="driverPath" />.</summary>
-    internal static string Manifest(string driverPath) =>
-        $$"""{ "file_format_version": "1.0.1", "ICD": { "library_path": "{{driverPath}}", "api_version": "1.4.312" } }""";
+    internal static string Manifest(string driverPath) => $$"""{ "file_format_version": "1.0.1", "ICD": { "library_path": "{{driverPath}}", "api_version": "1.4.312" } }""";
 
     private static string? NonEmpty(string? value) => string.IsNullOrEmpty(value) ? null : value;
 }

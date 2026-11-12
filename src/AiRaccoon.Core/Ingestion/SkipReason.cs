@@ -11,8 +11,7 @@ public enum SkipReason
     UnsupportedType,
 
     /// <summary>The content is binary.</summary>
-    [JsonStringEnumMemberName("binary")]
-    Binary,
+    [JsonStringEnumMemberName("binary")] Binary,
 
     /// <summary>A memory handler claimed the file but produced no chunks from non-blank content.</summary>
     [JsonStringEnumMemberName("unparseable")]
@@ -22,11 +21,12 @@ public enum SkipReason
 /// <summary>Renders a <see cref="SkipReason" /> the way JSON does.</summary>
 public static class SkipReasonExtensions
 {
-    public static string ToWireName(this SkipReason reason) => reason switch
-    {
-        SkipReason.UnsupportedType => "unsupported-type",
-        SkipReason.Binary => "binary",
-        SkipReason.Unparseable => "unparseable",
-        _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, null)
-    };
+    public static string ToWireName(this SkipReason reason) =>
+        reason switch
+        {
+            SkipReason.UnsupportedType => "unsupported-type",
+            SkipReason.Binary => "binary",
+            SkipReason.Unparseable => "unparseable",
+            _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, null)
+        };
 }

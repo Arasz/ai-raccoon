@@ -16,11 +16,9 @@ internal static class WatchProtocol
 
     public const string CoveringPathExtension = "coveringPath";
 
-    public static string ForStatus(string? projectId) =>
-        projectId is null ? Path : $"{Path}?projectId={Uri.EscapeDataString(projectId)}";
+    public static string ForStatus(string? projectId) => projectId is null ? Path : $"{Path}?projectId={Uri.EscapeDataString(projectId)}";
 
-    public static string ForRemove(string projectId, string path) =>
-        $"{Path}?projectId={Uri.EscapeDataString(projectId)}&path={Uri.EscapeDataString(path)}";
+    public static string ForRemove(string projectId, string path) => $"{Path}?projectId={Uri.EscapeDataString(projectId)}&path={Uri.EscapeDataString(path)}";
 }
 
 internal sealed record WatchAddRequest(string ProjectId, string Path);
@@ -40,9 +38,8 @@ internal sealed record WatchRefusal(string Kind, string Message, string? Coverin
     public static WatchRefusal? FromProblem(JsonElement problem) =>
         problem.ValueKind == JsonValueKind.Object
         && problem.TryGetProperty(WatchProtocol.KindExtension, out var kind) && kind.ValueKind == JsonValueKind.String
-            ? new WatchRefusal(kind.GetString()!, Text(problem, "detail") ?? string.Empty, Text(problem, WatchProtocol.CoveringPathExtension))
+            ? new WatchRefusal(kind.GetString()!, Text(problem, "detail") ?? "", Text(problem, WatchProtocol.CoveringPathExtension))
             : null;
 
-    private static string? Text(JsonElement problem, string name) =>
-        problem.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+    private static string? Text(JsonElement problem, string name) => problem.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 }

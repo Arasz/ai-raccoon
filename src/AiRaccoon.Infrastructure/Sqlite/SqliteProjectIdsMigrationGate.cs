@@ -17,8 +17,8 @@ public sealed class SqliteProjectIdsMigrationGate(ISqliteConnectionFactory facto
         await using var connection = await factory.OpenBankSkippingEnsureAsync(cancellationToken);
         await MemorySchema.EnsureCheapAsync(connection, cancellationToken);
         return await connection.ExecuteScalarAsync<long>(new CommandDefinition(
-                MemorySql.HasFinishedRepairRequest,
-                new { kind = RepairKinds.ProjectIds },
-                cancellationToken: cancellationToken)) > 0;
+            MemorySql.HasFinishedRepairRequest,
+            new { kind = RepairKinds.ProjectIds },
+            cancellationToken: cancellationToken)) > 0;
     }
 }

@@ -13,30 +13,31 @@ namespace AiRaccoon.Infrastructure.Embedding.NeuralEngine;
 /// </summary>
 internal sealed partial class NeuralEngineEmbeddingGenerator : ILocalEmbeddingGenerator
 {
-    /// <summary>How long the background compile may take before WebGPU is kept for good.</summary>
-    public static readonly TimeSpan CompileDeadline = TimeSpan.FromMinutes(5);
-
     /// <summary>The CLS cosine every probe row must reach between the Neural Engine and WebGPU.</summary>
     public const double ProbeCosine = 0.999;
 
     private const string ProbeSentence = "The drain embeds pending rows one at a time on the Neural Engine.";
 
-    private readonly ILocalEmbeddingGenerator _webGpu;
-    private readonly IEmbeddingTokenizer _tokenizer;
-    private readonly bool _normalize;
-    private readonly ICoreMlSessionFactory _factory;
+    /// <summary>How long the background compile may take before WebGPU is kept for good.</summary>
+    public static readonly TimeSpan CompileDeadline = TimeSpan.FromMinutes(5);
+
     private readonly CoreMlCache _cache;
-    private readonly TimeProvider _time;
     private readonly TimeSpan _deadline;
+    private readonly ICoreMlSessionFactory _factory;
     private readonly ILogger _logger;
-    private readonly string _webGpuProvider;
+    private readonly bool _normalize;
     private readonly Lock _serving = new();
-    private readonly CancellationTokenSource _stop = new();
     private readonly Task _settled;
+    private readonly CancellationTokenSource _stop = new();
+    private readonly TimeProvider _time;
+    private readonly IEmbeddingTokenizer _tokenizer;
+
+    private readonly ILocalEmbeddingGenerator _webGpu;
+    private readonly string _webGpuProvider;
     private Task _compile = Task.CompletedTask;
+    private bool _disposed;
     private Loaded? _neuralEngine;
     private ILocalEmbeddingGenerator? _overflow;
-    private bool _disposed;
 
     internal NeuralEngineEmbeddingGenerator(ILocalEmbeddingGenerator webGpu, IEmbeddingTokenizer tokenizer, bool normalize,
         ICoreMlSessionFactory factory, CoreMlCache cache, TimeProvider time, TimeSpan deadline, ILogger logger)
@@ -66,30 +67,18 @@ internal sealed partial class NeuralEngineEmbeddingGenerator : ILocalEmbeddingGe
     /// <summary>The background compile's state machine; every move it made is in its history.</summary>
     public NeuralEngineSwitch Switch { get; } = new();
 
-    public string ExecutionProvider => Switch.State switch
-    {
-        NeuralEngineState.NeuralEngineServing => "CoreML",
-        NeuralEngineState.Refused => $"{_webGpuProvider} (CoreML refused: {Switch.History[^1].Reason})",
-        _ => $"{_webGpuProvider} (CoreML compiling)"
-    };
-
-    public int IntraOpThreads { get; }
-
-    /// <summary>Why this platform cannot run the Neural Engine path, or null when it can.</summary>
-    public static string? RefusalReason(bool macArm64, bool graphPresent) =>
-        !macArm64 ? "requires macOS on Apple Silicon"
-        : !graphPresent ? "graph missing"
-        : null;
-
-    /// <summary>Completes once the background compile has settled, with the state it settled in. Test hook.</summary>
-    internal async Task<NeuralEngineState> WaitUntilSettledAsync(CancellationToken cancellationToken)
-    {
-        await _settled.WaitAsync(cancellationToken);
-        return Switch.State;
-    }
-
     /// <summary>The background session load, which can outlive <see cref="Dispose" /> by one bucket compile. Test hook.</summary>
     internal Task Compile => Volatile.Read(ref _compile);
+
+    public string ExecutionProvider =>
+        Switch.State switch
+        {
+            NeuralEngineState.NeuralEngineServing => "CoreML",
+            NeuralEngineState.Refused => $"{_webGpuProvider} (CoreML refused: {Switch.History[^1].Reason})",
+            _ => $"{_webGpuProvider} (CoreML compiling)"
+        };
+
+    public int IntraOpThreads { get; }
 
     public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(IEnumerable<string> values,
         EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default)
@@ -121,6 +110,19 @@ internal sealed partial class NeuralEngineEmbeddingGenerator : ILocalEmbeddingGe
         }
 
         _stop.Cancel();
+    }
+
+    /// <summary>Why this platform cannot run the Neural Engine path, or null when it can.</summary>
+    public static string? RefusalReason(bool macArm64, bool graphPresent) =>
+        !macArm64 ? "requires macOS on Apple Silicon"
+        : !graphPresent ? "graph missing"
+        : null;
+
+    /// <summary>Completes once the background compile has settled, with the state it settled in. Test hook.</summary>
+    internal async Task<NeuralEngineState> WaitUntilSettledAsync(CancellationToken cancellationToken)
+    {
+        await _settled.WaitAsync(cancellationToken);
+        return Switch.State;
     }
 
     private GeneratedEmbeddings<Embedding<float>> Serve(List<string> texts, EmbeddingGenerationOptions? options,
@@ -343,8 +345,7 @@ internal sealed partial class NeuralEngineEmbeddingGenerator : ILocalEmbeddingGe
         }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
     }
 
-    private static void Observe(Task task) =>
-        _ = task.ContinueWith(t => t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+    private static void Observe(Task task) => _ = task.ContinueWith(t => t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
 
     private sealed record ProbeRow(int Bucket, string Text, IReadOnlyList<int> Ids);
 
@@ -354,6 +355,16 @@ internal sealed partial class NeuralEngineEmbeddingGenerator : ILocalEmbeddingGe
         public CoreMlCacheLease Lease { get; } = lease;
 
         public float[][] ProbeVectors { get; set; } = [];
+
+        public void Dispose()
+        {
+            foreach (var session in sessions.Values)
+            {
+                session.Dispose();
+            }
+
+            Lease.Dispose();
+        }
 
         /// <summary>Runs one row at batch 1, padded with id 0 and mask 0 to its bucket.</summary>
         public float[] Run(IReadOnlyList<int> ids)
@@ -368,16 +379,6 @@ internal sealed partial class NeuralEngineEmbeddingGenerator : ILocalEmbeddingGe
             }
 
             return sessions[length].Run(inputIds, mask);
-        }
-
-        public void Dispose()
-        {
-            foreach (var session in sessions.Values)
-            {
-                session.Dispose();
-            }
-
-            Lease.Dispose();
         }
     }
 

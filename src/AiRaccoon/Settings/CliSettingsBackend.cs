@@ -77,9 +77,7 @@ internal static partial class CliSettingsBackend
             }
 
             throw new SettingsServerUnavailableException(ErrorCode.Reach.Unavailable,
-                $"ai-raccoon: no settings server at {ServerProbe.EndpointFor(config.Port)} " +
-                $"(serve exit {acquired.Result.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})" +
-                (acquired.Result.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty));
+                $"ai-raccoon: no settings server at {ServerProbe.EndpointFor(config.Port)} (serve exit {acquired.Result.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"}){(acquired.Result.ServeStderr is { } stderr ? $" — stderr: {stderr}" : "")}");
         }
 
         // ADR-0107 PC.4: acquired.Result.Url is only ever non-null once identity is already proven
@@ -87,8 +85,7 @@ internal static partial class CliSettingsBackend
         // here — RefusalReason (e.g. a chmod-700 remedy) is the real, actionable cause when set.
         var tokenFile = new McpTokenFile(config.Options);
         var token = tokenFile.Read() ?? throw new SettingsServerUnavailableException(ErrorCode.Server.NoToken,
-            $"ai-raccoon: the backend at {acquired.Result.Url} is listening but has no usable token for this data root " +
-            $"({tokenFile.RefusalReason ?? $"{tokenFile.Path} holds no token yet"})");
+            $"ai-raccoon: the backend at {acquired.Result.Url} is listening but has no usable token for this data root ({tokenFile.RefusalReason ?? $"{tokenFile.Path} holds no token yet"})");
 
         // F38 residual (owner ruling N1, 2026-09-22): the idle default stays intended, so this is
         // disclosure only — the backend survives this command; the line names the port that actually
@@ -101,8 +98,7 @@ internal static partial class CliSettingsBackend
     ///     The client every settings call goes through. It has no timeout of its own: the store bounds
     ///     each call with <see cref="RequestDeadline" />, and a repair report's bank-wide scan runs unbounded.
     /// </summary>
-    internal static HttpClient CreateClient(string url) =>
-        new() { BaseAddress = new Uri(url), Timeout = Timeout.InfiniteTimeSpan };
+    internal static HttpClient CreateClient(string url) => new() { BaseAddress = new Uri(url), Timeout = Timeout.InfiniteTimeSpan };
 
     internal static partial class Log
     {

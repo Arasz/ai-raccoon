@@ -1,6 +1,5 @@
 using AiRaccoon.Core.Memory.Filtering;
 using CommunityToolkit.Diagnostics;
-using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
@@ -27,9 +26,9 @@ public interface INoiseShadowObserver
 ///     content, not an embedding comparison, so there is nothing left to reuse or fetch here.
 ///     Gated by <see cref="NoiseConfigKeys.LearnerShadowEnabledGlobal" />, default off.
 ///     <para>
-///     <see cref="INoiseDetector" /> defaults to <see cref="NoOpNoiseDetector" /> — no scoring model
-///     is shipped yet (ADR-0039). This class's own job is only to prove the seam is wired and
-///     exercised, not to decide anything.
+///         <see cref="INoiseDetector" /> defaults to <see cref="NoOpNoiseDetector" /> — no scoring model
+///         is shipped yet (ADR-0039). This class's own job is only to prove the seam is wired and
+///         exercised, not to decide anything.
 ///     </para>
 /// </summary>
 public sealed partial class NoiseShadowObserver(

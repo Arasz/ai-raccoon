@@ -20,7 +20,7 @@ public sealed class LmStudioEmbedder(string model, string? baseUrl = null) : Emb
         var url = baseUrl ?? Environment.GetEnvironmentVariable("LMSTUDIO_BASE_URL") ?? "http://localhost:1234";
         var client = new OpenAIClient(
             new ApiKeyCredential("lm-studio"), // LM Studio does not validate the key
-            new OpenAIClientOptions { Endpoint = new Uri(url.TrimEnd('/') + "/v1") });
+            new OpenAIClientOptions { Endpoint = new Uri($"{url.TrimEnd('/')}/v1") });
         return client.GetEmbeddingClient(model).AsIEmbeddingGenerator();
     }
 }

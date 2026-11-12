@@ -7,8 +7,8 @@ using ModelContextProtocol.Client;
 namespace AiRaccoon.Hosting.Proxy;
 
 /// <summary>
-/// Owns MCP sessions; every open proves the configured endpoint before sending credentials.
-/// Only confirmed connection refusal permits a shared backend start; shared lifetime belongs to IdleWatchdog.
+///     Owns MCP sessions; every open proves the configured endpoint before sending credentials.
+///     Only confirmed connection refusal permits a shared backend start; shared lifetime belongs to IdleWatchdog.
 /// </summary>
 public sealed class BackendSessions(
     IBackendLauncher backendLauncher,
@@ -40,7 +40,7 @@ public sealed class BackendSessions(
     private bool _disposed;
 
     /// <summary>The endpoint the last successful acquire returned; empty until one succeeds. A failed open leaves the previous value unchanged, so readers must only use it after a successful OpenAsync.</summary>
-    public string Url { get; private set; } = string.Empty;
+    public string Url { get; private set; } = "";
 
     public async Task<McpClient> OpenAsync(string? revision, CancellationToken ctx)
     {
@@ -53,16 +53,14 @@ public sealed class BackendSessions(
             }
 
             throw new BackendUnavailableException(ErrorCode.Reach.BackendUnavailable, Unavailable(
-                $"no MCP backend at {ServerProbe.EndpointFor(config.Port)} (serve exit {acquired.Result.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"})" +
-                (acquired.Result.ServeStderr is { } stderr ? $" — stderr: {stderr}" : string.Empty)));
+                $"no MCP backend at {ServerProbe.EndpointFor(config.Port)} (serve exit {acquired.Result.ServeExitCode?.ToString(CultureInfo.InvariantCulture) ?? "none"}){(acquired.Result.ServeStderr is { } stderr ? $" — stderr: {stderr}" : "")}"));
         }
 
         // ADR-0107 PC.4: acquired.Result.Url is only ever non-null once identity is already proven
         // for both attach and start, so "another data root" never applies
         // here — RefusalReason (e.g. a chmod-700 remedy) is the real, actionable cause when set.
         var token = _tokenFile.Read() ?? throw new BackendUnavailableException(ErrorCode.Server.NoToken, Unavailable(
-            $"the backend at {acquired.Result.Url} is listening but has no usable token for this data root " +
-            $"({_tokenFile.RefusalReason ?? $"{_tokenFile.Path} holds no token yet"})"));
+            $"the backend at {acquired.Result.Url} is listening but has no usable token for this data root ({_tokenFile.RefusalReason ?? $"{_tokenFile.Path} holds no token yet"})"));
 
         Url = acquired.Result.Url;
         var session = await OpenSessionAsync(new Uri(acquired.Result.Url), token, revision, ctx);

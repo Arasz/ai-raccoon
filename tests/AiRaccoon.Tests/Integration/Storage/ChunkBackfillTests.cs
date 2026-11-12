@@ -1,4 +1,3 @@
-using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Sqlite;
 using Dapper;
@@ -7,7 +6,6 @@ using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using Xunit;
 using xRetry.v3;
-using AiRaccoon.Core.Memory;
 
 namespace AiRaccoon.Tests.Integration.Storage;
 

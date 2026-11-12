@@ -20,7 +20,6 @@ using FluentValidation;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
-using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Shouldly;
 using Xunit;
@@ -244,7 +243,7 @@ public sealed class ToolRefusalsTests : IAsyncLifetime
     {
         var records = logs.Collector.GetSnapshot()
             .Where(r => r.Level >= LogLevel.Warning)
-            .Select(r => $"  [{r.Level}] {r.Category}: {r.Message}{(r.Exception is null ? string.Empty : $"\n    -> {r.Exception.GetType().FullName}: {r.Exception.Message}")}")
+            .Select(r => $"  [{r.Level}] {r.Category}: {r.Message}{(r.Exception is null ? "" : $"\n    -> {r.Exception.GetType().FullName}: {r.Exception.Message}")}")
             .ToList();
 
         return records.Count == 0

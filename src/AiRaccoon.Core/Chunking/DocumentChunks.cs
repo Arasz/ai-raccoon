@@ -11,8 +11,10 @@ public sealed record PartitionRow(long Id, bool IsFileRow, long ChunkIndex);
 
 public static class DocumentChunks
 {
-    /// <summary>The rows a file's chunks are stored as: a chunk repeated verbatim is one row at its first occurrence,
-    /// so positions run 0..n-1 in document order and n is the row count.</summary>
+    /// <summary>
+    ///     The rows a file's chunks are stored as: a chunk repeated verbatim is one row at its first occurrence,
+    ///     so positions run 0..n-1 in document order and n is the row count.
+    /// </summary>
     public static IReadOnlyList<DocumentChunk> Distinct(string path, IReadOnlyList<TextChunk> chunks)
     {
         Guard.IsNotNull(path);
@@ -77,8 +79,10 @@ public static class DocumentChunks
         return positions;
     }
 
-    /// <summary>Positions for the rows citing a file that follow its first <paramref name="start" /> positions, in
-    /// their stored order.</summary>
+    /// <summary>
+    ///     Positions for the rows citing a file that follow its first <paramref name="start" /> positions, in
+    ///     their stored order.
+    /// </summary>
     public static IEnumerable<(long Id, long ChunkIndex)> After(long start, IEnumerable<PartitionRow> citing)
     {
         Guard.IsNotNull(citing);
@@ -87,6 +91,5 @@ public static class DocumentChunks
     }
 
     /// <summary>Known positions ascending, then unknown ones (-1) by id.</summary>
-    private static IOrderedEnumerable<PartitionRow> InStoredOrder(IEnumerable<PartitionRow> rows) =>
-        rows.OrderBy(row => row.ChunkIndex < 0).ThenBy(row => row.ChunkIndex).ThenBy(row => row.Id);
+    private static IOrderedEnumerable<PartitionRow> InStoredOrder(IEnumerable<PartitionRow> rows) => rows.OrderBy(row => row.ChunkIndex < 0).ThenBy(row => row.ChunkIndex).ThenBy(row => row.Id);
 }

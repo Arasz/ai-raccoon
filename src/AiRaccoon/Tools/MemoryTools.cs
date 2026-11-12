@@ -32,9 +32,6 @@ public sealed partial class MemoryTools(
     IEmbeddingService embeddings,
     TimeProvider? timeProvider = null)
 {
-    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
-
-
     private const string TnAddMemory = "add_memory";
     private const string TnQuery = "query";
     private const string TnGetIndex = "get_index";
@@ -47,14 +44,15 @@ public sealed partial class MemoryTools(
 
     private static readonly SearchQuery.Validator SearchQueryValidator = new();
     private static readonly MemoryWriteRequest.Validator MemoryWriteRequestValidator = new();
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     [McpServerTool(Name = TnAddMemory)]
     [McpToolScope(ToolScope.Project)]
     [Description(
         "Writes content into memory. Writes land in the project's committed context by default; naming a workspace_id routes them into that isolated workspace, and workspace_id wins over context when both are supplied (the sandbox has priority). A write may be refused (e.g. it matched a noise policy) — check stored: a refused write has stored=false and a reason naming what rejected it, and hash is empty.")]
     public async Task<ApiEnvelope<WriteResult>> Write(
-        [Description("The project id; every memory operation is scoped to a project.")]
-        [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id; every memory operation is scoped to a project.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description("The content to remember.")]
         string content,
         [Description("When set, the write lands in this workspace's isolated context instead of the project context. Wins over context when both are supplied (the sandbox has priority).")]
@@ -84,39 +82,10 @@ public sealed partial class MemoryTools(
     [McpServerTool(Name = TnQuery)]
     [McpToolScope(ToolScope.All)]
     [Description(
-        "Hybrid semantic search over the bank. projectId=shared directly reads shared documents and promoted knowledge (scope all/shared only, without labels/workspaces). scope=all (default) searches shared + project (+ workspace when named); "
-        + "scope=project searches the project only; scope=shared searches shared documents and promoted knowledge. A project scope "
-        + "covers every context in the project unless contextLabel narrows it to one. sessionId is required: every agent "
-        + "has a session, and the id is stored verbatim on the search_quality row. Entry type defaults to memory,code,file, with each "
-        + "section ranked by its own hybrid. Every search records a search_quality row and returns meta.correlationId "
-        + "for grade and follow-through. Selections including Memory or File store the memory leg count and files. Code-only stores the code "
-        + "count with an empty file list. Code paths never enter the table. A result warning of '"
-        + SearchWarnings.EngineNotConfiguredPrefix + "' means the memory section is keyword-only because the memory "
-        + "embedding engine is not installed: relay '" + EmbeddingEngineSetup.DefaultModelCommand + "' to the user "
-        + "once and treat the memory hits as incomplete; re-running the search changes nothing until that command runs. "
-        + "A result warning of '"
-        + CodeSearchWarnings.EngineNotConfiguredPrefix + "' means the code section is keyword-only because the code "
-        + "embedding engine is not installed: relay '" + CodeEngineSetup.DefaultModelCommand + "' to the user once and "
-        + "treat the code hits as incomplete; re-running the search changes nothing until that command runs. "
-        + "The response may carry an evidenceByHash map (hash → retrieval evidence): fusionStrength (0-1, the fraction of the strongest leg "
-        + "agreement this query could have produced — ~0.95 means every firing leg ranked it first, ~0.2 is thin), "
-        + "legs (which legs agreed and at which ranks; a single-leg entry is itself a thin-response tell), and cosine "
-        + "(the vector leg's raw content-embedding similarity to the query, when a vector leg participated and "
-        + "reported one — a hash-comparable magnitude, never the structure-blended score legs/order use). The "
-        + "response may carry fusionStats (topMargin/topVsMedian over pre-normalization raws, plus maxPossible "
-        + "and participatingLegs). A flat margin plus a single-leg top is the measurable 'best of a bad lot' "
-        + "signature — a thin response, not a verdict. "
-        + "These signals claim no relevance (no relevance value is computed); margins are computed over the PRE-floor "
-        + "candidate population, not the served set. A response with unranked: true ranks rows that carry "
-        + "no absolute relevance backing (flat margin, one leg, no row clearing the absolute relevance floor or "
-        + "containing every query term) — candidates to verify, not answers. An absolute relevance floor drops "
-        + "rows whose fused content cosine is below the engine's calibrated floor (0.79 for the bundled model, 0.35 "
-        + "for an engine that declares none) unless the row's text contains every query term (a "
-        + "keyword match on an identifier such as a ticket key is kept whatever its cosine), so a zero-overlap "
-        + "query comes back empty. A response short of "
-        + "its requested limit reports the cuts as truncation:[{floor, threshold, dropped}].")]
+        $"Hybrid semantic search over the bank. projectId=shared directly reads shared documents and promoted knowledge (scope all/shared only, without labels/workspaces). scope=all (default) searches shared + project (+ workspace when named); scope=project searches the project only; scope=shared searches shared documents and promoted knowledge. A project scope covers every context in the project unless contextLabel narrows it to one. sessionId is required: every agent has a session, and the id is stored verbatim on the search_quality row. Entry type defaults to memory,code,file, with each section ranked by its own hybrid. Every search records a search_quality row and returns meta.correlationId for grade and follow-through. Selections including Memory or File store the memory leg count and files. Code-only stores the code count with an empty file list. Code paths never enter the table. A result warning of '{SearchWarnings.EngineNotConfiguredPrefix}' means the memory section is keyword-only because the memory embedding engine is not installed: relay '{EmbeddingEngineSetup.DefaultModelCommand}' to the user once and treat the memory hits as incomplete; re-running the search changes nothing until that command runs. A result warning of '{CodeSearchWarnings.EngineNotConfiguredPrefix}' means the code section is keyword-only because the code embedding engine is not installed: relay '{CodeEngineSetup.DefaultModelCommand}' to the user once and treat the code hits as incomplete; re-running the search changes nothing until that command runs. The response may carry an evidenceByHash map (hash → retrieval evidence): fusionStrength (0-1, the fraction of the strongest leg agreement this query could have produced — ~0.95 means every firing leg ranked it first, ~0.2 is thin), legs (which legs agreed and at which ranks; a single-leg entry is itself a thin-response tell), and cosine (the vector leg's raw content-embedding similarity to the query, when a vector leg participated and reported one — a hash-comparable magnitude, never the structure-blended score legs/order use). The response may carry fusionStats (topMargin/topVsMedian over pre-normalization raws, plus maxPossible and participatingLegs). A flat margin plus a single-leg top is the measurable 'best of a bad lot' signature — a thin response, not a verdict. These signals claim no relevance (no relevance value is computed); margins are computed over the PRE-floor candidate population, not the served set. A response with unranked: true ranks rows that carry no absolute relevance backing (flat margin, one leg, no row clearing the absolute relevance floor or containing every query term) — candidates to verify, not answers. An absolute relevance floor drops rows whose fused content cosine is below the engine's calibrated floor (0.79 for the bundled model, 0.35 for an engine that declares none) unless the row's text contains every query term (a keyword match on an identifier such as a ticket key is kept whatever its cosine), so a zero-overlap query comes back empty. A response short of its requested limit reports the cuts as truncation:[{{floor, threshold, dropped}}].")]
     public async Task<ApiEnvelope<SearchResultList>> Search(
-        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description(
             "The search query. Semantic matching only sees roughly the first N tokens — the active " +
             "memory embedding engine's own window (1022 tokens for the bundled model from 1.54.0; " +
@@ -136,7 +105,8 @@ public sealed partial class MemoryTools(
         string scope = "all",
         [Description("When set, also searches this workspace's isolated context.")]
         string? workspaceId = null,
-        [Description("Maximum results (default 8). The score floors can serve fewer than this even when the bank holds more matches; when that shortens the response, truncation names the floor that dropped rows and how many.")]
+        [Description(
+            "Maximum results (default 8). The score floors can serve fewer than this even when the bank holds more matches; when that shortens the response, truncation names the floor that dropped rows and how many.")]
         int limit = SearchDefaults.Limit,
         [Description(
             "Relative floor: keeps results scoring at least this fraction of THIS response's top hit (default 0.6). " +
@@ -166,7 +136,8 @@ public sealed partial class MemoryTools(
         [Description("Narrows the project scope to one context. Omit it to search every context in " +
                      "the project (the default); get_store_statistics lists the labels in use.")]
         string? contextLabel = null,
-        [Description("Comma-separated entry types: memory, code, file. Any set naming both memory and file (the default memory,code,file included) applies no type filter to memory hits, so unclassified rows are included. Narrower sets select declared types only. Code is project-scoped; shared-only queries return no code hits.")]
+        [Description(
+            "Comma-separated entry types: memory, code, file. Any set naming both memory and file (the default memory,code,file included) applies no type filter to memory hits, so unclassified rows are included. Narrower sets select declared types only. Code is project-scoped; shared-only queries return no code hits.")]
         string entryType = "memory,code,file",
         [Description("Code section only: maximum results, overriding limit for the code section (bank setting unaffected).")]
         int? codeLimit = null,
@@ -174,7 +145,7 @@ public sealed partial class MemoryTools(
         double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnQuery, cancellationToken);
+        var canonicalProjectId = await gate.RequireAsync(projectId, AccessRequirement.Read, TnQuery, cancellationToken);
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
         var parsedScope = scope.ToLowerInvariant() switch
@@ -184,26 +155,27 @@ public sealed partial class MemoryTools(
             "shared" => SearchScope.Shared,
             _ => throw new McpException($"invalid-params: Invalid scope '{scope}': expected all, project, or shared.")
         };
+
         var parsedTypes = ParseEntryTypes(entryType);
+
         ValidateCodeOverrides(codeLimit, codeMinRelativeScore);
 
-        // Enum wire names are validated here (not silently defaulted) so a typo fails fast,
-        // and provided tuning values are range-checked before any bank work.
-        var searchQuery = BuildValidatedSearchQuery(canonical, query, parsedScope, workspaceId, limit,
-            minRelativeScore, rrfK, ftsWeight, vectorWeight, contextLabel, sourceLambda,
-            consolidationThreshold, docScoreFormula, candidateWindow) with { EntryTypes = parsedTypes };
 
-        var guard = await queryGuard.EvaluateAsync(canonical, query, cancellationToken);
-        if (guard.Shadowed is { } suppressed)
+        var searchQuery = BuildValidatedSearchQuery(canonicalProjectId, query, parsedScope, workspaceId, limit,
+                minRelativeScore, rrfK, ftsWeight, vectorWeight, contextLabel, sourceLambda,
+                consolidationThreshold, docScoreFormula, candidateWindow) with
+            {
+                EntryTypes = parsedTypes
+            };
+
+        var guard = await queryGuard.EvaluateAsync(canonicalProjectId, query, cancellationToken);
+        if (guard.Shadowed is var (queryGuardTier, policyName, _))
         {
-            Log.QueryGuardShadowVerdict(logger, suppressed.Tier.ToString(), canonical,
-                suppressed.PolicyName ?? string.Empty, QueryFingerprint(query));
+            Log.QueryGuardShadowVerdict(logger, queryGuardTier.ToString(), canonicalProjectId, policyName ?? "", QueryFingerprint(query));
         }
 
         if (guard.Verdict.Tier == QueryGuardTier.Refuse)
         {
-            // The caller gets its own query text back in the error result; the server's own
-            // channels (log line, OTLP span) carry only the fingerprint below.
             throw new RefusedQueryException(
                 $"invalid-params: {guard.Verdict.Guidance} Refused query: {QuerySnippet(query)}",
                 $"invalid-params: {guard.Verdict.Guidance} Refused query fingerprint ({guard.Verdict.PolicyName}): {QueryFingerprint(query)}");
@@ -211,29 +183,17 @@ public sealed partial class MemoryTools(
 
         var correlationId = Guid.CreateVersion7().ToString("N");
         var dispatch = await searchDispatcher.DispatchAsync(searchQuery, parsedTypes, scope, correlationId,
-            sessionId: sessionId, codeLimit: codeLimit, codeMinRelativeScore: codeMinRelativeScore,
-            cancellationToken: cancellationToken);
+            sessionId, codeLimit, codeMinRelativeScore,
+            cancellationToken);
 
         if (dispatch.MemorySearchResults is not null)
         {
-            // The metrics table never leaves the machine (stripped from every pushed snapshot per ADR-0098,
-            // like search_quality), so the query-content hash stays excluded for a code-adjacent kind
-            // as defense-in-depth -- only the hash, not the whole recording
-            // (integration review S6, unchanged by ADR-0094). search_quality itself now records
-            // every kind (ADR-0094), with code paths never stored.
             var queryHash = !parsedTypes.HasFlag(EntryType.Code) ? ContentHash.OfValue(query) : null;
-            RecordSearchMeasurements(dispatch.MemorySearchResults, queryHash, correlationId, canonical);
+            RecordSearchMeasurements(dispatch.MemorySearchResults, queryHash, correlationId, canonicalProjectId);
         }
 
-        var warning = await ComposeWarningAsync(guard.Verdict, query, parsedTypes, dispatch.CodeWarning,
-            cancellationToken);
-        var result = BuildSearchResultList(dispatch, warning, searchQuery);
-        var envelope = await gate.WrapAsync(canonical, result, cancellationToken);
-
-        // ADR-0094: SearchDispatcher records a search_quality row for every kind, so every
-        // envelope carries a backed correlation id -- a later set_query_result_grade /
-        // set_memory_usage_record call always has a row to key on. This supersedes the
-        // integration-review S6 withholding rule (which held only while code/both wrote no row).
+        var warning = await ComposeWarningAsync(guard.Verdict, query, parsedTypes, dispatch.CodeWarning, cancellationToken);
+        var envelope = await gate.WrapAsync(canonicalProjectId, BuildSearchResultList(dispatch, warning, searchQuery), cancellationToken);
         return envelope with { Meta = envelope.Meta with { CorrelationId = correlationId } };
     }
 
@@ -250,10 +210,12 @@ public sealed partial class MemoryTools(
         }
     }
 
-    /// <summary>S5: codeLimit/codeMinRelativeScore override limit/minRelativeScore for the code
-    /// section only — SearchQueryValidator enforces the same two rules for their un-prefixed
-    /// counterparts, so a section override must fail exactly the same way, not pass through
-    /// silently into an empty section.</summary>
+    /// <summary>
+    ///     S5: codeLimit/codeMinRelativeScore override limit/minRelativeScore for the code
+    ///     section only — SearchQueryValidator enforces the same two rules for their un-prefixed
+    ///     counterparts, so a section override must fail exactly the same way, not pass through
+    ///     silently into an empty section.
+    /// </summary>
     private static void ValidateCodeOverrides(int? codeLimit, double? codeMinRelativeScore)
     {
         if (codeLimit is <= 0)
@@ -453,7 +415,8 @@ public sealed partial class MemoryTools(
     [Description(
         "Deletes the whole memory behind a content hash: a multi-chunk add_memory's chunks share one write, so any of its chunk hashes deletes all of them, not just one. Idempotent: an unknown hash is not an error — it reports the true row count, 0 for an unknown hash.")]
     public async Task<ApiEnvelope<DeletedResult>> Delete(
-        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description("The content hash to delete — any chunk of a multi-chunk write reaches the whole write.")]
         string hash,
         CancellationToken cancellationToken = default)
@@ -472,7 +435,8 @@ public sealed partial class MemoryTools(
     [Description(
         "Deletes every entry stored under a context label (e.g. a project or workspace context). Idempotent: an unknown context is not an error — it reports deleted=0.")]
     public async Task<ApiEnvelope<DeletedContextResult>> DeleteContext(
-        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description("The context label to delete.")]
         string context,
         CancellationToken cancellationToken = default)
@@ -490,7 +454,8 @@ public sealed partial class MemoryTools(
     [McpToolScope(ToolScope.All)]
     [Description("Indexes one file from disk into memory. The path must lie inside the project's configured scope (ai-raccoon settings ingest scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<IngestResult>> IngestFile(
-        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description("Path of the file to index.")]
         string path,
         [Description("Optional context label.")]
@@ -511,7 +476,8 @@ public sealed partial class MemoryTools(
     [Description(
         "Recursively indexes a directory tree into memory, skipping unchanged files. The path must lie inside the project's configured scope (ai-raccoon settings ingest scope add); an unscoped project refuses every ingest.")]
     public async Task<ApiEnvelope<ScannedResult>> IngestDirectory(
-        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description("Path of the directory to index.")]
         string path,
         [Description("Optional context label applied to all files.")]
@@ -543,63 +509,6 @@ public sealed partial class MemoryTools(
         var envelope = await gate.WrapAsync(canonical, embedResult, cancellationToken);
         return envelope;
     }
-
-    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record WriteResult(string Hash, string Path, string Context, long CreatedAt, bool Stored = true, string? Reason = null);
-
-    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record GetResult(string Hash, string Value, string Path, string Context, long CreatedAt);
-
-    /// <summary>
-    ///     Warning is set only by the query guard's annotate tier (docs/adr/0040) or a corpus's
-    ///     degraded-mode note (the memory engine's, or the code section's): a non-null value never
-    ///     changes Results. Code is null (and omitted from the wire,
-    ///     <see cref="JsonIgnoreCondition.WhenWritingNull" />) for kind=memory — the pinned envelope
-    ///     contract (docs/work/2026-08-21-code-search-implementation-plan.md §3.6): kind=memory
-    ///     serializes the exact legacy shape, no "code" key at all.
-    ///     Unranked is the explicit marker for rankings with no absolute relevance backing, and
-    ///     Truncation reports the floor cuts behind a response short of its limit; both are omitted
-    ///     from the wire unless set (<see cref="JsonIgnoreCondition.WhenWritingDefault" />).
-    /// </summary>
-    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record SearchResultList(
-        IReadOnlyList<MemorySearchResult> Results,
-        string? Warning = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        IReadOnlyList<CodeSearchResult>? Code = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        FusionStats? FusionStats = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-        bool Unranked = false,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        IReadOnlyList<FloorTruncation>? Truncation = null);
-
-    /// <summary>One score floor's truncation report: which floor, its threshold, and how many candidates it dropped.</summary>
-    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record FloorTruncation(string Floor, double Threshold, int Dropped);
-
-    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record ListResult(JsonNode Files);
-
-    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record StatsResult(int Entries, int Pending, IReadOnlyList<string> Contexts);
-
-    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record DeletedResult(int Deleted);
-
-    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record DeletedContextResult(int Deleted);
-
-    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record IngestResult(int Indexed);
-
-    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record ScannedResult(int Scanned);
-
-    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
-    public sealed record EmbedResult(int Processed, int Pending);
 
     /// <summary>
     ///     Tags each of the nine search phases plus the measured total — plus the fusion diff,
@@ -687,12 +596,68 @@ public sealed partial class MemoryTools(
     private static string QuerySnippet(string query)
     {
         var collapsed = WhitespaceRunRegex().Replace(query, " ").Trim();
-        return collapsed.Length <= 200 ? collapsed : collapsed[..200] + "…";
+        return collapsed.Length <= 200 ? collapsed : $"{collapsed[..200]}…";
     }
 
     /// <summary>The refused query's raw length and content hash — the whole identity server-side channels keep, never its text.</summary>
-    private static string QueryFingerprint(string query) =>
-        $"{query.Length} chars, sha256 {ContentHash.OfValue(query)}";
+    private static string QueryFingerprint(string query) => $"{query.Length} chars, sha256 {ContentHash.OfValue(query)}";
+
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record WriteResult(string Hash, string Path, string Context, long CreatedAt, bool Stored = true, string? Reason = null);
+
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record GetResult(string Hash, string Value, string Path, string Context, long CreatedAt);
+
+    /// <summary>
+    ///     Warning is set only by the query guard's annotate tier (docs/adr/0040) or a corpus's
+    ///     degraded-mode note (the memory engine's, or the code section's): a non-null value never
+    ///     changes Results. Code is null (and omitted from the wire,
+    ///     <see cref="JsonIgnoreCondition.WhenWritingNull" />) for kind=memory — the pinned envelope
+    ///     contract (docs/work/2026-08-21-code-search-implementation-plan.md §3.6): kind=memory
+    ///     serializes the exact legacy shape, no "code" key at all.
+    ///     Unranked is the explicit marker for rankings with no absolute relevance backing, and
+    ///     Truncation reports the floor cuts behind a response short of its limit; both are omitted
+    ///     from the wire unless set (<see cref="JsonIgnoreCondition.WhenWritingDefault" />).
+    /// </summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record SearchResultList(
+        IReadOnlyList<MemorySearchResult> Results,
+        string? Warning = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<CodeSearchResult>? Code = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyDictionary<string, RetrievalEvidence>? EvidenceByHash = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        FusionStats? FusionStats = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        bool Unranked = false,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<FloorTruncation>? Truncation = null);
+
+    /// <summary>One score floor's truncation report: which floor, its threshold, and how many candidates it dropped.</summary>
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record FloorTruncation(string Floor, double Threshold, int Dropped);
+
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record ListResult(JsonNode Files);
+
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record StatsResult(int Entries, int Pending, IReadOnlyList<string> Contexts);
+
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record DeletedResult(int Deleted);
+
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record DeletedContextResult(int Deleted);
+
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record IngestResult(int Indexed);
+
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record ScannedResult(int Scanned);
+
+    [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
+    public sealed record EmbedResult(int Processed, int Pending);
 
     private static partial class Log
     {

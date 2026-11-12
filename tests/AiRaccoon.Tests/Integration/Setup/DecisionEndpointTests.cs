@@ -33,23 +33,23 @@ public sealed class DecisionEndpointTests : IAsyncLifetime
     public async Task RecordAndGet_UseTheSameProjectAndExposeConflictsAndValidation()
     {
         var root = $"/decisions/projects/{_project}";
-        (await Http.PostAsJsonAsync(root + "/tasks", new { taskId = "task", sessionId = "s", requestId = "task", title = "Task" }, Ct)).EnsureSuccessStatusCode();
-        var record = await Http.PostAsJsonAsync(root + "/records", new { taskId = "task", sessionId = "s", requestId = "record", title = "Title", category = "architecture", scenario = "Scenario", outcome = "Outcome", reasoning = "Reason" }, Ct);
+        (await Http.PostAsJsonAsync($"{root}/tasks", new { taskId = "task", sessionId = "s", requestId = "task", title = "Task" }, Ct)).EnsureSuccessStatusCode();
+        var record = await Http.PostAsJsonAsync($"{root}/records", new { taskId = "task", sessionId = "s", requestId = "record", title = "Title", category = "architecture", scenario = "Scenario", outcome = "Outcome", reasoning = "Reason" }, Ct);
         record.StatusCode.ShouldBe(HttpStatusCode.OK);
         var recordBody = await record.Content.ReadAsStringAsync(Ct);
         ProjectIdOf(recordBody).ShouldBe(_project);
         using var json = JsonDocument.Parse(recordBody);
         var id = json.RootElement.GetProperty("data").GetProperty("value").GetProperty("decisionId").GetString();
-        var get = await Http.GetAsync(root + "/records/" + id, Ct);
+        var get = await Http.GetAsync($"{root}/records/{id}", Ct);
         get.StatusCode.ShouldBe(HttpStatusCode.OK);
         var getBody = await get.Content.ReadAsStringAsync(Ct);
         ProjectIdOf(getBody).ShouldBe(_project);
         JsonDocument.Parse(getBody).RootElement.GetProperty("data").GetProperty("value").GetProperty("record").GetProperty("decisionId").GetString().ShouldBe(id);
-        var stale = await Http.PostAsJsonAsync(root + "/records/" + id + "/transition", new { taskId = "task", sessionId = "s", requestId = "transition", expectedVersion = 2, targetStatus = "accepted", changeReason = "accept" }, Ct);
+        var stale = await Http.PostAsJsonAsync($"{root}/records/{id}/transition", new { taskId = "task", sessionId = "s", requestId = "transition", expectedVersion = 2, targetStatus = "accepted", changeReason = "accept" }, Ct);
         stale.StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        var invalid = await Http.PostAsJsonAsync(root + "/records/" + id + "/transition", new { taskId = "task", sessionId = "s", requestId = "invalid", expectedVersion = 0, targetStatus = "accepted", changeReason = "accept" }, Ct);
+        var invalid = await Http.PostAsJsonAsync($"{root}/records/{id}/transition", new { taskId = "task", sessionId = "s", requestId = "invalid", expectedVersion = 0, targetStatus = "accepted", changeReason = "accept" }, Ct);
         invalid.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        (await Http.GetAsync(root + "/records/missing", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await Http.GetAsync($"{root}/records/missing", Ct)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [RetryFact]

@@ -13,8 +13,7 @@ public static class CodeSearchWarnings
 
     /// <inheritdoc cref="EngineNotConfiguredPrefix" />
     public const string EngineNotConfigured =
-        EngineNotConfiguredPrefix + " — the code section is FTS5-only; run '" + CodeEngineSetup.DefaultModelCommand
-        + "' to activate the bundled code embedding model";
+        $"{EngineNotConfiguredPrefix} — the code section is FTS5-only; run '{CodeEngineSetup.DefaultModelCommand}' to activate the bundled code embedding model";
 
     /// <summary>
     ///     The query exceeded the configured code engine's manifest window (510 tokens for
@@ -23,7 +22,5 @@ public static class CodeSearchWarnings
     ///     (<see cref="SearchDefaults.MaxKeywordTerms" />, ADR-0126).
     /// </summary>
     public static readonly string QueryTrimmedToCodeWindow =
-        "code search query was shortened to fit the code embedding model's window — the semantic " +
-        "match saw only the first part of the query; keyword matching, capped separately, searches " +
-        $"at most its first {SearchDefaults.MaxKeywordTerms} distinct words.";
+        $"code search query was shortened to fit the code embedding model's window — the semantic match saw only the first part of the query; keyword matching, capped separately, searches at most its first {SearchDefaults.MaxKeywordTerms} distinct words.";
 }

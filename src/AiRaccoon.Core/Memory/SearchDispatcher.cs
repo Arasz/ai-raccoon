@@ -1,12 +1,15 @@
 using AiRaccoon.Core.Memory.Code;
 using AiRaccoon.Core.Memory.Fusion;
-using AiRaccoon.Core.SearchQuality;
 using AiRaccoon.Core.Projects;
+using AiRaccoon.Core.SearchQuality;
 
 namespace AiRaccoon.Core.Memory;
 
 /// <inheritdoc cref="ISearchDispatcher" />
-public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService codeSearch, ISearchQualityService qualityService,
+public sealed class SearchDispatcher(
+    IMemoryStore store,
+    ICodeSearchService codeSearch,
+    ISearchQualityService qualityService,
     ISharedProjectScope scope)
     : ISearchDispatcher
 {
@@ -87,12 +90,13 @@ public sealed class SearchDispatcher(IMemoryStore store, ICodeSearchService code
             evidence = joined;
         }
 
-        await qualityService.RecordSearchSafeAsync(correlationId: correlationId, query: searchQuery.Query,
-            scope: rawScope, projectId: searchQuery.ProjectId, kind: legacyKind,
-            sessionId: sessionId, resultCount: quality.Count, topSourceFiles: quality.Files,
-            ct: cancellationToken, evidence: evidence, entryTypes: entryTypes);
+        await qualityService.RecordSearchSafeAsync(correlationId, searchQuery.Query,
+            rawScope, searchQuery.ProjectId, legacyKind,
+            sessionId, quality.Count, quality.Files,
+            cancellationToken, evidence, entryTypes);
 
         return new SearchDispatchResult(results, memorySearchResults, codeResults, codeWarning);
     }
+
     private sealed record QualitySelection(int Count, IReadOnlyList<string> Files);
 }

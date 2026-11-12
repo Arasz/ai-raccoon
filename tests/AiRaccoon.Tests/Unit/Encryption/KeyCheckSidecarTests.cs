@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using AiRaccoon.Infrastructure.Sqlite.Encryption;
-using AiRaccoon.Tests.TestHelpers;
 using Shouldly;
 using Xunit;
 

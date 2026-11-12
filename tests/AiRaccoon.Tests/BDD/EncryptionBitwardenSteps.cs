@@ -33,7 +33,7 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
 
     private string? _fixtureSecretId;
 
-    private EncryptionBitwardenFeatureContext.CliRun _lastCli = new(0, string.Empty, string.Empty);
+    private EncryptionBitwardenFeatureContext.CliRun _lastCli = new(0, "", "");
 
     private Exception? _lastProviderError;
 
@@ -113,10 +113,10 @@ public sealed class EncryptionBitwardenSteps(ScenarioContext scenarioContext)
             "encryption", "bitwarden");
 
     [When("^the user runs encryption show$")]
-    public Task WhenUserRunsEncryptionShow() => RunCliAsync(string.Empty, "encryption", "show");
+    public Task WhenUserRunsEncryptionShow() => RunCliAsync("", "encryption", "show");
 
     [When("^the user runs encryption unset$")]
-    public Task WhenUserRunsEncryptionUnset() => RunCliAsync(string.Empty, "encryption", "unset");
+    public Task WhenUserRunsEncryptionUnset() => RunCliAsync("", "encryption", "unset");
 
     [When("^the server opens the bank$")]
     public async Task WhenServerOpensTheBank() => _lastStartError = await Ctx.StartServerErrorAsync();

@@ -2,7 +2,6 @@ using AiRaccoon.Core.Access;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
-using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Infrastructure.Options;
@@ -304,7 +303,7 @@ public sealed class SharedProjectTests : IDisposable
         var before = await connection.ExecuteScalarAsync<int>(
             "SELECT count(*) FROM entries WHERE project_id = 'shared'");
 
-        var outcome = await Record.ExceptionAsync(() => MemoryTool().Delete("shared", hash!, ct));
+        var outcome = await Record.ExceptionAsync(() => MemoryTool().Delete("shared", hash, ct));
 
         (outcome?.Message ?? "no refusal").ShouldContain("shared-project-unsupported");
         var after = await connection.ExecuteScalarAsync<int>(

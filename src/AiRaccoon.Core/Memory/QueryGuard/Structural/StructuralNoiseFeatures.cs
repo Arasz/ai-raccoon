@@ -15,6 +15,22 @@ public static partial class StructuralNoiseFeatures
 {
     public const int FeatureCount = 30;
 
+    private static readonly HashSet<string> Pronouns = new(StringComparer.Ordinal)
+    {
+        "i", "we", "you", "my", "our", "your", "me", "us", "i'm", "we're",
+        "you're", "i've", "we've", "mine", "yours", "ours"
+    };
+
+    private static readonly HashSet<string> Stopwords = new(StringComparer.Ordinal)
+    {
+        "the", "a", "an", "is", "are", "was", "were", "be", "been", "to",
+        "of", "and", "or", "but", "in", "on", "for", "with", "that",
+        "this", "it", "as", "at", "by", "from", "not", "no", "so", "if",
+        "then", "than", "because", "which", "what", "when", "how", "why",
+        "do", "does", "did", "has", "have", "had", "can", "could",
+        "should", "would", "will", "there", "their", "they", "its"
+    };
+
     [GeneratedRegex(@"\x1b\[[0-9;]*[A-Za-z]")]
     private static partial Regex AnsiRegex();
 
@@ -41,22 +57,6 @@ public static partial class StructuralNoiseFeatures
 
     [GeneratedRegex(@"[/\\][\w.\-]+[/\\]|^[/~.]?[\w.\-]*[/\\][\w.\-/\\]+$")]
     private static partial Regex PathTokenRegex();
-
-    private static readonly HashSet<string> Pronouns = new(StringComparer.Ordinal)
-    {
-        "i", "we", "you", "my", "our", "your", "me", "us", "i'm", "we're",
-        "you're", "i've", "we've", "mine", "yours", "ours"
-    };
-
-    private static readonly HashSet<string> Stopwords = new(StringComparer.Ordinal)
-    {
-        "the", "a", "an", "is", "are", "was", "were", "be", "been", "to",
-        "of", "and", "or", "but", "in", "on", "for", "with", "that",
-        "this", "it", "as", "at", "by", "from", "not", "no", "so", "if",
-        "then", "than", "because", "which", "what", "when", "how", "why",
-        "do", "does", "did", "has", "have", "had", "can", "could",
-        "should", "would", "will", "there", "their", "they", "its"
-    };
 
     /// <summary>
     ///     Extracts the 30 shape statistics for <paramref name="text" />. Feature order:

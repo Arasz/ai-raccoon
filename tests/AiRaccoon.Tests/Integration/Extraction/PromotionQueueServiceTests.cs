@@ -62,7 +62,7 @@ public sealed class PromotionQueueServiceTests : IDisposable
     {
         using var document = JsonDocument.Parse(Json(meta));
         var paths = new List<string>();
-        Collect(document.RootElement, string.Empty, paths);
+        Collect(document.RootElement, "", paths);
         paths.Sort(StringComparer.Ordinal);
         return paths;
     }

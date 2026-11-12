@@ -10,8 +10,7 @@ Serialized with `McpJsonUtilities.DefaultOptions` — the exact options the MCP 
 every tool response with, not `JsonSerializerDefaults.Web`. `DefaultOptions` sets
 `DefaultIgnoreCondition = WhenWritingNull`, so a null property (`SourceFile`, `Warning`,
 `Capacity`, `OldestWaitSeconds`, `PromotionsWaitTimeSeconds`) is genuinely absent from this
-file, matching what the server actually emits — not present with a JSON `null` value
-(integration review S1: a fixture captured through the wrong serializer pins keys the wire
+file, matching what the server actually emits — not present with a JSON `null` value (integration review S1: a fixture captured through the wrong serializer pins keys the wire
 never sends).
 
 `Meta.CorrelationId` is a per-call random value (`Guid.CreateVersion7()`,

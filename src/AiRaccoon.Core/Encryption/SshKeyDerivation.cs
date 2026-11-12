@@ -45,5 +45,5 @@ public static class SshKeyDerivation
         return Format(key);
     }
 
-    private static string Format(ReadOnlySpan<byte> key) => string.Concat("x'", Convert.ToHexString(key).ToLowerInvariant(), "'");
+    private static string Format(ReadOnlySpan<byte> key) => $"x'{Convert.ToHexString(key).ToLowerInvariant()}'";
 }

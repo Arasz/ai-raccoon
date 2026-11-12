@@ -249,7 +249,7 @@ internal static class TestOnnx
         }
 
         var opset = new List<byte>();
-        opset.AddRange(StringField(1, string.Empty));
+        opset.AddRange(StringField(1, ""));
         opset.AddRange(Int64Field(2, 17));
 
         var model = new List<byte>();

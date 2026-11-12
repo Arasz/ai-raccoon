@@ -4,7 +4,6 @@ using Dapper;
 using AiRaccoon.Infrastructure.Sqlite.Memory;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Options;
-using AiRaccoon.Core.Isolation;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -135,7 +134,7 @@ public sealed class TypedSearchTests
         await SeedAsync(connection, "wanted", "memory", "needle", scope, "acme", label, workspaceId, Vector(0.8f, 0.6f));
         await SeedAsync(connection, "excluded-type", "file", "needle", scope, "acme", label, workspaceId, Vector(1, 0));
         await SeedAsync(connection, "other-project", "memory", "needle", "project", "other", content: Vector(1, 0));
-        await SeedAsync(connection, "other-workspace", "memory", "needle", "project", "acme", workspaceId: "other-workspace", content: Vector(1, 0));
+        await SeedAsync(connection, "other-workspace", "memory", "needle", workspaceId: "other-workspace", content: Vector(1, 0));
 
         var rows = await VectorHitsAsync(connection, EntryType.Memory, false, 100, MemorySql.ContextKeyFor(context, "acme"));
         var contextFilter = ContextFilterProvider.For(context, "acme", "e.");

@@ -180,7 +180,7 @@ public class EmbeddingManifestSerializerTests
     [Fact]
     public void MissingRequiredField_FailsDeserialization_WithFormatException()
     {
-        var json = ReadFixture("bge-m3.full.json").Replace("\"provider\": \"local\",", string.Empty);
+        var json = ReadFixture("bge-m3.full.json").Replace("\"provider\": \"local\",", "");
 
         var ex = Should.Throw<EmbeddingManifestFormatException>(() => new EmbeddingManifestSerializer().Deserialize(json));
 

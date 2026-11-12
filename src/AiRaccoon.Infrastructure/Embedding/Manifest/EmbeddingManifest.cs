@@ -2,8 +2,10 @@ using System.Text.Json.Serialization;
 
 namespace AiRaccoon.Infrastructure.Embedding.Manifest;
 
-/// <summary>Tokenizer families the manifest contract knows: bert-wordpiece (vocab.txt),
-/// sentencepiece (.model) and tokenizer-json (a Hugging Face tokenizer.json).</summary>
+/// <summary>
+///     Tokenizer families the manifest contract knows: bert-wordpiece (vocab.txt),
+///     sentencepiece (.model) and tokenizer-json (a Hugging Face tokenizer.json).
+/// </summary>
 public enum TokenizerFamily
 {
     BertWordpiece,
@@ -87,8 +89,10 @@ public sealed record ManifestSource(
     [property: JsonRequired] string Repo,
     [property: JsonRequired] string Revision);
 
-/// <summary>Matryoshka (MRL) truncation capability. Informational; only MRL-trained models may
-/// declare it, and <see cref="Supported" /> requires <see cref="MinDimensions" />.</summary>
+/// <summary>
+///     Matryoshka (MRL) truncation capability. Informational; only MRL-trained models may
+///     declare it, and <see cref="Supported" /> requires <see cref="MinDimensions" />.
+/// </summary>
 public sealed record MRLInfo(
     [property: JsonRequired] bool Supported,
     int? MinDimensions);
@@ -97,8 +101,10 @@ public sealed record PoolingManifest(
     [property: JsonRequired] PoolingMode Mode,
     PoolingOutputNames? OutputNames = null);
 
-/// <summary>Graph output names the pooling strategy reads: <see cref="Embedding" /> is the pooled
-/// output (model-output mode), <see cref="TokenEmbeddings" /> the token-level output.</summary>
+/// <summary>
+///     Graph output names the pooling strategy reads: <see cref="Embedding" /> is the pooled
+///     output (model-output mode), <see cref="TokenEmbeddings" /> the token-level output.
+/// </summary>
 public sealed record PoolingOutputNames(
     [property: JsonRequired] string Embedding,
     [property: JsonRequired] string TokenEmbeddings);
@@ -120,15 +126,19 @@ public sealed record TokenizerOptionsManifest(
     IReadOnlyDictionary<string, int>? SpecialTokens = null,
     int VocabOffset = 0);
 
-/// <summary>A pinned file: repo-relative path + SHA-256 (hex). For LFS files the sha256 is the HF
-/// LFS oid captured from the tree API before download (D8); for non-LFS files it is the TOFU pin
-/// of the bytes actually downloaded.</summary>
+/// <summary>
+///     A pinned file: repo-relative path + SHA-256 (hex). For LFS files the sha256 is the HF
+///     LFS oid captured from the tree API before download (D8); for non-LFS files it is the TOFU pin
+///     of the bytes actually downloaded.
+/// </summary>
 public sealed record ManifestFile(
     [property: JsonRequired] string Path,
     [property: JsonRequired] string Sha256);
 
-/// <summary><see cref="Files" /> lists the model file FIRST, then any external-data siblings —
-/// the order the download writes and every reader (loader, pooling repair) relies on.</summary>
+/// <summary>
+///     <see cref="Files" /> lists the model file FIRST, then any external-data siblings —
+///     the order the download writes and every reader (loader, pooling repair) relies on.
+/// </summary>
 public sealed record OnnxManifest(
     [property: JsonRequired] IReadOnlyList<string> Inputs,
     string? EmbeddingOutput,

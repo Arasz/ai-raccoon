@@ -11,6 +11,8 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [2.7.0 — MCP dispatch delay is visible in performance metrics](2.7.0-mcp-dispatch-delay.md)
+
 - [2.6.1 — decision tools match their output schema](2.6.1-decision-tools-match-their-output-schema.md)
 - [2.6.0 — Semantica decisions import into the native graph](2.6.0-semantica-import.md)
 - [2.5.1 — a watcher overflow during a scan is no longer lost until the heal](2.5.1-overflow-rescan-waits-for-running-scan.md)

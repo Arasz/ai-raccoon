@@ -145,7 +145,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
 
     private static async Task<SqliteConnection> OpenRawAsync(string path, bool readOnly, bool runSchema, CancellationToken cancellationToken)
     {
-        var connection = new SqliteConnection($"Data Source={path}{(readOnly ? ";Mode=ReadOnly" : string.Empty)}");
+        var connection = new SqliteConnection($"Data Source={path}{(readOnly ? ";Mode=ReadOnly" : "")}");
         await connection.OpenAsync(cancellationToken);
         connection.EnableExtensions();
         connection.LoadVector();
@@ -169,7 +169,7 @@ public sealed class CodeCorpusSteps(ScenarioContext scenarioContext)
         var pulled = await _cloud.PullAsync(SyncObjectKey, CancellationToken.None);
         pulled.ShouldNotBeNull("the sync push produced nothing to pull back");
         _pushedSnapshotPath = Path.Combine(Ctx.DataRoot, $"pulled-{Guid.NewGuid():N}.db");
-        await File.WriteAllBytesAsync(_pushedSnapshotPath, pulled!.Data);
+        await File.WriteAllBytesAsync(_pushedSnapshotPath, pulled.Data);
     }
 
     private async Task SeedRemoteMemoryOnlySnapshotAsync(string hash, string content)

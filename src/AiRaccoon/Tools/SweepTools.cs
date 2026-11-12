@@ -52,7 +52,8 @@ public sealed class SweepTools(
         + "Clearing (ttlDays null) works on any entry in the project, including a file entry's TTL stored before 2.1.0. "
         + "Requires full access mode.")]
     public async Task<ApiEnvelope<TtlResult>> SetTtl(
-        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description("The entry's content hash. A hash this project does not own is refused as unknown-hash.")]
         string hash,
         [Description("Days of age before the entry is sweepable, 1-36500. Null clears the TTL, so the entry never expires; 0 is rejected.")]

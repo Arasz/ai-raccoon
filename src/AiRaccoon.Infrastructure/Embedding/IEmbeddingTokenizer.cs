@@ -11,9 +11,8 @@ namespace AiRaccoon.Infrastructure.Embedding;
 /// </summary>
 public interface IEmbeddingTokenizer
 {
+    int SpecialTokenReservation { get; }
     int CountTokens(string text);
 
     IReadOnlyList<int> EncodeToIds(string text, bool addSpecialTokens);
-
-    int SpecialTokenReservation { get; }
 }

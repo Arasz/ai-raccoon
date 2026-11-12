@@ -9,6 +9,9 @@ namespace AiRaccoon.Infrastructure.Decisions;
 /// <summary>Registers project decisions and changes graph state through auditable transactions.</summary>
 public sealed partial class DecisionService(IDecisionStore store, TimeProvider timeProvider) : IDecisionService
 {
+    private DateTimeOffset Now => timeProvider.GetUtcNow();
+    private IDecisionStore Store => store;
+
     public Task<DecisionResult<DecisionTask>> RegisterTaskAsync(string projectId, DecisionWrite write, string title,
         string? sourceRef = null, CancellationToken cancellationToken = default)
     {
@@ -35,7 +38,7 @@ public sealed partial class DecisionService(IDecisionStore store, TimeProvider t
             var task = new DecisionTask(write.TaskId, title, tasks.Count == 0 ? 1 : checked(tasks.Max(task => task.RegisteredOrder) + 1), Now, sourceRef);
             await writer.AddTaskAsync(task, ct);
             return new Mutation<DecisionTask>(task);
-        }, cancellationToken, requireTask: false);
+        }, cancellationToken, false);
     }
 
     public Task<DecisionResult<DecisionVersion>> RecordAsync(string projectId, DecisionWrite write, DecisionContent content,
@@ -71,6 +74,34 @@ public sealed partial class DecisionService(IDecisionStore store, TimeProvider t
             var selected = history.SingleOrDefault(item => item.Version == wanted) ?? throw NotFound("Decision version");
             return new DecisionResult<DecisionDetails>(projectId, await reader.RevisionAsync(ct),
                 new DecisionDetails(record, includeHistory ? history : [selected], wanted));
+        }, cancellationToken);
+    }
+
+    public Task<DecisionResult<DecisionVersion>> AmendAsync(string projectId, DecisionWrite write, string decisionId,
+        int expectedVersion, string changeReason, DecisionContent content, CancellationToken cancellationToken = default)
+    {
+        Guard.IsNotNull(content);
+        DecisionText.Required(changeReason, 2000, nameof(changeReason));
+        return MutateAsync(projectId, write, "amend", new { decisionId, expectedVersion, changeReason, content }, async (writer, revision, ct) =>
+        {
+            var current = await CurrentAsync(writer, decisionId, expectedVersion, ct);
+            try
+            {
+                new DecisionState(current.Status).EnsureCanAmend();
+            }
+            catch (InvalidOperationException exception)
+            {
+                throw new DecisionException(DecisionErrorKinds.InvalidTransition, exception.Message);
+            }
+
+            var amended = current with
+            {
+                Version = checked(current.Version + 1), TaskId = write.TaskId, ProjectRevision = revision,
+                Content = content, RecordedAt = Now, Actor = write.Actor,
+                SessionId = write.SessionId, ChangeReason = changeReason
+            };
+            await writer.AddVersionAsync(amended, ct);
+            return new Mutation<DecisionVersion>(amended);
         }, cancellationToken);
     }
 
@@ -113,37 +144,8 @@ public sealed partial class DecisionService(IDecisionStore store, TimeProvider t
         }, cancellationToken);
     }
 
-    private sealed record Mutation<T>(T Value, bool Changed = true);
     private static DecisionException NotFound(string resource) => new(DecisionErrorKinds.NotFound, $"{resource} was not found in this project.");
     private static DecisionException Conflict(string message, int? version = null, long? revision = null) => new(DecisionErrorKinds.Conflict, message, version, revision);
-
-    public Task<DecisionResult<DecisionVersion>> AmendAsync(string projectId, DecisionWrite write, string decisionId,
-        int expectedVersion, string changeReason, DecisionContent content, CancellationToken cancellationToken = default)
-    {
-        Guard.IsNotNull(content);
-        DecisionText.Required(changeReason, 2000, nameof(changeReason));
-        return MutateAsync(projectId, write, "amend", new { decisionId, expectedVersion, changeReason, content }, async (writer, revision, ct) =>
-        {
-            var current = await CurrentAsync(writer, decisionId, expectedVersion, ct);
-            try
-            {
-                new DecisionState(current.Status).EnsureCanAmend();
-            }
-            catch (InvalidOperationException exception)
-            {
-                throw new DecisionException(DecisionErrorKinds.InvalidTransition, exception.Message);
-            }
-
-            var amended = current with
-            {
-                Version = checked(current.Version + 1), TaskId = write.TaskId, ProjectRevision = revision,
-                Content = content, RecordedAt = Now, Actor = write.Actor,
-                SessionId = write.SessionId, ChangeReason = changeReason
-            };
-            await writer.AddVersionAsync(amended, ct);
-            return new Mutation<DecisionVersion>(amended);
-        }, cancellationToken);
-    }
 
     private static async Task<DecisionVersion> CurrentAsync(IDecisionReader reader, string decisionId,
         int? expectedVersion, CancellationToken cancellationToken)
@@ -161,8 +163,8 @@ public sealed partial class DecisionService(IDecisionStore store, TimeProvider t
         }
 
         return (await reader.VersionsAsync(decisionId, cancellationToken)).SingleOrDefault(version => version.Version == record.CurrentVersion)
-            ?? throw NotFound("Current decision version");
+               ?? throw NotFound("Current decision version");
     }
-    private DateTimeOffset Now => timeProvider.GetUtcNow();
-    private IDecisionStore Store => store;
+
+    private sealed record Mutation<T>(T Value, bool Changed = true);
 }

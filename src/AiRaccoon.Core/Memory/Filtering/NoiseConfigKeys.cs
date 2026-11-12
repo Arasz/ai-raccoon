@@ -7,9 +7,6 @@ public static class NoiseConfigKeys
 
     public const bool DefaultEnabled = true;
 
-    /// <summary>On unless the setting explicitly says "false": an absent or unreadable value keeps the default.</summary>
-    public static bool ParseEnabled(string? value) => !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
-
     /// <summary>
     ///     Reserved for a future enforce mode (real write rejection from a learned cluster) —
     ///     nothing reads this setting yet. <see cref="LearnerShadowEnabledGlobal" /> is what the
@@ -19,9 +16,6 @@ public static class NoiseConfigKeys
     public const string LearnerEnabledGlobal = "noise.learner.enabled.global";
 
     public const bool DefaultLearnerEnabled = false;
-
-    /// <summary>Off unless the setting explicitly says "true": an absent or unreadable value keeps the default.</summary>
-    public static bool ParseLearnerEnabled(string? value) => string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     ///     Shadow/dry-run mode (ADR-0039, revised direction): evaluates the learner against real
@@ -34,9 +28,6 @@ public static class NoiseConfigKeys
 
     public const bool DefaultLearnerShadowEnabled = false;
 
-    /// <summary>Off unless the setting explicitly says "true": an absent or unreadable value keeps the default.</summary>
-    public static bool ParseLearnerShadowEnabled(string? value) => string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
-
     // No similarity-threshold setting here (ADR-0039): a distance cutoff is itself scoring logic,
     // and no detector — centroid or otherwise — has been validated on held-out data. That threshold
     // existed in an earlier draft of this file and was removed once the write path stopped doing
@@ -47,6 +38,15 @@ public static class NoiseConfigKeys
 
     /// <summary>ADR-0029's original hardcoded value, now a setting default rather than a constant.</summary>
     public const int DefaultRetentionDays = 14;
+
+    /// <summary>On unless the setting explicitly says "false": an absent or unreadable value keeps the default.</summary>
+    public static bool ParseEnabled(string? value) => !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Off unless the setting explicitly says "true": an absent or unreadable value keeps the default.</summary>
+    public static bool ParseLearnerEnabled(string? value) => string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Off unless the setting explicitly says "true": an absent or unreadable value keeps the default.</summary>
+    public static bool ParseLearnerShadowEnabled(string? value) => string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
 
     public static int ParseRetentionDays(string? value) => int.TryParse(value, out var days) && days > 0 ? days : DefaultRetentionDays;
 }

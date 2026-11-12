@@ -28,92 +28,110 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
 
     private const string KeyValueCachePrefix = "past_key_values.";
 
-    private readonly ILogger _logger;
-    private InferenceSession _session;
-    private readonly string _modelPath;
-    private readonly bool _preferGpu;
-    private readonly Lock _sessionGate = new();
-    private bool _serializeRuns;
-    private bool _cudaActive;
-    private readonly IEmbeddingTokenizer _tokenizer;
-    private readonly int _window;
-    private readonly string _pooling;
-    private readonly string _normalization;
-    private readonly IReadOnlyList<string> _inputNames;
-    private readonly string _outputName;
-
-    /// <summary>
-    ///     Output dimension reported by the ONNX session itself (engineer doc §4.2.1) — the
-    ///     replacement for the deleted <c>EmbeddingMath.Dimension</c> const. Manifest-declared
-    ///     dimensions are cross-checked against this at construction.
-    /// </summary>
-    public int Dimension { get; }
-
-    /// <summary>ORT intra-op threads this session was built with (WP11-A/G16); 0 means ORT's own default.</summary>
-    public int IntraOpThreads { get; }
-
-    /// <summary>The execution provider the session runs on: "WebGPU", "CPU", "MLX", "CUDA", or one of those
-    /// with a parenthesized "(… refused: …)" suffix per fallback step actually taken.</summary>
-    public string ExecutionProvider { get; private set; } = CpuProvider;
-
     private const string CpuProvider = "CPU";
     private const string WebGpuProvider = "WebGPU";
     private const string MlxProvider = "MLX";
     private const string CudaProvider = "CUDA";
 
+    /// <summary>Why a session that prefers the GPU runs on the CPU where the loaded core has no WebGPU.</summary>
+    internal const string NoWebGpuInCoreReason = "this platform's ONNX Runtime core has no WebGPU";
+
+    private const string WebGpuExecutionProviderName = "WebGpuExecutionProvider";
+
+    private const string CudaExecutionProviderName = "CUDAExecutionProvider";
+
+    private const string MlxExecutionProviderName = "MLXExecutionProvider";
+    private const string MlxPluginDirectoryName = "mlx";
+    private const string MlxGraphFileName = "model_fp16_mlx.onnx";
+    private const string MlxPluginLibraryFileName = "libonnxruntime_mlx_ep.dylib";
+
+    /// <summary>
+    ///     A run of ~100+ characters with no space or punctuation (this tokenizer's pretokenizer does
+    ///     not split on newline/tab/CR) exceeds the per-word decomposition limit and collapses to a
+    ///     single [UNK] — reporting a *tiny* token count for real content, invisible to any budget
+    ///     ceiling check (docs/adr/0036). Newline-joined hash/id lists are the realistic trigger.
+    /// </summary>
+    private const int UnkCollapseMinChars = 100;
+
     /// <summary>WebGPU sessions share one process-wide GPU context, which concurrent runs corrupt.</summary>
     private static readonly Lock GpuGate = new();
 
-    /// <summary>Test hook: whether no thread holds <see cref="GpuGate" /> right now.</summary>
-    internal static bool GpuGateIsFree()
-    {
-        if (!GpuGate.TryEnter())
-        {
-            return false;
-        }
+    /// <summary>
+    ///     GPU/MLX intra-op workers spin-wait between kernels by default, which burns CPU on a
+    ///     WebGPU or MLX session for no latency benefit; CPU-only sessions keep spinning because it helps
+    ///     CPU-bound runs. Applied to <see cref="CreateGpuSessionOrNull" />'s and
+    ///     <see cref="CreateMlxSessionOnCurrentThread" />'s options (ADR-0110).
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, string> GpuSessionConfigEntries =
+        new Dictionary<string, string> { ["session.intra_op.allow_spinning"] = "0" };
 
-        GpuGate.Exit();
-        return true;
-    }
+    private static readonly Lock NvidiaVulkanIcdGate = new();
+    private static bool _nvidiaVulkanIcdChecked;
+    private static readonly Lock RegistrationGate = new();
 
-    /// <summary>Test hook: whether this generator's MLX thread is still running; false when it never had one.</summary>
-    internal bool MlxThreadAlive => _mlxExecutor?.IsThreadAlive ?? false;
+    /// <summary>Plugin libraries registered with the process-wide <see cref="OrtEnv" />, by registration name.</summary>
+    private static readonly Dictionary<string, string> RegisteredLibraries = new(StringComparer.Ordinal);
 
-    /// <summary>Records a device this session was asked for but refused, as another "(… refused: …)" suffix.</summary>
-    internal void AppendRefusal(string device, string reason) => ExecutionProvider = $"{ExecutionProvider} ({device} refused: {reason})";
+    private static readonly string[] MlxPluginFiles =
+        [MlxPluginLibraryFileName, "libmlx.dylib", "libmlxc.dylib", "mlx.metallib"];
+
+    private readonly IReadOnlyList<string> _inputNames;
+
+    private readonly ILogger _logger;
+    private readonly string _modelPath;
+    private readonly string _normalization;
+    private readonly string _outputName;
+    private readonly string _pooling;
+    private readonly bool _preferGpu;
+    private readonly Lock _sessionGate = new();
+    private readonly IEmbeddingTokenizer _tokenizer;
+    private readonly int _window;
+    private Action? _beforeCudaFallbackForTesting;
+
+    /// <summary>
+    ///     True for an MLX session: rows pad to <see cref="LengthBuckets" /> so MLX compiles and
+    ///     caches a handful of shapes instead of one per row length (ADR-0114).
+    /// </summary>
+    private bool _bucketRows;
+
+    private bool _cudaActive;
+
+    /// <summary>
+    ///     Guards <see cref="Dispose" /> against being called twice — the standard IDisposable
+    ///     contract — since <see cref="_mlxExecutor" /> is itself single-use and throws on a second Run.
+    /// </summary>
+    private bool _disposed;
+
+    /// <summary>
+    ///     Non-null only for an MLX session: the plugin is thread-affine (a session may run
+    ///     only on the exact OS thread it first ran on), so every call this generator makes into it —
+    ///     construction, Run, Dispose — is pinned to one dedicated thread (ADR-0110).
+    /// </summary>
+    private SingleThreadExecutor? _mlxExecutor;
+
+    /// <summary>
+    ///     What <see cref="Dispose" /> runs on the MLX thread to release <see cref="_session" />;
+    ///     a field (not a direct call) only so a test can substitute a throwing action and prove the
+    ///     executor is still disposed on that path. Always the real session's Dispose in production.
+    /// </summary>
+    private Action _mlxSessionDisposeAction;
 
     /// <summary>True only for a session that actually landed on WebGPU (not a "(… refused: …)" fallback) — <see cref="Run" />'s gate check.</summary>
     private bool _needsGpuGateForRun;
 
-    /// <summary>Non-null only for an MLX session: the plugin is thread-affine (a session may run
-    /// only on the exact OS thread it first ran on), so every call this generator makes into it —
-    /// construction, Run, Dispose — is pinned to one dedicated thread (ADR-0110).</summary>
-    private SingleThreadExecutor? _mlxExecutor;
+    private bool _serializeRuns;
+    private InferenceSession _session;
 
-    /// <summary>True for an MLX session: rows pad to <see cref="LengthBuckets" /> so MLX compiles and
-    /// caches a handful of shapes instead of one per row length (ADR-0114).</summary>
-    private bool _bucketRows;
-
-    /// <summary>True when this MLX session capped MLX's free-buffer cache (ADR-0114).</summary>
-    public bool MlxCacheLimitApplied { get; private set; }
-
-    /// <summary>Sequence length of the most recent session run, padding included.</summary>
-    internal int LastSequenceLength { get; private set; }
-
-    /// <summary>Guards <see cref="Dispose" /> against being called twice — the standard IDisposable
-    /// contract — since <see cref="_mlxExecutor" /> is itself single-use and throws on a second Run.</summary>
-    private bool _disposed;
-
-    /// <summary>What <see cref="Dispose" /> runs on the MLX thread to release <see cref="_session" />;
-    /// a field (not a direct call) only so a test can substitute a throwing action and prove the
-    /// executor is still disposed on that path. Always the real session's Dispose in production.</summary>
-    private Action _mlxSessionDisposeAction;
+    private Func<InferenceSession, List<NamedOnnxValue>, IDisposableReadOnlyCollection<DisposableNamedOnnxValue>>? _sessionRunForTesting;
 
     /// <summary>
     ///     Turns off ONNX Runtime's own telemetry client before any session exists. Its upload thread can
     ///     abort the process at exit by locking a mutex that exit has already destroyed.
     /// </summary>
-    static OnnxEmbeddingGenerator() => OrtSessionLog.Environment.DisableTelemetryEvents();
+    static OnnxEmbeddingGenerator()
+    {
+        OrtSessionLog.Environment.DisableTelemetryEvents();
+    }
 
     internal OnnxEmbeddingGenerator(string modelPath, IEmbeddingTokenizer tokenizer, EngineDescriptor descriptor, ILogger logger,
         int intraOpThreads = 0, bool preferGpu = false, bool preferMlx = false, string? cudaLibraryPath = null)
@@ -177,8 +195,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         if (descriptor.Dimensions != Dimension)
         {
             throw new InvalidOperationException(
-                $"Manifest model '{descriptor.Model}' declares {descriptor.Dimensions} dimensions but the ONNX session reports " +
-                $"{Dimension} for output '{_outputName}'.");
+                $"Manifest model '{descriptor.Model}' declares {descriptor.Dimensions} dimensions but the ONNX session reports {Dimension} for output '{_outputName}'.");
         }
 
         // Adapting to the graph's rank (see Pool) is deliberate, but never silent: a manifest whose
@@ -190,20 +207,29 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
     }
 
     /// <summary>
-    ///     Builds the same BERT WordPiece tokenizer the bundled engine embeds with, so a caller that
-    ///     needs to *count* tokens the way this generator will (e.g. the chunker, for a guaranteed
-    ///     budget — docs/adr/0036) uses an identically configured tokenizer rather than a
-    ///     hand-duplicated copy of these options.
+    ///     Output dimension reported by the ONNX session itself (engineer doc §4.2.1) — the
+    ///     replacement for the deleted <c>EmbeddingMath.Dimension</c> const. Manifest-declared
+    ///     dimensions are cross-checked against this at construction.
     /// </summary>
-    public static BertTokenizer CreateTokenizer(string vocabPath) =>
-        BertTokenizer.Create(vocabPath, new BertOptions
-        {
-            LowerCaseBeforeTokenization = true,
-            ApplyBasicTokenization = true,
-            SplitOnSpecialTokens = true,
-            IndividuallyTokenizeCjk = true,
-            RemoveNonSpacingMarks = true
-        });
+    public int Dimension { get; }
+
+    /// <summary>Test hook: whether this generator's MLX thread is still running; false when it never had one.</summary>
+    internal bool MlxThreadAlive => _mlxExecutor?.IsThreadAlive ?? false;
+
+    /// <summary>True when this MLX session capped MLX's free-buffer cache (ADR-0114).</summary>
+    public bool MlxCacheLimitApplied { get; private set; }
+
+    /// <summary>Sequence length of the most recent session run, padding included.</summary>
+    internal int LastSequenceLength { get; private set; }
+
+    /// <summary>ORT intra-op threads this session was built with (WP11-A/G16); 0 means ORT's own default.</summary>
+    public int IntraOpThreads { get; }
+
+    /// <summary>
+    ///     The execution provider the session runs on: "WebGPU", "CPU", "MLX", "CUDA", or one of those
+    ///     with a parenthesized "(… refused: …)" suffix per fallback step actually taken.
+    /// </summary>
+    public string ExecutionProvider { get; private set; } = CpuProvider;
 
     public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(IEnumerable<string> values,
         EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default)
@@ -234,6 +260,39 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         DisposeSession();
     }
 
+    object? IEmbeddingGenerator.GetService(Type serviceType, object? serviceKey) => null;
+
+    /// <summary>Test hook: whether no thread holds <see cref="GpuGate" /> right now.</summary>
+    internal static bool GpuGateIsFree()
+    {
+        if (!GpuGate.TryEnter())
+        {
+            return false;
+        }
+
+        GpuGate.Exit();
+        return true;
+    }
+
+    /// <summary>Records a device this session was asked for but refused, as another "(… refused: …)" suffix.</summary>
+    internal void AppendRefusal(string device, string reason) => ExecutionProvider = $"{ExecutionProvider} ({device} refused: {reason})";
+
+    /// <summary>
+    ///     Builds the same BERT WordPiece tokenizer the bundled engine embeds with, so a caller that
+    ///     needs to *count* tokens the way this generator will (e.g. the chunker, for a guaranteed
+    ///     budget — docs/adr/0036) uses an identically configured tokenizer rather than a
+    ///     hand-duplicated copy of these options.
+    /// </summary>
+    public static BertTokenizer CreateTokenizer(string vocabPath) =>
+        BertTokenizer.Create(vocabPath, new BertOptions
+        {
+            LowerCaseBeforeTokenization = true,
+            ApplyBasicTokenization = true,
+            SplitOnSpecialTokens = true,
+            IndividuallyTokenizeCjk = true,
+            RemoveNonSpacingMarks = true
+        });
+
     private void DisposeSession()
     {
         if (_disposed)
@@ -263,20 +322,21 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         _session.Dispose();
     }
 
-    /// <summary>Attaches an executor to a normally-constructed (CPU) generator so Dispose's MLX
-    /// branch is exercisable without a real onnxruntime MLX plugin. Test seam.</summary>
+    /// <summary>
+    ///     Attaches an executor to a normally-constructed (CPU) generator so Dispose's MLX
+    ///     branch is exercisable without a real onnxruntime MLX plugin. Test seam.
+    /// </summary>
     internal void AttachMlxExecutorForTesting(SingleThreadExecutor executor)
     {
         _mlxExecutor = executor;
         _bucketRows = true;
     }
 
-    /// <summary>Substitutes what Dispose runs on the MLX thread instead of the real session's
-    /// Dispose, so a throwing disposal can be proven not to leak the executor. Test seam.</summary>
+    /// <summary>
+    ///     Substitutes what Dispose runs on the MLX thread instead of the real session's
+    ///     Dispose, so a throwing disposal can be proven not to leak the executor. Test seam.
+    /// </summary>
     internal void SetMlxSessionDisposeActionForTesting(Action action) => _mlxSessionDisposeAction = action;
-
-    private Func<InferenceSession, List<NamedOnnxValue>, IDisposableReadOnlyCollection<DisposableNamedOnnxValue>>? _sessionRunForTesting;
-    private Action? _beforeCudaFallbackForTesting;
 
     /// <summary>Exercises CUDA inference failure with real CPU sessions on hosts without CUDA.</summary>
     internal void AttachCudaForTesting(
@@ -290,8 +350,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         _beforeCudaFallbackForTesting = beforeFallback;
     }
 
-    private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> RunSession(List<NamedOnnxValue> feed) =>
-        _sessionRunForTesting?.Invoke(_session, feed) ?? _session.Run(feed);
+    private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> RunSession(List<NamedOnnxValue> feed) => _sessionRunForTesting?.Invoke(_session, feed) ?? _session.Run(feed);
 
     private IDisposableReadOnlyCollection<DisposableNamedOnnxValue> Run(List<NamedOnnxValue> feed)
     {
@@ -353,8 +412,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
     }
 
     /// <summary>Whether the loaded core has WebGPU compiled in: the NuGet core on macOS, the bundled WebGPU core elsewhere (ADR-0115).</summary>
-    private static bool BuiltInWebGpuAvailable() =>
-        OrtSessionLog.Environment.GetAvailableProviders().Contains(WebGpuExecutionProviderName, StringComparer.Ordinal);
+    private static bool BuiltInWebGpuAvailable() => OrtSessionLog.Environment.GetAvailableProviders().Contains(WebGpuExecutionProviderName, StringComparer.Ordinal);
 
     private static InferenceSession CreateCpuSession(string modelPath, int intraOpThreads, ILogger logger)
     {
@@ -367,16 +425,11 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         return OrtSessionLog.Create(modelPath, options, logger);
     }
 
-    /// <summary>GPU/MLX intra-op workers spin-wait between kernels by default, which burns CPU on a
-    /// WebGPU or MLX session for no latency benefit; CPU-only sessions keep spinning because it helps
-    /// CPU-bound runs. Applied to <see cref="CreateGpuSessionOrNull" />'s and
-    /// <see cref="CreateMlxSessionOnCurrentThread" />'s options (ADR-0110).</summary>
-    internal static readonly IReadOnlyDictionary<string, string> GpuSessionConfigEntries =
-        new Dictionary<string, string> { ["session.intra_op.allow_spinning"] = "0" };
-
-    /// <summary>A WebGPU session on the core's built-in provider — the NuGet core on macOS, the bundled
-    /// WebGPU core on Windows and Linux x64 (ADR-0115) — or null, the caller then building a CPU session;
-    /// <see cref="ExecutionProvider" /> records any refusal.</summary>
+    /// <summary>
+    ///     A WebGPU session on the core's built-in provider — the NuGet core on macOS, the bundled
+    ///     WebGPU core on Windows and Linux x64 (ADR-0115) — or null, the caller then building a CPU session;
+    ///     <see cref="ExecutionProvider" /> records any refusal.
+    /// </summary>
     private InferenceSession? CreateGpuSessionOrNull(string modelPath, int intraOpThreads)
     {
         if (BuiltInWebGpuAvailable())
@@ -387,9 +440,6 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         ExecutionProvider = $"{CpuProvider} (GPU refused: {NoWebGpuInCoreReason})";
         return null;
     }
-
-    private static readonly Lock NvidiaVulkanIcdGate = new();
-    private static bool _nvidiaVulkanIcdChecked;
 
     /// <summary>
     ///     Once per process on Linux: when NVIDIA's Vulkan driver is mounted without an ICD manifest (common in GPU
@@ -449,11 +499,10 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
     private static extern int SetNativeEnvironmentVariable(
         [MarshalAs(UnmanagedType.LPUTF8Str)] string name, [MarshalAs(UnmanagedType.LPUTF8Str)] string value, int overwrite);
 
-    /// <summary>Why a session that prefers the GPU runs on the CPU where the loaded core has no WebGPU.</summary>
-    internal const string NoWebGpuInCoreReason = "this platform's ONNX Runtime core has no WebGPU";
-
-    /// <summary>A session with the built-in WebGPU provider appended (ORT keeps what the GPU cannot run
-    /// on the CPU), or null when ORT refuses it.</summary>
+    /// <summary>
+    ///     A session with the built-in WebGPU provider appended (ORT keeps what the GPU cannot run
+    ///     on the CPU), or null when ORT refuses it.
+    /// </summary>
     private InferenceSession? CreateBuiltInWebGpuSessionOrNull(string modelPath, int intraOpThreads)
     {
         SupplyNvidiaVulkanIcdOnce();
@@ -487,12 +536,6 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         }
     }
 
-    private const string WebGpuExecutionProviderName = "WebGpuExecutionProvider";
-    private static readonly Lock RegistrationGate = new();
-
-    /// <summary>Plugin libraries registered with the process-wide <see cref="OrtEnv" />, by registration name.</summary>
-    private static readonly Dictionary<string, string> RegisteredLibraries = new(StringComparer.Ordinal);
-
     /// <summary>
     ///     Registers a plugin library once per process under <paramref name="name" />; the same name and path
     ///     again is a no-op, a different path is refused. A registration that throws is not recorded.
@@ -514,11 +557,12 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         }
     }
 
-    private static string? EnsureRegistered(OrtEnv env, string name, string libraryPath) =>
-        EnsureRegistered(name, libraryPath, env.RegisterExecutionProviderLibrary);
+    private static string? EnsureRegistered(OrtEnv env, string name, string libraryPath) => EnsureRegistered(name, libraryPath, env.RegisterExecutionProviderLibrary);
 
-    /// <summary>Registers a plugin EP library and returns its first GPU device (never an integrated CPU
-    /// fallback device the plugin may also expose), or null with the reason.</summary>
+    /// <summary>
+    ///     Registers a plugin EP library and returns its first GPU device (never an integrated CPU
+    ///     fallback device the plugin may also expose), or null with the reason.
+    /// </summary>
     private static (IReadOnlyList<OrtEpDevice>? Devices, string? Refusal) RegisterPluginGpuDevice(
         string epName, string libraryPath, string noDeviceReason)
     {
@@ -567,8 +611,6 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         }
     }
 
-    private const string CudaExecutionProviderName = "CUDAExecutionProvider";
-
     /// <summary>
     ///     A session on the user-supplied CUDA plugin library, or null with the reason. Construction takes
     ///     <see cref="GpuGate" /> like the WebGPU plugin's; runs do not, as CUDA sessions share no device context.
@@ -616,23 +658,15 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
     }
 
     /// <summary>What a plugin attempt may throw that must become a refusal rather than a failed construction.</summary>
-    private static bool IsPluginLoadFailure(Exception ex) =>
-        ex is OnnxRuntimeException or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException;
-
-    private const string MlxExecutionProviderName = "MLXExecutionProvider";
-    private const string MlxPluginDirectoryName = "mlx";
-    private const string MlxGraphFileName = "model_fp16_mlx.onnx";
-    private const string MlxPluginLibraryFileName = "libonnxruntime_mlx_ep.dylib";
-
-    private static readonly string[] MlxPluginFiles =
-        [MlxPluginLibraryFileName, "libmlx.dylib", "libmlxc.dylib", "mlx.metallib"];
+    private static bool IsPluginLoadFailure(Exception ex) => ex is OnnxRuntimeException or DllNotFoundException or EntryPointNotFoundException or BadImageFormatException;
 
     /// <summary>The onnxruntime MLX plugin EP (ADR-0110) is proven only on macOS/Apple Silicon.</summary>
-    private static bool MlxPlatformSupported() =>
-        OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
+    private static bool MlxPlatformSupported() => OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
 
-    /// <summary>The plugin dylib ships beside the MLX runtime libraries it loads via @loader_path
-    /// (docs/work/2026-09-24-onnx-runtime-providers-gpu-mlx.md F7); null unless all four are present.</summary>
+    /// <summary>
+    ///     The plugin dylib ships beside the MLX runtime libraries it loads via @loader_path
+    ///     (docs/work/2026-09-24-onnx-runtime-providers-gpu-mlx.md F7); null unless all four are present.
+    /// </summary>
     internal static string? ResolveMlxPluginDirectory(string baseDirectory)
     {
         var directory = Path.Combine(baseDirectory, MlxPluginDirectoryName);
@@ -652,13 +686,15 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         return File.Exists(candidate) ? candidate : null;
     }
 
-    /// <summary>A session on the MLX plugin EP running the rewritten graph, or null (with
-    /// <paramref name="refusalReason" /> set) when the platform, the plugin files, the rewritten
-    /// graph, or ORT itself refuses — the caller falls back to the existing WebGPU-then-CPU path.
-    /// Construction runs on the dedicated <see cref="_mlxExecutor" /> thread, because the plugin is
-    /// thread-affine: everything it does for this session must happen on the one thread it starts
-    /// on. The executor is disposed here on any refusal; on success it is kept in
-    /// <see cref="_mlxExecutor" /> for every later Run and for Dispose.</summary>
+    /// <summary>
+    ///     A session on the MLX plugin EP running the rewritten graph, or null (with
+    ///     <paramref name="refusalReason" /> set) when the platform, the plugin files, the rewritten
+    ///     graph, or ORT itself refuses — the caller falls back to the existing WebGPU-then-CPU path.
+    ///     Construction runs on the dedicated <see cref="_mlxExecutor" /> thread, because the plugin is
+    ///     thread-affine: everything it does for this session must happen on the one thread it starts
+    ///     on. The executor is disposed here on any refusal; on success it is kept in
+    ///     <see cref="_mlxExecutor" /> for every later Run and for Dispose.
+    /// </summary>
     private InferenceSession? CreateMlxSessionOrNull(string modelPath, int intraOpThreads, out string? refusalReason)
     {
         if (!MlxPlatformSupported())
@@ -738,8 +774,6 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
             return (null, ex.Message);
         }
     }
-
-    object? IEmbeddingGenerator.GetService(Type serviceType, object? serviceKey) => null;
 
     // One row per session run: ORT keeps each run's activation peak, and a 32 x 510 batch on a 400M
     // model holds 3-7 GB for no per-row speedup (docs/work/2026-09-23-server-memory-usage.md F5/F6).
@@ -863,8 +897,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         if (dimensions.Length != 3)
         {
             throw new InvalidOperationException(
-                $"ONNX {outputName} is a rank-{dimensions.Length} tensor; a token-embeddings output must be "
-                + $"[batch, sequence, {dimension}] and an already-pooled one [batch, {dimension}].");
+                $"ONNX {outputName} is a rank-{dimensions.Length} tensor; a token-embeddings output must be [batch, sequence, {dimension}] and an already-pooled one [batch, {dimension}].");
         }
 
         var maskRow = new int[maxLen];
@@ -899,8 +932,7 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         if (dimensions[1] != dimension || output.Length < batch * dimension)
         {
             throw new InvalidOperationException(
-                $"ONNX {outputName} is a [batch, {dimensions[1]}] tensor of {output.Length} values; "
-                + $"{batch} × {dimension} were expected.");
+                $"ONNX {outputName} is a [batch, {dimensions[1]}] tensor of {output.Length} values; {batch} × {dimension} were expected.");
         }
 
         for (var i = 0; i < batch; i++)
@@ -917,16 +949,17 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
             if (name is not ("input_ids" or "attention_mask" or "token_type_ids" or "position_ids") && !IsKeyValueCacheInput(name))
             {
                 throw new InvalidOperationException(
-                    $"Manifest model '{descriptor.Model}' declares unsupported ONNX input '{name}'; " +
-                    "supported inputs: input_ids, attention_mask, token_type_ids, position_ids, past_key_values.*.");
+                    $"Manifest model '{descriptor.Model}' declares unsupported ONNX input '{name}'; supported inputs: input_ids, attention_mask, token_type_ids, position_ids, past_key_values.*.");
             }
         }
     }
 
     private static bool IsKeyValueCacheInput(string name) => name.StartsWith(KeyValueCachePrefix, StringComparison.Ordinal);
 
-    /// <summary>A decoder graph exported with a KV cache takes one past key and value per layer; a
-    /// single full-sequence run feeds each an empty [batch, heads, 0, headDim] tensor.</summary>
+    /// <summary>
+    ///     A decoder graph exported with a KV cache takes one past key and value per layer; a
+    ///     single full-sequence run feeds each an empty [batch, heads, 0, headDim] tensor.
+    /// </summary>
     private IEnumerable<NamedOnnxValue> EmptyKeyValueCache(int batch)
     {
         foreach (var name in _inputNames.Where(IsKeyValueCacheInput))
@@ -953,20 +986,11 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
         if (dims is null || dims.Length == 0 || dims[^1] <= 0)
         {
             throw new InvalidOperationException(
-                $"ONNX model '{modelName}' output '{outputName}' has no static final dimension " +
-                $"(dims: [{string.Join(", ", dims ?? [])}]); the embedding dimension must be a compile-time constant.");
+                $"ONNX model '{modelName}' output '{outputName}' has no static final dimension (dims: [{string.Join(", ", dims ?? [])}]); the embedding dimension must be a compile-time constant.");
         }
 
-        return (int)dims[^1];
+        return dims[^1];
     }
-
-    /// <summary>
-    ///     A run of ~100+ characters with no space or punctuation (this tokenizer's pretokenizer does
-    ///     not split on newline/tab/CR) exceeds the per-word decomposition limit and collapses to a
-    ///     single [UNK] — reporting a *tiny* token count for real content, invisible to any budget
-    ///     ceiling check (docs/adr/0036). Newline-joined hash/id lists are the realistic trigger.
-    /// </summary>
-    private const int UnkCollapseMinChars = 100;
 
     private EncodedText Encode(string text)
     {
@@ -1001,15 +1025,19 @@ internal sealed partial class OnnxEmbeddingGenerator : ILocalEmbeddingGenerator
                       + "separately and reported as event 416 — this one is always a write or an ingest.")]
         public static partial void ChunkTruncatedAtEmbedTime(ILogger logger, int actualTokens, int maxTokens);
 
-        /// <summary>Fires when a long chunk tokenizes to almost nothing — likely an unknown-token collapse from a
-        /// long punctuation-free, newline-joined run (docs/adr/0036) — and is embedded as noise. Wording is
-        /// family-neutral (WP3 engineer S8): the collapse mechanism differs per tokenizer family.</summary>
+        /// <summary>
+        ///     Fires when a long chunk tokenizes to almost nothing — likely an unknown-token collapse from a
+        ///     long punctuation-free, newline-joined run (docs/adr/0036) — and is embedded as noise. Wording is
+        ///     family-neutral (WP3 engineer S8): the collapse mechanism differs per tokenizer family.
+        /// </summary>
         [LoggerMessage(EventId = 415, Level = LogLevel.Warning,
             Message = "Chunk possibly collapsed to an unknown token at embed time: {Chars} characters tokenized to only {ActualTokens} tokens")]
         public static partial void ChunkPossiblyCollapsedToUnknownToken(ILogger logger, int chars, int actualTokens);
 
-        /// <summary>Issue #466: the graph emits a [batch, dimensions] vector, so the manifest's token-level
-        /// pooling mode cannot apply and the graph's own pooling is used instead.</summary>
+        /// <summary>
+        ///     Issue #466: the graph emits a [batch, dimensions] vector, so the manifest's token-level
+        ///     pooling mode cannot apply and the graph's own pooling is used instead.
+        /// </summary>
         [LoggerMessage(EventId = 417, Level = LogLevel.Warning,
             Message = "Model '{Model}' pools inside its own ONNX graph: output '{Output}' is [batch, dimensions], "
                       + "so the manifest's pooling mode '{Pooling}' cannot be applied and the graph's own vector is "

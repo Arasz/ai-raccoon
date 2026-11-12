@@ -49,7 +49,10 @@ public sealed record ProjectIdCensusRow(
     /// <summary>Owns entries but has no projects row — the research record's orphan shape.</summary>
     public bool Orphan => !Registered && EntryTotal > 0;
 
-    /// <summary>Non-entry attachments that must be reviewed before any retire/delete decision. Telemetry (metrics/noise) is excluded: regenerable derived data, never verdict-blocking (D3). Every workspace row counts here, open or closed — the retire verdict waits for the whole set. Decision graph rows count too: the repair never retires a graph owner.</summary>
+    /// <summary>
+    ///     Non-entry attachments that must be reviewed before any retire/delete decision. Telemetry (metrics/noise) is excluded: regenerable derived data, never verdict-blocking (D3). Every workspace row counts here, open or closed — the
+    ///     retire verdict waits for the whole set. Decision graph rows count too: the repair never retires a graph owner.
+    /// </summary>
     public long AttachmentCount =>
         Queued + Discards + QualityRows + Watches + WatchFiles + DigestClaims +
         Tombstones + Workspaces + WorkspaceEntries + CodeEntries + SettingsKeys.Count + DecisionRows;

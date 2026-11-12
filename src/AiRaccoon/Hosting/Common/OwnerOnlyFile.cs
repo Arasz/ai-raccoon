@@ -26,7 +26,7 @@ internal static partial class OwnerOnlyFile
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
 
     /// <summary>The advisory lock beside a secret; held with <see cref="FileShare.None" /> for mint and heal.</summary>
-    internal static string LockPathFor(string secretPath) => secretPath + ".lock";
+    internal static string LockPathFor(string secretPath) => $"{secretPath}.lock";
 
     /// <summary>
     ///     Creates the state directory owner-only. An existing one this user owns whose only leak is

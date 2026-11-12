@@ -1,3 +1,5 @@
+using AiRaccoon.Core.Projects;
+
 namespace AiRaccoon.Core.Access;
 
 /// <summary>
@@ -11,8 +13,7 @@ public static class AccessModePolicy
     public const string GlobalSettingKey = "access.mode.global";
 
     /// <summary>The per-project mode key; the id segment folds at construction (air-merge P4 — see <see cref="Ingestion.IngestScopeKeys" />).</summary>
-    public static string ProjectSettingKey(string projectId) =>
-        $"access.mode.project:{Projects.ProjectIdAliasMap.Default.Fold(projectId)}";
+    public static string ProjectSettingKey(string projectId) => $"access.mode.project:{ProjectIdAliasMap.Default.Fold(projectId)}";
 
     /// <summary>
     ///     The pre-P4 spelling of the per-project key: the id embedded verbatim, unfolded.
@@ -20,8 +21,7 @@ public static class AccessModePolicy
     ///     migrated, so a raw-spelling row would otherwise miss and fail open): nothing writes
     ///     this form anymore, <see cref="ProjectSettingKey" /> folds at construction.
     /// </summary>
-    public static string LegacyProjectSettingKey(string projectId) =>
-        $"{SettingKeyPrefix}project:{projectId}";
+    public static string LegacyProjectSettingKey(string projectId) => $"{SettingKeyPrefix}project:{projectId}";
 
     public static AccessMode Resolve(AccessMode? global, AccessMode? perProject) => perProject ?? global ?? AccessMode.Rw;
 

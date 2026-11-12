@@ -1,3 +1,5 @@
+using AiRaccoon.Core.Projects;
+
 namespace AiRaccoon.Core.Watch;
 
 /// <summary>
@@ -14,10 +16,8 @@ public static class WatchConfigKeys
     public const string BufferSizeGlobal = "watch.buffer-size.global";
 
     /// <summary>The per-project key; the id segment folds at construction (air-merge P4 — see <see cref="AiRaccoon.Core.Ingestion.IngestScopeKeys" />).</summary>
-    public static string EnabledProject(string projectId) =>
-        $"watch.enabled.{Projects.ProjectIdAliasMap.Default.Fold(projectId)}";
+    public static string EnabledProject(string projectId) => $"watch.enabled.{ProjectIdAliasMap.Default.Fold(projectId)}";
 
     /// <summary>The per-project key; the id segment folds at construction (air-merge P4 — see <see cref="AiRaccoon.Core.Ingestion.IngestScopeKeys" />).</summary>
-    public static string ConcurrencyProject(string projectId) =>
-        $"watch.concurrency.{Projects.ProjectIdAliasMap.Default.Fold(projectId)}";
+    public static string ConcurrencyProject(string projectId) => $"watch.concurrency.{ProjectIdAliasMap.Default.Fold(projectId)}";
 }

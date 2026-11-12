@@ -12,6 +12,12 @@ namespace AiRaccoon.Setup.Cli.Commands;
 /// </summary>
 public sealed class ExtractCommands(IPromotionQueuePruneStore promotionQueuePrune)
 {
+    private static readonly IntSetting Interval = new(ExtractionConfigKeys.IntervalMinutesGlobal, "minutes",
+        "interval", "minutes", value => $"extraction interval: {value} min");
+
+    private static readonly IntSetting Capacity = new(ExtractionConfigKeys.QueueCapacityGlobal, "capacity",
+        "capacity", "queued candidates", value => $"propose-tier capacity: {value} candidates");
+
     public async Task<int> SetEnabledAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken)
     {
@@ -26,10 +32,9 @@ public sealed class ExtractCommands(IPromotionQueuePruneStore promotionQueuePrun
 
         var mode = ExtractionConfigKeys.ParseMode(
             await store.GetSettingAsync(ExtractionConfigKeys.ModeGlobal, cancellationToken));
-        await streams.WriteOutputLineAsync($"mode: {mode.ToString().ToLowerInvariant()} " +
-                                           (mode == ExtractMode.Promote
-                                               ? "(promote shares candidates with ALL projects — review the mode before relying on it)"
-                                               : "(propose only logs candidates; nothing is shared)"));
+        await streams.WriteOutputLineAsync($"mode: {mode.ToString().ToLowerInvariant()} {(mode == ExtractMode.Promote
+            ? "(promote shares candidates with ALL projects — review the mode before relying on it)"
+            : "(propose only logs candidates; nothing is shared)")}");
 
         return 0;
     }
@@ -49,12 +54,6 @@ public sealed class ExtractCommands(IPromotionQueuePruneStore promotionQueuePrun
             $"extraction mode: {mode} — {(mode == "promote" ? "shares candidates with ALL projects" : "logs candidates only, never shares")}");
         return 0;
     }
-
-    private static readonly IntSetting Interval = new(ExtractionConfigKeys.IntervalMinutesGlobal, "minutes",
-        "interval", "minutes", value => $"extraction interval: {value} min");
-
-    private static readonly IntSetting Capacity = new(ExtractionConfigKeys.QueueCapacityGlobal, "capacity",
-        "capacity", "queued candidates", value => $"propose-tier capacity: {value} candidates");
 
     public Task<int> SetIntervalAsync(ParseResult parseResult, IMemoryStore store, StandardStreams streams,
         CancellationToken cancellationToken) =>
@@ -85,8 +84,7 @@ public sealed class ExtractCommands(IPromotionQueuePruneStore promotionQueuePrun
         var formatted = ExtractionConfigKeys.FormatAutoPromoteThreshold(parsed);
         await store.SetSettingAsync(ExtractionConfigKeys.AutoPromoteThresholdGlobal, formatted, cancellationToken);
         await streams.WriteOutputLineAsync(
-            $"auto-promote-threshold: {formatted} " +
-            "(in promote mode, candidates scoring at or above share automatically; nothing below is queued)");
+            $"auto-promote-threshold: {formatted} (in promote mode, candidates scoring at or above share automatically; nothing below is queued)");
         return 0;
     }
 
@@ -104,8 +102,7 @@ public sealed class ExtractCommands(IPromotionQueuePruneStore promotionQueuePrun
             ExtractionConfigKeys.ParseAutoPromoteThreshold(
                 await store.GetSettingAsync(ExtractionConfigKeys.AutoPromoteThresholdGlobal, cancellationToken)));
         await streams.WriteOutputLineAsync(
-            $"enabled: {enabled}  mode: {mode.ToString().ToLowerInvariant()}  interval: {interval} min  " +
-            $"queue-capacity: {capacity}  auto-promote-threshold: {threshold}");
+            $"enabled: {enabled}  mode: {mode.ToString().ToLowerInvariant()}  interval: {interval} min  queue-capacity: {capacity}  auto-promote-threshold: {threshold}");
         return 0;
     }
 

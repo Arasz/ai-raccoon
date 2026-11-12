@@ -20,8 +20,8 @@ public sealed class WatchTools(
     [Description(
         "Registers a file or directory to be mirrored into the project's memory. Pass projectId=shared explicitly for documents available to all projects in this bank; no ID minting or registration needed. Watching must be enabled and the path inside the scope allowlist — both configured via the CLI ('ai-raccoon settings watch enable' / 'settings ingest scope add'). No overlapping watches: a path already covered by an existing watch is refused (watch-overlap, naming the covering watch); registering a broader watch prunes every watch it contains (reported in `pruned`; already-ingested entries are kept and the broader watch re-scans them). An exact re-add of an already-watched path is a no-op (`absorbedBy` reports it). Returns immediately — the initial scan runs in the background (status reports scanning).")]
     public async Task<ApiEnvelope<WatchAddResult>> Add(
-        [Description("The project id; use shared explicitly for documents shared across projects.")]
-        [Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id; use shared explicitly for documents shared across projects.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description("Absolute path of the file or directory to watch.")]
         string path,
         CancellationToken cancellationToken = default)
@@ -54,7 +54,8 @@ public sealed class WatchTools(
     [McpToolScope(ToolScope.All)]
     [Description("Stops watching a path for the project and removes its registration; a non-existent watch is a no-op, reported as removed=false.")]
     public async Task<ApiEnvelope<WatchRemoveResult>> Remove(
-        [Description("The project id.")][Optional][DefaultParameterValue("")] string projectId,
+        [Description("The project id.")] [Optional] [DefaultParameterValue("")]
+        string projectId,
         [Description("Absolute path of the watched file or directory.")]
         string path,
         CancellationToken cancellationToken = default)
@@ -66,9 +67,11 @@ public sealed class WatchTools(
         return envelope;
     }
 
-    /// <summary>Pruned/AbsorbedBy are additive (docs/work/2026-08-21-code-search-implementation-plan.md
-    /// §5 WP4): Pruned lists watches this add contained (empty when none); AbsorbedBy is set only
-    /// for an exact-literal-path re-add (never together with a non-empty Pruned).</summary>
+    /// <summary>
+    ///     Pruned/AbsorbedBy are additive (docs/work/2026-08-21-code-search-implementation-plan.md
+    ///     §5 WP4): Pruned lists watches this add contained (empty when none); AbsorbedBy is set only
+    ///     for an exact-literal-path re-add (never together with a non-empty Pruned).
+    /// </summary>
     public sealed record WatchAddResult(string ProjectId, string Path, IReadOnlyList<string> Pruned, string? AbsorbedBy);
 
     public sealed record WatchStatusResult(IReadOnlyList<WatchStatus> Watches);

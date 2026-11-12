@@ -7,7 +7,6 @@ using AiRaccoon.Core.Memory.QueryGuard;
 using AiRaccoon.Core.Metrics;
 using AiRaccoon.Infrastructure.Metrics;
 using AiRaccoon.Infrastructure.Sqlite;
-using AiRaccoon.Tests;
 using AiRaccoon.Tests.TestHelpers;
 using AiRaccoon.Tools;
 using Dapper;

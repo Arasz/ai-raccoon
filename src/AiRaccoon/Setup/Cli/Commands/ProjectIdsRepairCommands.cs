@@ -12,10 +12,10 @@ namespace AiRaccoon.Setup.Cli.Commands;
 ///     --apply commits requests the server applies, rather than writing here. Doctor stays
 ///     read-only and never serves this report.
 ///     <para>
-    ///         ADR-0099: the public binary ships no machine-local ids. The operator map defaults
-    ///         to <c>&lt;data-root&gt;/project-id-map.json</c>, with <c>--map &lt;path&gt;</c> as
-    ///         an override; without either file, a dry run plans with the empty map and writes an
-    ///         editable template beside the bank instead of guessing folds.
+///         ADR-0099: the public binary ships no machine-local ids. The operator map defaults
+///         to <c>&lt;data-root&gt;/project-id-map.json</c>, with <c>--map &lt;path&gt;</c> as
+///         an override; without either file, a dry run plans with the empty map and writes an
+///         editable template beside the bank instead of guessing folds.
 ///     </para>
 ///     <para>
 ///         Package F (D5): plain --apply runs the loop — derive→commit-request→poll→reap→re-derive
@@ -34,23 +34,9 @@ public sealed class ProjectIdsRepairCommands
     /// <summary>Default operator-maintained alias map loaded beside the bank when present.</summary>
     public const string DefaultMapFileName = "project-id-map.json";
 
-    /// <summary>
-    ///     The D6 (iv) P3 clause, read off the bank the census just scanned rather than asserted:
-    ///     the durable alias map is what the choke points enforce, so an empty map means no id
-    ///     folds through and none is refused — "armed" would be a claim nothing backs. The counts
-    ///     are the evidence: they match the rows in <c>project_id_aliases</c>.
-    /// </summary>
-    public static string P3Note(ProjectIdCensusReport report)
-    {
-        Guard.IsNotNull(report);
-        return report.P3Armed
-            ? $"P3 armed ({report.DurableAliasCount} alias, {report.DurableDroppedCount} dropped)"
-            : "P3 inert (durable alias map empty — no id folds through, none is refused)";
-    }
+    private readonly RepairLoopOptions _options;
 
     private readonly IRepairStore _repair;
-
-    private readonly RepairLoopOptions _options;
 
     private readonly TimeProvider _timeProvider;
 
@@ -63,15 +49,17 @@ public sealed class ProjectIdsRepairCommands
     }
 
     /// <summary>
-    ///     Bounds for the run-until-fixed loop. One server maintenance poll is ~15s (H7), so each
-    ///     pass waits one poll; ≤10 passes cap the committed repair_requests rows at ten and the
-    ///     wall clock near three minutes, with a 10-minute total backstop for loaded machines.
+    ///     The D6 (iv) P3 clause, read off the bank the census just scanned rather than asserted:
+    ///     the durable alias map is what the choke points enforce, so an empty map means no id
+    ///     folds through and none is refused — "armed" would be a claim nothing backs. The counts
+    ///     are the evidence: they match the rows in <c>project_id_aliases</c>.
     /// </summary>
-    public sealed record RepairLoopOptions(int MaxPasses, TimeSpan PollInterval, TimeSpan TotalBudget)
+    public static string P3Note(ProjectIdCensusReport report)
     {
-        public static RepairLoopOptions Default { get; } = new(10, TimeSpan.FromSeconds(15), TimeSpan.FromMinutes(10));
-
-        internal static RepairLoopOptions Test { get; } = new(3, TimeSpan.Zero, TimeSpan.FromMinutes(10));
+        Guard.IsNotNull(report);
+        return report.P3Armed
+            ? $"P3 armed ({report.DurableAliasCount} alias, {report.DurableDroppedCount} dropped)"
+            : "P3 inert (durable alias map empty — no id folds through, none is refused)";
     }
 
     /// <summary>Resolves the template path for a data root.</summary>
@@ -122,8 +110,7 @@ public sealed class ProjectIdsRepairCommands
             // "the map still can't place this id." Without this line, an operator watching the
             // same needsAttention count across repeated runs has no way to tell those two apart.
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: re-running will not clear the {plan.Unresolved.Count} id(s) above that need a " +
-                "human — attribute them, or wait for an alias-map update.");
+                $"project-ids repair: re-running will not clear the {plan.Unresolved.Count} id(s) above that need a human — attribute them, or wait for an alias-map update.");
         }
 
         if (!apply)
@@ -148,7 +135,7 @@ public sealed class ProjectIdsRepairCommands
             var mapJson = File.ReadAllText(mapPath);
             return (ProjectIdAliasMap.FromJson(mapJson), mapJson, true);
         }
-        catch (Exception ex) when (isDefaultMap && (ex is FileNotFoundException or DirectoryNotFoundException))
+        catch (Exception ex) when (isDefaultMap && ex is FileNotFoundException or DirectoryNotFoundException)
         {
             // A missing default is the empty-map fallback; access and I/O errors remain failures.
             return (ProjectIdAliasMap.Empty, null, false);
@@ -171,13 +158,11 @@ public sealed class ProjectIdsRepairCommands
         // a problem.
         var needsAttention = plan.Unresolved.Count;
         var needsNothing = report.Rows.Count - plan.Folds.Count - plan.Dropped.Count -
-            plan.RetiredProjects.Count - needsAttention - plan.Pinned.Count;
+                           plan.RetiredProjects.Count - needsAttention - plan.Pinned.Count;
         var verb = apply ? "Request will be queued for the server." : "Dry run — pass --apply to run this.";
-        var pinnedSegment = plan.Pinned.Count > 0 ? $", {plan.Pinned.Count} pinned (waiting with reasons below)" : string.Empty;
+        var pinnedSegment = plan.Pinned.Count > 0 ? $", {plan.Pinned.Count} pinned (waiting with reasons below)" : "";
         await streams.WriteOutputLineAsync(
-            $"project-ids repair: {report.Rows.Count} id(s) censused — {plan.Folds.Count} fold, " +
-            $"{plan.Dropped.Count} drop (test residue), {plan.RetiredProjects.Count} retire (registered, empty), " +
-            $"{needsAttention} need a human to attribute{pinnedSegment}, {needsNothing} need nothing (already correct or empty). {verb}");
+            $"project-ids repair: {report.Rows.Count} id(s) censused — {plan.Folds.Count} fold, {plan.Dropped.Count} drop (test residue), {plan.RetiredProjects.Count} retire (registered, empty), {needsAttention} need a human to attribute{pinnedSegment}, {needsNothing} need nothing (already correct or empty). {verb}");
 
         var orphans = report.Rows.Count(row => row.Orphan);
         if (orphans > 0)
@@ -197,9 +182,7 @@ public sealed class ProjectIdsRepairCommands
             // winner with every other committed row. The count stays visible pre-apply as the
             // verify-they-move instrument: a nonzero count folds by design, never a surprise orphan.
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: '{fold.Loser}' owns {loser?.EntryTotal ?? 0} entries " +
-                $"({loser?.NullContextEntries ?? 0} NULL-context, fold), " +
-                $"{loser?.Queued ?? 0} queued — folds to '{fold.Winner}'");
+                $"project-ids repair: '{fold.Loser}' owns {loser?.EntryTotal ?? 0} entries ({loser?.NullContextEntries ?? 0} NULL-context, fold), {loser?.Queued ?? 0} queued — folds to '{fold.Winner}'");
         }
 
         if (plan.Pinned.Count > 0)
@@ -234,7 +217,7 @@ public sealed class ProjectIdsRepairCommands
             foreach (var id in plan.Unresolved)
             {
                 var row = report.Rows.SingleOrDefault(r => r.ProjectId == id);
-                var hint = row?.RegisteredName is not null ? $" (registered as '{row.RegisteredName}')" : string.Empty;
+                var hint = row?.RegisteredName is not null ? $" (registered as '{row.RegisteredName}')" : "";
                 await streams.WriteOutputLineAsync($"  '{id}'{hint}");
             }
         }
@@ -248,7 +231,7 @@ public sealed class ProjectIdsRepairCommands
         // registered non-retired ids are exactly the canonical-branch rows worth seeding.
         var canonicalSeed = report.Rows
             .Where(row => row.Registered && !SharedProjectScope.IsReservedId(row.ProjectId)
-                && !plan.RetiredProjects.Contains(row.ProjectId, StringComparer.Ordinal))
+                                         && !plan.RetiredProjects.Contains(row.ProjectId, StringComparer.Ordinal))
             .Select(row => row.ProjectId)
             .Distinct(StringComparer.Ordinal)
             .ToList();
@@ -256,15 +239,10 @@ public sealed class ProjectIdsRepairCommands
         var planned = $"project-ids repair: no --map supplied and no default map at '{DefaultMapPathFor(dataRoot)}' — planned with the empty map (no folds). ";
         await streams.WriteOutputLineAsync(
             template.Wrote
-                ? planned +
-                  $"Wrote an editable alias-map template to '{templatePath}' (example alias shape, " +
-                  $"__self_metrics__ + {canonicalSeed.Count} registered canonical(s), {plan.Unresolved.Count} unattributed id(s) " +
-                  $"pre-filled in Dropped for review); review it, save as '{DefaultMapFileName}' beside the bank, or pass --map."
+                ? $"{planned}Wrote an editable alias-map template to '{templatePath}' (example alias shape, __self_metrics__ + {canonicalSeed.Count} registered canonical(s), {plan.Unresolved.Count} unattributed id(s) pre-filled in Dropped for review); review it, save as '{DefaultMapFileName}' beside the bank, or pass --map."
                 : template.Failure is not null
-                    ? planned +
-                      $"Could not write the alias-map template to '{templatePath}': {template.Failure.TrimEnd('.', ' ')}; create '{DefaultMapFileName}' beside the bank or pass --map."
-                    : planned +
-                      $"Review the existing template at '{templatePath}', save it as '{DefaultMapFileName}' beside the bank, or pass --map.");
+                    ? $"{planned}Could not write the alias-map template to '{templatePath}': {template.Failure.TrimEnd('.', ' ')}; create '{DefaultMapFileName}' beside the bank or pass --map."
+                    : $"{planned}Review the existing template at '{templatePath}', save it as '{DefaultMapFileName}' beside the bank, or pass --map.");
     }
 
     /// <summary>
@@ -292,8 +270,7 @@ public sealed class ProjectIdsRepairCommands
             "project-ids repair: the fold is single-pass — quiesce writers under a folded id, or re-run " +
             "'repair project-ids' until it reports no folds.");
         await streams.WriteOutputLineAsync(
-            $"project-ids repair: summary — repair in progress: {queued} change(s) queued for the server — " +
-            "the server applies it on its next maintenance poll (~15s).");
+            $"project-ids repair: summary — repair in progress: {queued} change(s) queued for the server — the server applies it on its next maintenance poll (~15s).");
         return ErrorCode.Ok.Success;
     }
 
@@ -304,9 +281,10 @@ public sealed class ProjectIdsRepairCommands
     ///     those) | stuck (identical actionable set across 2 passes with zero rows moved and no
     ///     total growth) | writers-active (census totals grew — quiesce, loop to bound, then report).
     /// </summary>
-    private async Task<int> RunRepairLoopAsync(ProjectIdAliasMap map, string? mapJson, ProjectIdCensusReport report, ProjectIdsFoldPlan plan, StandardStreams streams, CancellationToken cancellationToken)
+    private async Task<int> RunRepairLoopAsync(ProjectIdAliasMap map, string? mapJson, ProjectIdCensusReport report, ProjectIdsFoldPlan plan, StandardStreams streams,
+        CancellationToken cancellationToken)
     {
-        var loop = new RepairLoop(report, plan, Pass: 0, Previous: null, CensusTotal(report), _timeProvider.GetTimestamp());
+        var loop = new RepairLoop(report, plan, 0, null, CensusTotal(report), _timeProvider.GetTimestamp());
         while (true)
         {
             if (await TryStopAsync(loop, streams) is { } exit)
@@ -318,23 +296,13 @@ public sealed class ProjectIdsRepairCommands
             if (pass.StillOpen)
             {
                 await streams.WriteOutputLineAsync(
-                    $"project-ids repair: summary — stuck: {CountsLine(loop.Plan)} — the server has not finished " +
-                    $"the committed request within {_options.TotalBudget.TotalMinutes:0.#} minute(s); check that the " +
-                    "server is running and healthy, then re-run 'repair project-ids'.");
+                    $"project-ids repair: summary — stuck: {CountsLine(loop.Plan)} — the server has not finished the committed request within {_options.TotalBudget.TotalMinutes:0.#} minute(s); check that the server is running and healthy, then re-run 'repair project-ids'.");
                 return ErrorCode.Bank.RepairStuck;
             }
 
             loop = loop with { Report = pass.After, Plan = pass.AfterPlan, Pass = loop.Pass + 1, Previous = pass };
         }
     }
-
-    /// <summary>The loop's state between passes: the latest census and plan, the pass count, the last pass, and where the run started.</summary>
-    private sealed record RepairLoop(ProjectIdCensusReport Report, ProjectIdsFoldPlan Plan, int Pass, RepairPass? Previous,
-        long FirstTotal, long Started);
-
-    /// <summary>What one pass saw: the actionable set it committed for, the rows it moved, and the re-derived census.</summary>
-    private sealed record RepairPass(string Signature, long Moved, bool Grew, ProjectIdCensusReport After, ProjectIdsFoldPlan AfterPlan,
-        bool StillOpen = false);
 
     /// <summary>
     ///     The loop's exit code once a stop condition holds — settled, stuck, or bound reached with
@@ -354,12 +322,9 @@ public sealed class ProjectIdsRepairCommands
         if (previous is not null && string.Equals(signature, previous.Signature, StringComparison.Ordinal) && previous.Moved == 0 && !previous.Grew)
         {
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: stuck — identical actionable set across 2 passes with zero rows moved " +
-                $"(actionable: {signature}); quiesce writers under folded ids and check the server log for " +
-                "the job receipt, then re-run 'repair project-ids'.");
+                $"project-ids repair: stuck — identical actionable set across 2 passes with zero rows moved (actionable: {signature}); quiesce writers under folded ids and check the server log for the job receipt, then re-run 'repair project-ids'.");
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: summary — stuck: {CountsLine(plan)} — identical actionable set across " +
-                "2 passes with zero rows moved; quiesce writers under folded ids, then re-run.");
+                $"project-ids repair: summary — stuck: {CountsLine(plan)} — identical actionable set across 2 passes with zero rows moved; quiesce writers under folded ids, then re-run.");
             return ErrorCode.Bank.RepairStuck;
         }
 
@@ -373,16 +338,12 @@ public sealed class ProjectIdsRepairCommands
         {
             var stuckIds = string.Join(", ", plan.Folds.Select(fold => $"'{fold.Loser}'"));
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: summary — writers-active: {CountsLine(plan)} — census totals grew " +
-                $"{firstTotal} → {latestTotal} entries across {pass} pass(es); quiesce writers under " +
-                $"folded ids ({stuckIds}), then re-run 'repair project-ids'.");
+                $"project-ids repair: summary — writers-active: {CountsLine(plan)} — census totals grew {firstTotal} → {latestTotal} entries across {pass} pass(es); quiesce writers under folded ids ({stuckIds}), then re-run 'repair project-ids'.");
             return ErrorCode.Bank.RepairWritersActive;
         }
 
         await streams.WriteOutputLineAsync(
-            $"project-ids repair: summary — stuck: {CountsLine(plan)} — still actionable after " +
-            $"{pass} pass(es) with no census growth; quiesce writers under folded ids and check " +
-            "the server log for the job receipt, then re-run.");
+            $"project-ids repair: summary — stuck: {CountsLine(plan)} — still actionable after {pass} pass(es) with no census growth; quiesce writers under folded ids and check the server log for the job receipt, then re-run.");
         return ErrorCode.Bank.RepairStuck;
     }
 
@@ -395,9 +356,7 @@ public sealed class ProjectIdsRepairCommands
         var beforeActionableEntries = ActionableEntries(report, plan);
         await _repair.RequestRepairAsync(RepairKind.ProjectIds, cancellationToken, mapJson);
         await streams.WriteOutputLineAsync(
-            $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — derived {plan.Folds.Count} fold, " +
-            $"{plan.Dropped.Count} drop, {plan.RetiredProjects.Count} retire; request committed; the server " +
-            "applies it on its next maintenance poll (~15s).");
+            $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — derived {plan.Folds.Count} fold, {plan.Dropped.Count} drop, {plan.RetiredProjects.Count} retire; request committed; the server applies it on its next maintenance poll (~15s).");
 
         // The request this run just committed is open until the server stamps finished_at; reading
         // earlier would claim a verdict about a bank the server has not touched yet.
@@ -406,8 +365,7 @@ public sealed class ProjectIdsRepairCommands
         {
             await Task.Delay(_options.PollInterval, _timeProvider, cancellationToken);
             after = await _repair.ReportProjectIdsAsync(cancellationToken);
-        }
-        while (after.RepairOpen && _timeProvider.GetElapsedTime(started) < _options.TotalBudget);
+        } while (after.RepairOpen && _timeProvider.GetElapsedTime(started) < _options.TotalBudget);
 
         var moved = Math.Max(0, beforeActionableEntries - ActionableEntries(after, plan));
         var afterTotal = CensusTotal(after);
@@ -416,18 +374,15 @@ public sealed class ProjectIdsRepairCommands
             // The server has not applied the request within the budget: the poll summary owns the
             // verdict, so no reaped or census line claims a pass the bank never completed.
             return new RepairPass(ActionableSignature(plan), moved, afterTotal > beforeTotal, after,
-                ProjectIdsFoldPlan.FromCensus(after, map), StillOpen: true);
+                ProjectIdsFoldPlan.FromCensus(after, map), true);
         }
 
         await streams.WriteOutputLineAsync(
-            $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — reaped: moved {moved} row(s); " +
-            $"census totals {beforeTotal} → {afterTotal} entries.");
+            $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — reaped: moved {moved} row(s); census totals {beforeTotal} → {afterTotal} entries.");
         if (afterTotal > beforeTotal)
         {
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — census totals grew " +
-                $"({beforeTotal} → {afterTotal}); writers are active under folded ids — quiesce writers, " +
-                "then the loop re-checks.");
+                $"project-ids repair: pass {pass + 1}/{_options.MaxPasses} — census totals grew ({beforeTotal} → {afterTotal}); writers are active under folded ids — quiesce writers, then the loop re-checks.");
         }
 
         return new RepairPass(ActionableSignature(plan), moved, afterTotal > beforeTotal, after,
@@ -447,18 +402,16 @@ public sealed class ProjectIdsRepairCommands
         if (actionable > 0)
         {
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: summary — repair needed: {CountsLine(plan)} — pass --apply to run " +
-                (plan.Unresolved.Count > 0
+                $"project-ids repair: summary — repair needed: {CountsLine(plan)} — pass --apply to run {(plan.Unresolved.Count > 0
                     ? $"the loop until it reports converged; {plan.Unresolved.Count} id(s) still need a human to attribute."
-                    : "the loop until it reports converged."));
+                    : "the loop until it reports converged.")}");
             return false;
         }
 
         if (plan.Unresolved.Count > 0)
         {
             await streams.WriteOutputLineAsync(
-                $"project-ids repair: summary — attention needed: {CountsLine(plan)} — " +
-                $"{plan.Unresolved.Count} id(s) still need a human to attribute.");
+                $"project-ids repair: summary — attention needed: {CountsLine(plan)} — {plan.Unresolved.Count} id(s) still need a human to attribute.");
             return true;
         }
 
@@ -476,18 +429,16 @@ public sealed class ProjectIdsRepairCommands
 
     /// <summary>D6 counts fragment shared by every closing line: explicit zeros, inline pin list.</summary>
     private static string CountsLine(ProjectIdsFoldPlan plan) =>
-        $"{plan.Folds.Count} fold, {plan.Dropped.Count} drop, {plan.RetiredProjects.Count} retire, " +
-        $"{plan.Unresolved.Count} unresolved, {plan.Pinned.Count} pinned{PinsInline(plan)}";
+        $"{plan.Folds.Count} fold, {plan.Dropped.Count} drop, {plan.RetiredProjects.Count} retire, {plan.Unresolved.Count} unresolved, {plan.Pinned.Count} pinned{PinsInline(plan)}";
 
     /// <summary>Inline pin list for the counts fragment; empty when nothing waits.</summary>
     private static string PinsInline(ProjectIdsFoldPlan plan) =>
         plan.Pinned.Count == 0
-            ? string.Empty
+            ? ""
             : $" ({string.Join(", ", plan.Pinned.Select(pin => $"{pin.Bucket}: '{pin.ProjectId}'"))})";
 
     /// <summary>Changes the server can still apply: folds plus drops plus retires.</summary>
-    private static int ActionableCount(ProjectIdsFoldPlan plan) =>
-        plan.Folds.Count + plan.Dropped.Count + plan.RetiredProjects.Count;
+    private static int ActionableCount(ProjectIdsFoldPlan plan) => plan.Folds.Count + plan.Dropped.Count + plan.RetiredProjects.Count;
 
     /// <summary>
     ///     The loop's stuck comparator: the ordered actionable set (fold losers with winners, drops,
@@ -523,11 +474,7 @@ public sealed class ProjectIdsRepairCommands
     }
 
     /// <summary>Bank-wide committed entries — the writers-active instrument.</summary>
-    private static long CensusTotal(ProjectIdCensusReport report) =>
-        report.Rows.Sum(row => row.EntryTotal);
-
-    /// <summary>The outcome of attempting the template write: created, already present, or failed.</summary>
-    internal sealed record TemplateWrite(bool Wrote, string? Failure);
+    private static long CensusTotal(ProjectIdCensusReport report) => report.Rows.Sum(row => row.EntryTotal);
 
     /// <summary>
     ///     Writes the seed template unless the file already exists (never overwrites operator edits).
@@ -554,13 +501,13 @@ public sealed class ProjectIdsRepairCommands
             using var stream = new FileStream(templatePath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
             using var writer = new StreamWriter(stream);
             writer.Write(seed.ToJson(indented: true));
-            return new TemplateWrite(Wrote: true, Failure: null);
+            return new TemplateWrite(true, null);
         }
         catch (IOException ex) when (ex.HResult == unchecked((int)0x80070050))
         {
             // FileMode.CreateNew collides with an existing file (EEXIST on every platform) —
             // the never-overwrite rule. Any other IOException (disk full, access) is reported.
-            return new TemplateWrite(Wrote: false, Failure: null);
+            return new TemplateWrite(false, null);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -569,10 +516,43 @@ public sealed class ProjectIdsRepairCommands
             // so an existing file means operator edits, whatever the IOException says.
             if (File.Exists(templatePath))
             {
-                return new TemplateWrite(Wrote: false, Failure: null);
+                return new TemplateWrite(false, null);
             }
 
-            return new TemplateWrite(Wrote: false, Failure: ex.Message);
+            return new TemplateWrite(false, ex.Message);
         }
     }
+
+    /// <summary>
+    ///     Bounds for the run-until-fixed loop. One server maintenance poll is ~15s (H7), so each
+    ///     pass waits one poll; ≤10 passes cap the committed repair_requests rows at ten and the
+    ///     wall clock near three minutes, with a 10-minute total backstop for loaded machines.
+    /// </summary>
+    public sealed record RepairLoopOptions(int MaxPasses, TimeSpan PollInterval, TimeSpan TotalBudget)
+    {
+        public static RepairLoopOptions Default { get; } = new(10, TimeSpan.FromSeconds(15), TimeSpan.FromMinutes(10));
+
+        internal static RepairLoopOptions Test { get; } = new(3, TimeSpan.Zero, TimeSpan.FromMinutes(10));
+    }
+
+    /// <summary>The loop's state between passes: the latest census and plan, the pass count, the last pass, and where the run started.</summary>
+    private sealed record RepairLoop(
+        ProjectIdCensusReport Report,
+        ProjectIdsFoldPlan Plan,
+        int Pass,
+        RepairPass? Previous,
+        long FirstTotal,
+        long Started);
+
+    /// <summary>What one pass saw: the actionable set it committed for, the rows it moved, and the re-derived census.</summary>
+    private sealed record RepairPass(
+        string Signature,
+        long Moved,
+        bool Grew,
+        ProjectIdCensusReport After,
+        ProjectIdsFoldPlan AfterPlan,
+        bool StillOpen = false);
+
+    /// <summary>The outcome of attempting the template write: created, already present, or failed.</summary>
+    internal sealed record TemplateWrite(bool Wrote, string? Failure);
 }

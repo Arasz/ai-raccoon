@@ -6,7 +6,6 @@ using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Observability;
 using AiRaccoon.Setup;
 using AiRaccoon.Tests.TestHelpers;
-using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Time.Testing;
