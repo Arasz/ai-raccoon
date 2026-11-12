@@ -240,7 +240,7 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
     [RetryFact]
     public async Task ConsolidateAsync_PromotesWithoutASourceFile_LeavingChunkColumnsAtTheUnknownSentinel()
     {
-        var workspaceService = new WorkspaceService(_store, _workspaces, new FakeTimeProvider(FixedNow), TestData.SharedScope);
+        var workspaceService = new WorkspaceService(_store, _workspaces, new FakeTimeProvider(FixedNow), TestData.SharedScope, new EntryKindClassifier());
         var workspace = await workspaceService.BeginAsync("acme", cancellationToken: TestContext.Current.CancellationToken);
         var entry = await _store.WriteAsync(
             new MemoryWriteRequest("acme", "scratch note", WorkspaceId: workspace.Id),
@@ -271,11 +271,11 @@ public sealed class SqliteMemoryStoreChunkColumnMaintenanceTests : IAsyncLifetim
         await File.WriteAllTextAsync(projectFile, "p1\n\np2\n\np3", TestContext.Current.CancellationToken);
         await _store.IngestFileAsync("acme", projectFile, null, TestContext.Current.CancellationToken);
 
-        await _store.AddContentAsync("acme", "shared/a.md", "shared chunk", ContextNaming.SharedContext,
+        await _store.AddContentAsync("acme", "shared/a.md", "shared chunk", ContextNaming.SharedContext, EntryKind.Memory,
             sourceFile: "shared-doc.md", cancellationToken: TestContext.Current.CancellationToken);
-        await _store.AddContentAsync("acme", "custom/a.md", "custom chunk one", "my-label",
+        await _store.AddContentAsync("acme", "custom/a.md", "custom chunk one", "my-label", EntryKind.Memory,
             sourceFile: "custom-doc.md", cancellationToken: TestContext.Current.CancellationToken);
-        await _store.AddContentAsync("acme", "custom/b.md", "custom chunk two", "my-label",
+        await _store.AddContentAsync("acme", "custom/b.md", "custom chunk two", "my-label", EntryKind.Memory,
             sourceFile: "custom-doc.md", cancellationToken: TestContext.Current.CancellationToken);
 
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

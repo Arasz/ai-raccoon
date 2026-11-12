@@ -172,7 +172,8 @@ public sealed partial class SqliteMemoryStore(
         return source is null
             ? throw new UnknownHashException(hash, projectId)
             : await AddContentAsync(projectId, $"shared/{ContentHash.OfValue(source.Value)}.md",
-                source.Value, ContextNaming.SharedContext, source.SourceFile, source.Section, cancellationToken);
+                source.Value, ContextNaming.SharedContext, entryTypeClassifier.Resolve(source.EntryType, source.Path, source.SourceFile),
+                source.SourceFile, source.Section, cancellationToken);
     }
 
     public async Task<IReadOnlyList<ExtractionCandidateRow>> ExtractCandidatesAsync(string projectId,
@@ -280,8 +281,8 @@ public sealed partial class SqliteMemoryStore(
     }
 
     public async Task<MemoryEntryResult> AddContentAsync(
-        string projectId, string path, string content, string? context, string? sourceFile = null,
-        string? section = null, CancellationToken cancellationToken = default)
+        string projectId, string path, string content, string? context, EntryKind entryKind,
+        string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default)
     {
         scope.EnsureCanExecuteInSharedScope(projectId, "direct content writes");
 
@@ -320,7 +321,8 @@ public sealed partial class SqliteMemoryStore(
                     createdAt = now,
                     updatedAt = now,
                     sourceId = source.Id,
-                    entryType = entryTypeClassifier.ToStoredValue(EntryKind.Memory),
+                    entryType = entryTypeClassifier.ToStoredValue(
+                        entryKind == EntryKind.None ? entryTypeClassifier.Classify(path, sourceFile) : entryKind),
                     chunkIndex = -1,
                     totalChunks = 0
                 },

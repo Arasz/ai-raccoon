@@ -222,7 +222,7 @@ public sealed class SearchFixtureBank : IAsyncDisposable
 
             var path = $"bench/{scopeTag}/topic-{topicIndex}/doc-{i:D5}.md";
             var content = ContentFor(topic, random, grouped, positionInBlock);
-            await store.AddContentAsync(ProjectId, path, content, context, sourceFile,
+            await store.AddContentAsync(ProjectId, path, content, context, EntryKind.Memory, sourceFile,
                     cancellationToken: cancellationToken);
         }
     }

@@ -125,6 +125,84 @@ public sealed class EntryTypeWriteTests : IDisposable
         untyped.ShouldBe(0, "a row without a kind is a row the query cannot place");
     }
 
+    /// <summary>A copy keeps the kind its writer declares: a FILE written through add-content is a file, not a memory.</summary>
+    [RetryTheory]
+    [InlineData(EntryKind.File, "file")]
+    [InlineData(EntryKind.Memory, "memory")]
+    public async Task AddContent_WritesTheKindItIsGiven(EntryKind kind, string expected)
+    {
+        await _store.AddContentAsync("acme", "docs/guide.md", "zephyr guide body", ContextNaming.ProjectContext("acme"),
+            kind, sourceFile: "docs/guide.md", cancellationToken: TestContext.Current.CancellationToken);
+
+        (await ReadEntryTypeAsync("acme")).ShouldBe(expected);
+    }
+
+    /// <summary>An undeclared kind (a legacy row) resolves from the row's shape: a source file equal to the path is a file.</summary>
+    [RetryTheory]
+    [InlineData("docs/guide.md", "docs/guide.md", "file")]
+    [InlineData("note.md", null, "memory")]
+    public async Task AddContent_WithNoKind_ResolvesTheKindFromTheShape(string path, string? sourceFile, string expected)
+    {
+        await _store.AddContentAsync("acme", path, "zephyr undeclared body", ContextNaming.ProjectContext("acme"),
+            EntryKind.None, sourceFile: sourceFile, cancellationToken: TestContext.Current.CancellationToken);
+
+        (await ReadEntryTypeAsync("acme")).ShouldBe(expected);
+    }
+
+    /// <summary>Sharing a FILE row promotes a shared FILE row, and the copy carries no TTL.</summary>
+    [RetryFact]
+    public async Task SharingAFileRow_WritesASharedFileRowWithoutATtl()
+    {
+        var source = await _store.AddContentAsync("acme", "docs/guide.md", "zephyr shared guide",
+            ContextNaming.ProjectContext("acme"), EntryKind.File, sourceFile: "docs/guide.md",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var shared = await _store.ShareAsync("acme", source.Entry.Hash, TestContext.Current.CancellationToken);
+
+        var copy = await ReadSharedRowAsync(shared.Entry.Hash);
+        copy.EntryType.ShouldBe("file");
+        copy.TtlDays.ShouldBeNull();
+    }
+
+    /// <summary>Sharing a MEMORY row stays a memory.</summary>
+    [RetryFact]
+    public async Task SharingAMemoryRow_WritesASharedMemoryRow()
+    {
+        var source = await _store.AddContentAsync("acme", "note.md", "zephyr shared note",
+            ContextNaming.ProjectContext("acme"), EntryKind.Memory,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var shared = await _store.ShareAsync("acme", source.Entry.Hash, TestContext.Current.CancellationToken);
+
+        (await ReadSharedRowAsync(shared.Entry.Hash)).EntryType.ShouldBe("memory");
+    }
+
+    /// <summary>A legacy source row (kind none) is shared with the kind its own shape implies.</summary>
+    [RetryFact]
+    public async Task SharingAnUndeclaredFileShapedRow_WritesASharedFileRow()
+    {
+        var source = await _store.AddContentAsync("acme", "docs/legacy.md", "zephyr legacy guide",
+            ContextNaming.ProjectContext("acme"), EntryKind.File, sourceFile: "docs/legacy.md",
+            cancellationToken: TestContext.Current.CancellationToken);
+        await using (var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken))
+        {
+            await connection.ExecuteAsync("UPDATE entries SET entry_type = 'none' WHERE hash = @hash",
+                new { hash = source.Entry.Hash });
+        }
+
+        var shared = await _store.ShareAsync("acme", source.Entry.Hash, TestContext.Current.CancellationToken);
+
+        (await ReadSharedRowAsync(shared.Entry.Hash)).EntryType.ShouldBe("file");
+    }
+
+    private async Task<(string EntryType, long? TtlDays)> ReadSharedRowAsync(string hash)
+    {
+        await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.QuerySingleAsync<(string EntryType, long? TtlDays)>(
+            "SELECT entry_type AS EntryType, ttl_days AS TtlDays FROM entries WHERE hash = @hash AND scope = 'shared'",
+            new { hash });
+    }
+
     private async Task<string?> ReadEntryTypeAsync(string projectId)
     {
         await using var connection = await _factory.OpenBankAsync(TestContext.Current.CancellationToken);

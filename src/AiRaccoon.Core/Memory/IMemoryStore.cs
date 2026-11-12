@@ -67,9 +67,10 @@ public interface IMemoryStore : IModelMigrationStore
 
     /// <summary>
     ///     Indexes caller-provided file content under an explicit logical path and context (memory_add_content;
-    ///     consolidation, share). Created tells the caller whether the row was actually inserted.
+    ///     consolidation, share). The row is written with <paramref name="entryKind" />; <c>None</c> resolves it from the path and source file shape.
+    ///     Created tells the caller whether the row was actually inserted.
     /// </summary>
-    Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context,
+    Task<MemoryEntryResult> AddContentAsync(string projectId, string path, string content, string? context, EntryKind entryKind,
         string? sourceFile = null, string? section = null, CancellationToken cancellationToken = default);
 
     /// <summary>Lists the entries stored under one context (workspace status, sweep enumeration).</summary>

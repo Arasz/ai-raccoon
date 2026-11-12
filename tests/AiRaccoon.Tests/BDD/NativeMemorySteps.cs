@@ -185,7 +185,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         foreach (var (content, path) in rows)
         {
             await scratch.Store.AddContentAsync(projectId, path, content,
-                ContextNaming.ProjectContext(projectId), cancellationToken: CancellationToken.None);
+                ContextNaming.ProjectContext(projectId), EntryKind.Memory, cancellationToken: CancellationToken.None);
         }
 
         var snapshotPath = Path.GetTempFileName();
@@ -283,7 +283,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task WhenIWorkspaceBeginWithAgent(string projectId, string agent)
     {
         // The agent label is part of the tool contract; begin itself returns a generated id.
-        var workspace = await new WorkspaceService(_store, new SqliteWorkspaceStore(_ctx.Factory, TestData.SharedScope), _ctx.TimeProvider, TestData.SharedScope)
+        var workspace = await new WorkspaceService(_store, new SqliteWorkspaceStore(_ctx.Factory, TestData.SharedScope), _ctx.TimeProvider, TestData.SharedScope, new EntryKindClassifier())
             .BeginAsync(projectId, cancellationToken: CancellationToken.None);
         scenarioContext["WorkspaceId"] = workspace.Id;
     }
@@ -566,7 +566,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     {
         var projectId = (string)scenarioContext["ProjectId"];
         var wsId = (string)scenarioContext["WorkspaceId"];
-        var ws = new WorkspaceService(_store, new SqliteWorkspaceStore(_ctx.Factory, TestData.SharedScope), _ctx.TimeProvider, TestData.SharedScope);
+        var ws = new WorkspaceService(_store, new SqliteWorkspaceStore(_ctx.Factory, TestData.SharedScope), _ctx.TimeProvider, TestData.SharedScope, new EntryKindClassifier());
         var keepHashes = keep == "all"
             ? (IReadOnlyList<string>)["all"]
             : [.. keep.Split(',', StringSplitOptions.TrimEntries).Select(k => (string)scenarioContext[k])];
@@ -612,7 +612,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task WhenIDiscardWorkspace(string wsId)
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        var ws = new WorkspaceService(_store, new SqliteWorkspaceStore(_ctx.Factory, TestData.SharedScope), _ctx.TimeProvider, TestData.SharedScope);
+        var ws = new WorkspaceService(_store, new SqliteWorkspaceStore(_ctx.Factory, TestData.SharedScope), _ctx.TimeProvider, TestData.SharedScope, new EntryKindClassifier());
         await ws.DiscardAsync(projectId, wsId, CancellationToken.None);
     }
 
@@ -703,7 +703,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
         var projectId = (string)scenarioContext["ProjectId"];
         var ws = new SqliteWorkspaceStore(_ctx.Factory, TestData.SharedScope);
         await ws.BeginAsync(new Workspace(wsId, projectId), MemoryFeatureContext.FixedNow, CancellationToken.None);
-        await _store.AddContentAsync(projectId, path, "workspace content", $"workspace:{wsId}",
+        await _store.AddContentAsync(projectId, path, "workspace content", $"workspace:{wsId}", EntryKind.Memory,
             cancellationToken: CancellationToken.None);
         scenarioContext["WorkspaceId"] = wsId;
     }
@@ -1597,7 +1597,7 @@ public sealed class NativeMemorySteps(ScenarioContext scenarioContext)
     public async Task GivenContentWrittenWithContext(string content, string context)
     {
         var projectId = (string)scenarioContext["ProjectId"];
-        await _store.AddContentAsync(projectId, "note.md", content, context, cancellationToken: CancellationToken.None);
+        await _store.AddContentAsync(projectId, "note.md", content, context, EntryKind.Memory, cancellationToken: CancellationToken.None);
     }
 
     [When(@"I search for ""(.*)"" restricted to context ""(.*)""")]

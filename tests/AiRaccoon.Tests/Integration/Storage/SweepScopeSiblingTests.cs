@@ -82,7 +82,7 @@ public sealed class SweepScopeSiblingTests : IDisposable
             new MemoryWriteRequest(ProjectId, "sweepable doc note"),
             TestContext.Current.CancellationToken);
         var customEntry = await _store.AddContentAsync(
-            ProjectId, projectEntry.Path, "sweepable doc note", "docs:api",
+            ProjectId, projectEntry.Path, "sweepable doc note", "docs:api", EntryKind.Memory,
             cancellationToken: TestContext.Current.CancellationToken);
         customEntry.Entry.Hash.ShouldBe(projectEntry.Hash,
             "the fixture this test needs: identical content, two scopes, one hash");
