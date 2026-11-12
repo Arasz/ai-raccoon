@@ -323,3 +323,34 @@ class TestTheVersionFile:
 
         assert derive.main([str(tree)]) == 0
         assert "version=9.9.9" in capsys.readouterr().out
+
+
+class TestSingleFactFlag:
+    """`--fact NAME` prints one bare value, so checks.json needs no sed pipeline."""
+
+    def _run(self, *args):
+        return subprocess.run([sys.executable, str(DERIVE), *args],
+                              capture_output=True, text=True, check=False)
+
+    @pytest.mark.parametrize("name,value", [("version", "9.9.9"), ("mcp-tool-count", "2"),
+                                            ("mcp-prompt-count", "1")])
+    def test_it_prints_exactly_the_value(self, tmp_path, name, value):
+        tree = _tree(tmp_path, tools="[McpServerTool] a; [McpServerTool] b;")
+
+        result = self._run(str(tree), "--fact", name)
+
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == f"{value}\n"
+
+    def test_an_unknown_fact_exits_2_with_nothing_on_stdout(self, tmp_path):
+        result = self._run(str(_tree(tmp_path)), "--fact", "nope")
+
+        assert result.returncode == 2
+        assert result.stdout == ""
+        assert "nope" in result.stderr
+
+    def test_a_failing_derivation_still_exits_1_with_nothing_on_stdout(self, tmp_path):
+        result = self._run(str(tmp_path / "nowhere"), "--fact", "version")
+
+        assert result.returncode == 1
+        assert result.stdout == ""

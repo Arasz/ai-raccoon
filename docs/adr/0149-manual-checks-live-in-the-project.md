@@ -8,7 +8,7 @@ Status: Accepted.
 
 The ai-badger framework shipped `ai-raccoon-manual-checklist`, a skill that held AiRaccoon's 44 manual checks, its fact script and its poison embedding stub. A skill that names one project's checks is not framework material: every release of the framework had to carry AiRaccoon's checklist, and a check change needed a framework release.
 
-Framework ADR-0050 replaces it with a generic `run-manual-checklist` skill. The skill reads the checks from the project's own `docs/checklist/checks.json`, and a project that has no such file has no checks.
+Framework ADR-0050 (proposed in ai-badger PR #672) is the decision this follows. It replaces the skill with a generic `run-manual-checklist` skill. The skill reads the checks from the project's own `docs/checklist/checks.json`, and a project that has no such file has no checks.
 
 ## Decision
 
@@ -23,4 +23,12 @@ Framework ADR-0050 replaces it with a generic `run-manual-checklist` skill. The 
 - **Positive.** A new or changed check is one edit in this repository, reviewed with the code that makes it necessary.
 - **Positive.** The framework carries no AiRaccoon knowledge in this area.
 - **Negative.** This repository owns two more scripts and their tests.
-- **Neutral.** The old skill copy in `.ai-badger/` stays until the next re-scaffold removes it.
+- **Neutral.** Until the follow-up below lands, the old skill copy in `.ai-badger/skills/ai-raccoon-manual-checklist` is what agents load.
+
+## Follow-up
+
+After ai-badger 0.220.0 is released, a separate PR:
+
+1. re-scaffolds this repository;
+2. adds `run-manual-checklist` to `include.skills` and removes `ai-raccoon` from `stacks` in `.ai-badger/config.json`;
+3. deletes the old `.ai-badger/skills/ai-raccoon-manual-checklist` copy by hand if the refresh keeps it (it was hand-edited, so the prune may leave it), plus its `.claude/skills` link and the `~/.hermes/skills` link.
