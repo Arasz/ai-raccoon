@@ -1,8 +1,14 @@
 {
-  "lastUpdated": "2026-11-11",
+  "lastUpdated": "2026-11-12",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+    {
+      "id": "air-upgrade-dotnet-11-runtime-async",
+      "title": "Upgrade to .NET 11 (SDK 11.0.100), runtime-async on for net11.0+, NuGet packages updated; release 2.8.0",
+      "pr": 942,
+      "finished": "2026-11-12"
+    },
     {
       "id": "air-hermes-plugin-new-tool-names",
       "title": "Hermes plugin 0.1.1 calls the 2.x MCP tool names and sends sessionId to query",
@@ -273,7 +279,7 @@
       "summary": "Live dry run proposed 23,459 rows to -1: pre-granite (#687) and August chunkings of unchanged files, not corruption (tokenizer switch explains ~5k, #775 ~30). #794 keeps a partition's stored order when positions are 0..n-1 and reproduced rows are in document order; #795 (from two parallel reviews) locates every row's text in one SearchValues pass and keeps the heaviest stored-order chain (reproduced rows outweigh), adds duplicate/lone-CR/moved/out-of-place tests, fixes how-to drift, bumps 1.53.9. Snapshot: 742 to -1, 21 moved."
     }
   ],
-  "next": "Hermes plugin 0.1.1 is untested against a live 2.x server (slow tests need the mcp SDK from the Hermes venv) and no CI job runs integrations/hermes/tests. ai-badger follow-ups were sent to the ai-badger session: old tool names in mcp-tools.json and memory_grade_hook.py, and 18 project-only checklist items that every den-refresh drops. GPU/platform tests now live in build-gpu.yml (#938). Publish 1.60.1, 1.60.2 and 1.60.3 in order: none of the three has been published yet, and 1.60.3 adds the root-help pointer to the monitoring verb. Post-merge follow-ups for air-fix-repair-open-workspaces-census: publish to NuGet (the installed tool is a local build of the same commit) so `dotnet tool update -g ai-raccoon` moves off the local package; the delegated review of PR #889 never ran (openrouter balance exhausted, free tier capped) and was done in-session, so give the diff a human read if you want the second pair of eyes. Then: the 254-vs-1022 retrieval measurement, and a rule on #706.",
+  "next": "Publish 2.8.0 (release cut from fdafa82a; publish.yml waits on the production approval) and confirm build and build-gpu on main fdafa82a are green, since #942 merged before its PR CI finished. Deferred package updates: Microsoft.ML.Tokenizers 3.0 (#943), ONNX Runtime 1.31.1 (#944), System.CommandLine 3.0 (#946, changes CLI error and help text). .ai-badger/config.json summary still says '.NET 10' and regenerates CLAUDE.md/AGENTS.md: fix it and re-run welcome-ai-badger. The installed ai-raccoon 2.6.1 tool does not start on this machine (only the .NET 11 runtime in /usr/local/share/dotnet): update the tool to 2.8.0 to bring the MCP server back. Earlier: Hermes plugin 0.1.1 is untested against a live 2.x server (slow tests need the mcp SDK from the Hermes venv) and no CI job runs integrations/hermes/tests. ai-badger follow-ups were sent to the ai-badger session: old tool names in mcp-tools.json and memory_grade_hook.py, and 18 project-only checklist items that every den-refresh drops. GPU/platform tests now live in build-gpu.yml (#938). Publish 1.60.1, 1.60.2 and 1.60.3 in order: none of the three has been published yet, and 1.60.3 adds the root-help pointer to the monitoring verb. Post-merge follow-ups for air-fix-repair-open-workspaces-census: publish to NuGet (the installed tool is a local build of the same commit) so `dotnet tool update -g ai-raccoon` moves off the local package; the delegated review of PR #889 never ran (openrouter balance exhausted, free tier capped) and was done in-session, so give the diff a human read if you want the second pair of eyes. Then: the 254-vs-1022 retrieval measurement, and a rule on #706.",
   "filedNotStarted": [
     "#477 no job-level metrics (feature gap)",
     "#479 unattributed force-pushes on task branches (post-delta-3 investigation)",
