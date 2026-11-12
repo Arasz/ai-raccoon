@@ -45,14 +45,14 @@ def _post(url, body):
         return json.loads(response.read())
 
 
-def test_it_prints_a_base_url_ending_in_v1(stub):
+def test_it_prints_a_base_url_ending_in_v1(stub: tuple[str, Path]) -> None:
     base, _ = stub
 
     assert base.startswith("http://127.0.0.1:")
     assert base.endswith("/v1")
 
 
-def test_a_float_request_gets_one_vector_per_input(stub):
+def test_a_float_request_gets_one_vector_per_input(stub: tuple[str, Path]) -> None:
     base, _ = stub
 
     body = _post(f"{base}/embeddings", {"model": "m", "input": ["alpha", "beta"]})
@@ -62,7 +62,7 @@ def test_a_float_request_gets_one_vector_per_input(stub):
     assert body["data"][0]["embedding"] != body["data"][1]["embedding"]
 
 
-def test_a_base64_request_gets_little_endian_float32(stub):
+def test_a_base64_request_gets_little_endian_float32(stub: tuple[str, Path]) -> None:
     """The .NET OpenAI SDK asks for base64; a float-only stub fails at the SDK, not the server."""
     base, _ = stub
 
@@ -75,7 +75,7 @@ def test_a_base64_request_gets_little_endian_float32(stub):
     assert decoded == pytest.approx(floats["data"][0]["embedding"], abs=1e-6)
 
 
-def test_the_same_text_always_gets_the_same_vector(stub):
+def test_the_same_text_always_gets_the_same_vector(stub: tuple[str, Path]) -> None:
     base, _ = stub
 
     first = _post(f"{base}/embeddings", {"model": "m", "input": "alpha"})
@@ -84,7 +84,7 @@ def test_the_same_text_always_gets_the_same_vector(stub):
     assert first["data"][0]["embedding"] == second["data"][0]["embedding"]
 
 
-def test_a_batch_holding_the_marker_is_refused_with_400(stub):
+def test_a_batch_holding_the_marker_is_refused_with_400(stub: tuple[str, Path]) -> None:
     base, _ = stub
 
     with pytest.raises(urllib.error.HTTPError) as refused:
@@ -93,7 +93,7 @@ def test_a_batch_holding_the_marker_is_refused_with_400(stub):
     assert refused.value.code == 400
 
 
-def test_any_other_path_is_404(stub):
+def test_any_other_path_is_404(stub: tuple[str, Path]) -> None:
     base, _ = stub
 
     with pytest.raises(urllib.error.HTTPError) as missing:
@@ -102,7 +102,7 @@ def test_any_other_path_is_404(stub):
     assert missing.value.code == 404
 
 
-def test_the_log_counts_ok_and_poison_requests(stub):
+def test_the_log_counts_ok_and_poison_requests(stub: tuple[str, Path]) -> None:
     """The item's negative control: both kinds of request must reach the engine."""
     base, log = stub
     _post(f"{base}/embeddings", {"model": "m", "input": ["a", "b", "c"]})

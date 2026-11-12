@@ -69,7 +69,7 @@ def is_comment_line(line: str) -> bool:
 
 
 def count_attribute_uses(source: str, attribute: str) -> int:
-    """Occurrences of ``[<attribute>`` in *source*, ignoring comment lines.
+    """Occurrences of ``[<attribute>`` in *source*, ignoring block comments and comment lines.
 
     Counts per occurrence, not per line: two attributes on one line are two uses. Only a line
     that *opens* as a comment is dropped, so an attribute following code on the same line counts.
@@ -81,6 +81,9 @@ def count_attribute_uses(source: str, attribute: str) -> int:
     the boundary would have to be word characters for it to match there, so a further
     ``(?!Type)`` lookahead would be redundant.
     """
+    source = re.sub(r'//[^\n]*|@"(?:""|[^"])*"|"(?:\\.|[^"\\])*"|/\*.*?\*/',
+                    lambda match: match[0] if not match[0].startswith("/*")
+                    else "\n" * match[0].count("\n"), source, flags=re.DOTALL)
     pattern = re.compile(r"\[" + re.escape(attribute) + r"\b")
     return sum(len(pattern.findall(line)) for line in source.splitlines()
                if not is_comment_line(line))
@@ -142,7 +145,7 @@ def derive(repo_root: Path) -> Facts:
                  prompts=count_in_tree(prompts_dir, "McpServerPrompt"))
 
 
-def main(argv) -> int:
+def main(argv: list[str]) -> int:
     """Print the derived facts, or the reason there are none. 0 on success, 1 on a failed
     derivation, 2 on an unknown `--fact` name."""
     parser = argparse.ArgumentParser(prog=PREFIX, description="Derive the checklist facts.")

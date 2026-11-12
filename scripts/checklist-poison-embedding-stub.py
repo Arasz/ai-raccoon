@@ -42,13 +42,13 @@ def encode(values: list[float], encoding_format: str | None) -> list[float] | st
     return values
 
 
-def make_handler(marker: str, dims: int, log: Path):
+def make_handler(marker: str, dims: int, log: Path) -> type[BaseHTTPRequestHandler]:
     """A request handler bound to one marker, vector size and log file."""
 
     class Handler(BaseHTTPRequestHandler):
         """Serves POST .../embeddings; every other request is 404."""
 
-        def do_POST(self):  # pylint: disable=invalid-name  # http.server dispatch name
+        def do_POST(self) -> None:  # pylint: disable=invalid-name  # http.server dispatch name
             """Embed the inputs, or refuse the batch when one holds the marker."""
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")
@@ -81,7 +81,7 @@ def make_handler(marker: str, dims: int, log: Path):
             self.end_headers()
             self.wfile.write(raw)
 
-        def log_message(self, format, *args):  # pylint: disable=redefined-builtin
+        def log_message(self, format: str, *args: object) -> None:  # pylint: disable=redefined-builtin
             """Keep stdout to the one base-URL line."""
 
     return Handler
