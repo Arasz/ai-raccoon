@@ -2,7 +2,7 @@
 
 Date: 2026-11-12
 
-Status: Proposed. The release version (D1), the ONNX Runtime scope (D2) and RollForward (D3) wait on the owner gate `docs/work/2026-11-12-dotnet-11-upgrade-review.html`.
+Status: Proposed. The release version (D1) and RollForward (D3) wait on the owner gate `docs/work/2026-11-12-dotnet-11-upgrade-review.html`.
 
 ## Context
 
@@ -14,7 +14,7 @@ The solution targets `net10.0` and global.json pins SDK 10.0.401. The global too
 
 - Every `net10.0` project targets `net11.0`. The source generator stays on `netstandard2.0`. global.json pins SDK 11.0.100 with `latestPatch`. CI, scripts and script tests that name `bin/Debug/net10.0` or `tools/net10.0` follow the new folder.
 - `Directory.Build.targets` turns on runtime-async for every `net11.0` project: `<Features>$(Features);runtime-async=on</Features>`. It is a `.targets` condition, because `TargetFramework` is not set yet when `Directory.Build.props` is read. A test checks that a production `async` method has the runtime-async method flag, so a build that loses the switch fails the test.
-- Packages move to their latest stable versions, including System.CommandLine 3.0. Each major bump is a separate commit with its API changes. These packages stay where they are: `HiraokaHyperTools.sqlite-vec` (retrieval-harness rule), and `Microsoft.ML.Tokenizers` with `Microsoft.ML.Tokenizers.Data.O200kBase` at 2.0.1 (the owner deferred the 3.0 update on 2026-11-12). ONNX Runtime follows D2.
+- Packages move to their latest stable versions. System.CommandLine moves to 3.0 only if the change is small (about 10 call sites, no behaviour change); otherwise it stays at 2.0.13 and gets its own issue. These packages stay where they are: `HiraokaHyperTools.sqlite-vec` (retrieval-harness rule), `Microsoft.ML.Tokenizers` with `Microsoft.ML.Tokenizers.Data.O200kBase` at 2.0.1 (#943), and `Microsoft.ML.OnnxRuntime` at 1.30.0 (#944). The owner deferred the last two on 2026-11-12.
 
 ## Options
 
