@@ -15,17 +15,11 @@ public sealed class SearchDispatcher(
 {
     private readonly ISharedProjectScope _scope = scope;
 
-    public async Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, EntryType entryTypes, string rawScope,
+    public async Task<SearchDispatchResult> DispatchAsync(SearchQuery searchQuery, string rawScope,
         string correlationId, string sessionId, int? codeLimit = null, double? codeMinRelativeScore = null,
         CancellationToken cancellationToken = default)
     {
-        EntryTypeParameter.RefuseUnknownBits(entryTypes);
-        if (entryTypes == EntryType.None)
-        {
-            throw new ArgumentException("The entry type selection cannot be empty.", nameof(entryTypes));
-        }
-
-        searchQuery = searchQuery with { EntryTypes = entryTypes };
+        var entryTypes = searchQuery.EntryTypes;
         _scope.EnsureCanExecuteInSharedScope(searchQuery);
         SearchResults? memorySearchResults = null;
         IReadOnlyList<MemorySearchResult> results = [];
@@ -69,8 +63,6 @@ public sealed class SearchDispatcher(
         var quality = entryTypes == EntryType.Code
             ? new QualitySelection(codeResults?.Count ?? 0, [])
             : new QualitySelection(results.Count, [.. results.Where(r => r.SourceFile is not null).Select(r => r.SourceFile!).Take(5)]);
-        var legacyKind = entryTypes == EntryType.Code ? SearchKindWireNames.Code
-            : entryTypes.HasFlag(EntryType.Code) ? SearchKindWireNames.Both : SearchKindWireNames.Memory;
         // P6a threading: join the served rows to the P4 sidecar by hash, in served order.
         // Null sidecar stays null (absent-evidence writes exactly as before); a present sidecar
         // yields the served subset only, so the payload is bounded by the served rows.
@@ -91,7 +83,7 @@ public sealed class SearchDispatcher(
         }
 
         await qualityService.RecordSearchSafeAsync(correlationId, searchQuery.Query,
-            rawScope, searchQuery.ProjectId, legacyKind,
+            rawScope, searchQuery.ProjectId, SearchQualityKinds.KindOf(entryTypes),
             sessionId, quality.Count, quality.Files,
             cancellationToken, evidence, entryTypes);
 

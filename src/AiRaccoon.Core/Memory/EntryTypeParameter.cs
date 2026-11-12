@@ -95,7 +95,7 @@ public static class EntryTypeParameter
                 "The entry type asks for no kind at all: expected memory, code, or file.", nameof(value));
         }
 
-        return RefuseUnknownBits(set);
+        return set;
     }
 
     /// <summary>
@@ -113,6 +113,21 @@ public static class EntryTypeParameter
         }
 
         return types;
+    }
+
+    /// <summary>
+    ///     The one check a query's selection passes: it names at least one kind and only known ones.
+    ///     <see cref="SearchQuery" /> applies it where the selection is set, so no reader re-checks.
+    /// </summary>
+    /// <exception cref="ArgumentException">The set is empty or carries a bit outside the known kinds.</exception>
+    public static EntryType Require(EntryType types)
+    {
+        if (types == EntryType.None)
+        {
+            throw new ArgumentException("The entry type selection cannot be empty.", nameof(types));
+        }
+
+        return RefuseUnknownBits(types);
     }
 
     /// <summary>
