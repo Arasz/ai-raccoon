@@ -37,10 +37,10 @@ internal static class ToolTelemetry
     internal static readonly IReadOnlyDictionary<string, Func<IDictionary<string, JsonElement>?, ToolProject>>
         Projections = new Dictionary<string, Func<IDictionary<string, JsonElement>?, ToolProject>>(StringComparer.Ordinal)
         {
-            ["get_memories_sharing_ranking"] = static arguments => new ToolProject(Text(arguments, ProjectIdArgument) ?? AllProjectsId, null),
-            ["trigger_memory_sharing"] = static arguments => new ToolProject(JoinedText(arguments, ProjectIdsArgument), MultiProjectId),
-            ["save_project_id_token"] = static _ => new ToolProject(NoProjectId, null),
-            ["get_project_id"] = static _ => new ToolProject(NoProjectId, null)
+            [ToolNames.GetMemoriesSharingRanking] = static arguments => new ToolProject(Text(arguments, ProjectIdArgument) ?? AllProjectsId, null),
+            [ToolNames.TriggerMemorySharing] = static arguments => new ToolProject(JoinedText(arguments, ProjectIdsArgument), MultiProjectId),
+            [ToolNames.SaveProjectIdToken] = static _ => new ToolProject(NoProjectId, null),
+            [ToolNames.GetProjectId] = static _ => new ToolProject(NoProjectId, null)
         };
 
     /// <summary>The filter: every call to every registered tool, present and future, passes through it.</summary>

@@ -14,10 +14,7 @@ public sealed class PromotionTools(
     IPromotionQueue queue,
     IToolGate gate)
 {
-    private const string TnGetMemoriesSharingRanking = "get_memories_sharing_ranking";
-    private const string TnDeleteMemoryFromRanking = "delete_memory_from_ranking";
-
-    [McpServerTool(Name = TnGetMemoriesSharingRanking)]
+    [McpServerTool(Name = ToolNames.GetMemoriesSharingRanking)]
     [McpToolScope(ToolScope.Project)]
     [Description(
         "Lists the propose tier — candidates waiting for promotion review, ranked by score. Propose with trigger_memory_sharing to fill it; promote the keepers with trigger_memory_sharing (mode=promote) or drop them with delete_memory_from_ranking. Values are previews by default; pass includeFullValue=true for the full text. Omitting projectId requires allProjects=true.")]
@@ -40,7 +37,7 @@ public sealed class PromotionTools(
         var canonical = projectId;
         if (projectId is not null)
         {
-            canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, TnGetMemoriesSharingRanking, cancellationToken);
+            canonical = await gate.RequireAsync(projectId, AccessRequirement.Read, ToolNames.GetMemoriesSharingRanking, cancellationToken);
         }
         else if (!allProjects)
         {
@@ -51,7 +48,7 @@ public sealed class PromotionTools(
         {
             // The allProjects branch names no project to check, but it still meets the gate: the
             // migration lock holds for every bank operation (ADR-0076).
-            await gate.RequireBankAvailableAsync(TnGetMemoriesSharingRanking, cancellationToken);
+            await gate.RequireBankAvailableAsync(ToolNames.GetMemoriesSharingRanking, cancellationToken);
         }
 
         var rows = await queue.ListAsync(canonical, limit, cancellationToken);
@@ -69,7 +66,7 @@ public sealed class PromotionTools(
             ? value
             : $"{value[..(SharedExtractionService.PreviewLength - 1)]}…";
 
-    [McpServerTool(Name = TnDeleteMemoryFromRanking)]
+    [McpServerTool(Name = ToolNames.DeleteMemoryFromRanking)]
     [McpToolScope(ToolScope.Project)]
     [Description(
         "Removes a candidate from the propose tier without promoting it (the agent's 'no'). Omit the hash to clear the whole project's queue. Idempotent: an unknown hash is not an error — it reports discarded=0.")]
@@ -79,7 +76,7 @@ public sealed class PromotionTools(
         string? hash = null,
         CancellationToken cancellationToken = default)
     {
-        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, TnDeleteMemoryFromRanking, cancellationToken);
+        var canonical = await gate.RequireAsync(projectId, AccessRequirement.Write, ToolNames.DeleteMemoryFromRanking, cancellationToken);
 
         var discarded = await queue.DiscardAsync(canonical, hash, cancellationToken);
         var result = new PromotionDiscardResult(discarded);
