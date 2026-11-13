@@ -1,0 +1,490 @@
+{
+  "run": {
+    "date": "2026-11-13",
+    "branch": "checklist/2026-11-13-run",
+    "commit": "d912ebab6dfbc4277d70cad4a1c61699c87279f0",
+    "note": "Full 44-item pass against the 2.9.0 local pack (HEAD d912ebab) installed to an isolated tool path; all writes in scratch data roots; live bank read only."
+  },
+  "derived": {
+    "version": "2.9.0",
+    "mcp-tool-count": "43",
+    "mcp-prompt-count": "2"
+  },
+  "findings-against-prior-runs": [
+    "The 2.1.0 changelog (and the typed-memory-only-ttl check) say File TTL setting and clearing are refused; this run finds that clearing a File TTL (ttlDays=null) is accepted as a no-op success, contradicting the 2.1.0 changelog text 'refuses both setting and clearing a File TTL' and the check wording (MemorySql.cs:897-898 makes clearing reach any kind on purpose).",
+    "Prior runs and docs/reference/agent-memory-server.md say an unclassified row's entryKind 'none' is the entryType to pass get_entry, but get_entry refuses 'none' as invalid and unknown-hash for memory/file/code: a row with entry_type 'none' cannot be read by get_entry at all (observed on 2.9.0).",
+    "Check typed-query-all-selections says only the default/all selection includes unclassified rows; 2.9.0 also includes them for entryType=memory,file (documented in MemoryTools and agent-memory-server.md:162). The check wording is narrower than the product contract.",
+    "2026-10-13-1.57.6-release recorded that sqlite3 -readonly on the live WAL bank fails ('unable to open database file') and had to copy the file; on this run `sqlite3 -readonly file:...?mode=ro` and VACUUM INTO worked because the live bank has a -shm/-wal pair (the live server holds it open).",
+    "The 1.56.1 changelog's 74-second long-query cost on a 22,450-entry bank does not reproduce on 2.9.0 (1.2-3.2 s for a 7,000-char paste on a 25,829-entry copy); the 1.56.0 control built here took 3.6-4.4 s on a 3.7k-entry docs bank.",
+    "run-manual-checklist new-run rejects the slug '2.9.0-full-pass' (dots are not kebab-case); the run used '2-9-0-full-pass'.",
+    "checks.json watch-catch-up item says `.git/notes.md`; writing a .git directory from a shell is blocked by this environment's git-internals guard, so the dot-git decoy was created through python as <dir>/.git/notes.md; the term was never found."
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release pack succeeds; install to an isolated tool path, or force-update the global tool when requested; installed --version matches derived.version.",
+      "command": "git -C <worktree> rev-parse HEAD; python3 scripts/download-mlx-runtime.py; cp Models/granite-embedding-small-english-r2/model_fp16.onnx_data (gitignored); dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=osx-arm64 -o $S/artifacts; dotnet tool install ai-raccoon --version 2.9.0 --add-source $S/artifacts --tool-path $S/tool; $S/tool/ai-raccoon --version; shasum -a 256 $S/tool/ai-raccoon; global `ai-raccoon --version` (read only, not updated)",
+      "evidence": "Successfully created package '.../artifacts/ai-raccoon.osx-arm64.2.9.0.nupkg'.\nSuccessfully created package '.../artifacts/ai-raccoon.2.9.0.nupkg'.\nTool 'ai-raccoon' (version '2.9.0') was successfully installed.\n$S/tool/ai-raccoon --version -> 2.9.0+d912ebab6dfbc4277d70cad4a1c61699c87279f0\ngit rev-parse HEAD -> d912ebab6dfbc4277d70cad4a1c61699c87279f0\nshasum -a 256 $S/tool/ai-raccoon -> b9b2521b0f322224672bdb5bd8d0cffbbaacdcb72cb03e12e99e1e4aa7c9b3f7\nglobal ai-raccoon --version (untouched) -> 2.9.0+dd035aab086da198d969a279d5e889ce7f7a7e13\nrun.derived.version = 2.9.0",
+      "observed-result": "Release pack of this worktree (HEAD d912ebab) succeeded and the isolated tool-path install reports 2.9.0+<HEAD sha>: identity proved by the +sha equal to git HEAD, not by the version string. Every later server in this run was started from this install ('serving on port N' lines print the same +sha). The global tool was not updated (it is a different build, dd035aab).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "$S/tool/ai-raccoon --data-root $S/d1 serve --port 0 --idle-timeout 0 (background); lsof -nP -iTCP:<port> -sTCP:LISTEN; $S/tool/ai-raccoon --data-root $S/d1 serve --restart --port 57730 --idle-timeout 0 (background); lsof again; lsof -iTCP:7721",
+      "evidence": "serve1.log: ai-raccoon: 2.9.0+d912ebab6dfbc4277d70cad4a1c61699c87279f0 serving on port 57730 from '.../tool/.store/ai-raccoon/2.9.0/...' (http://127.0.0.1:57730/mcp)\nlsof :57730 before restart -> AiRaccoon 45651 ... TCP 127.0.0.1:57730 (LISTEN)\nserve1-restart.log: ...serving on port 57730 ...\nlsof :57730 after restart -> AiRaccoon 46323 ... TCP 127.0.0.1:57730 (LISTEN); ps -p 45651 -> no process\nlsof :7721 -> AiRaccoon 77332 (the user's live server, same pid before and after, never touched)",
+      "observed-result": "--port 0 bound a random port and printed it; --restart on that explicit port replaced pid 45651 with pid 46323 on the same port (cycled, did not attach); port 7721 stayed with the user's own pid 77332 throughout.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "memory-write-stores-and-reports-truthfully",
+      "anchor": "docs/adr/0032-truthful-write-outcome.md",
+      "expected-result": "add_memory returns a hash for a stored entry; a rejected write returns Stored=false with a reason and no fabricated hash (ADR-0032)",
+      "command": "MCP add_memory {projectId, content, sessionId} on scratch server 57730; add_memory content=''; add_memory workspaceId='no-such-ws'; then noise-rejected write (see write-path-noise-filtering)",
+      "evidence": "add_memory ok -> {\"data\":{\"hash\":\"319611aaf4d32821079324cdd7802b17bfa83cbfa629b5dd3416a8ab990fc173\",\"path\":\"3bd52dbd...md\",\"context\":\"project:21238131-...\",\"createdAt\":1794566248,\"stored\":true}}\nadd_memory '' -> isError: invalid-params: Validation failed: -- content: 'content' must not be empty.\nadd_memory workspaceId=no-such-ws -> isError: unknown-workspace: Workspace 'no-such-ws' does not exist for project '21238131-...'.\nnoise-rejected write -> {\"hash\":\"\",\"path\":\"\",\"context\":\"\",\"stored\":false,\"reason\":\"rejected by noise policy 'HermesBackgroundProcessLog'\"}",
+      "observed-result": "A stored write returns a real 64-hex hash and stored=true; refused writes are explicit (error codes, or stored=false with a reason and an empty hash, no fabricated hash).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "memory-search-hybrid-retrieval",
+      "expected-result": "query returns the written entry through hybrid BM25 + vector RRF ranking",
+      "command": "add_memory 'Ferrets in Alder Lane run a quarterly xylophone auction every equinox.'; embed_deferred_entries; query 'musical instrument sale held by small mustelids' (semantic) and query 'xylophone auction' (keyword), minRelativeScore=0",
+      "evidence": "semantic query -> ranking 1 hash 223ba908..., legs=[{vector rank 1}], cosine 0.856, participatingLegs=[vector]\nkeyword query -> ranking 1 hash 223ba908..., legs=[{fts rank 1},{vector rank 1}], cosine 0.864, participatingLegs=[fts,vector]",
+      "observed-result": "The written entry is returned by RRF fusion: by the vector leg alone for a paraphrase and by fts + vector for a keyword query.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "memory-get-returns-content-by-hash",
+      "anchor": "docs/adr/0035-memory-get-and-query-relevant-snippets.md",
+      "expected-result": "get_entry requires one entryType and returns the selected Memory/File/Code entry for a reachable hash; unknown or mismatched types refuse without fallback (2.1.0 changelog, ADR-0035)",
+      "command": "MCP get_entry {projectId, hash, entryType} with entryType memory|file|code|bogus|''|'memory,file' and an all-zero hash",
+      "evidence": "memory -> ok value 'Ferrets in Alder Lane run...'\nfile -> unknown-hash: No entry with hash '223ba908...' in project '6ecf69c2-...'.\ncode -> unknown-hash\nbogus -> invalid-params: Invalid entry type 'bogus': expected memory, code, or file.\n'' -> invalid-params: The entry type is required: expected memory, code, or file.\n'memory,file' -> invalid-params: A lookup names one entry type, not 'Memory, File'.\nzero hash -> unknown-hash",
+      "observed-result": "Exactly one entryType is required; the selected type returns the entry, a mismatched type is unknown-hash with no fallback, bogus/empty/composite types are refused.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "source-path-anchor-resolves-its-chunk",
+      "expected-result": "a `file#section` query returns that exact chunk within the production result window",
+      "command": "Wrote docs1/brindlemoor.md (8 sections, ~22.7 KB), ingest_file, embed_deferred_entries; query '<file>#<section>' with entryType=file for Delta quarry, Foxtrot canal, Hotel foundry, Bravo lighthouse",
+      "evidence": "chunks: 8 rows chunk_index 0..7, one per section (section column Alpha harbour .. Hotel foundry)\nbrindlemoor.md#Delta quarry -> rank 1 '## Delta quarry...' chunkIndex 3/8 legs fts+vector\nbrindlemoor.md#Foxtrot canal -> rank 1 chunkIndex 5/8\nbrindlemoor.md#Hotel foundry -> rank 1 chunkIndex 7/8\nbrindlemoor.md#Bravo lighthouse -> rank 1 chunkIndex 1/8",
+      "observed-result": "Each file#section anchor ranks its exact section chunk first, for a document with eight multi-chunk sections, within the default result window.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "keyword-search-across-a-chunk-boundary",
+      "anchor": "docs/adr/0120-chunk-boundaries-fall-on-whitespace.md",
+      "expected-result": "add_memory a note made of\"The village fete committee met in the church hall to plan stalls, bunting, the tombola and the cake competition.\" forty-five times, space-joined (ten fit in one chunk since 1.56), then \" Invoice reference vk83jq was filed with the parish council.\" Premise: sqlite shows more than one entries row for the note's path. query {query: \"vk83jq\", entryType: memory, minRelativeScore: 0} returns the note with an `fts` leg in evidenceByHash, and one of its rows holds `vk83jq` whole (`instr(value,'vk83jq')`). A vector-only hit does not count: the vector leg finds this note on a broken build too. Then write a note holding one whitespace-free term of about 2,500 characters (40 concatenated SHA-256 hex digests); premise: no row holds the whole term; searching the whole term returns that note with an `fts` leg. A build without ADR-0120 returns both notes by the vector leg only, and no row holds vk83jq (ADR-0120)",
+      "command": "add_memory of the 45x fete sentence + ' Invoice reference vk83jq was filed with the parish council.'; sqlite read of entries rows for the path; query {query:'vk83jq', entryType:memory, minRelativeScore:0}; then add_memory of a 2560-char SHA-256 hex term and query of the whole term",
+      "evidence": "6 premise: select count(*), sum(instr(value,'vk83jq')>0) for the note path -> 2|1 (chunk 0: 4611 chars, no vk83jq; chunk 1: 533 chars, holds vk83jq)\n6 q vk83jq -> result with path==note path, legs [{fts rank 1},{vector rank 1}] (second note row: vector rank 3 only)\n6b term len 2560; rows for its path -> 2|0|1710 (two rows, none holds the whole term)\n6b q whole term -> note returned rank 1, legs [{fts rank 1},{vector rank 1}]",
+      "observed-result": "More than one row exists for each note, only one row holds vk83jq whole (so a vector-only hit would not count), and the note comes back with an fts leg; the 2,500-char single token is split across rows yet still found through an fts leg.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "note-opening-chunk-reports-index-zero",
+      "anchor": "docs/adr/0122-note-chunk-positions-follow-text-order.md",
+      "expected-result": "add_memory a note with sourceFile /notes/minutes.md made of 62 paragraphs separated by blank lines (\"Paragraph N of the parish minutes records the treasurer's report on hall repairs, roof slates and the organ fund.\"), the first opening with \"Opening marker zq71\". Premise: sqlite shows more than one row for the note's path. query {query: \"zq71\", entryType: memory, minRelativeScore: 0} returns it with chunkIndex 0, and sqlite gives chunk_index 0 for the row where `instr(value,'zq71') > 0`. A build without ADR-0122 puts the opening at the last index (1 of 2 on 1.56.1) (ADR-0122)",
+      "command": "add_memory of 62 newline-separated paragraphs ('Opening marker zq71.' in paragraph 1) with sourceFile=/notes/minutes.md; sqlite entries rows; query zq71",
+      "evidence": "entries rows for /notes/minutes.md: 0|1|4304 and 1|0|3015 (chunk_index | has zq71 | length)\nquery zq71 -> rank 1 sourceFile /notes/minutes.md chunkIndex 0 totalChunks 2 'Opening marker zq71. Paragraph 1 of the ...'",
+      "observed-result": "The opening chunk holding the marker is stored and reported with chunkIndex 0 of 2.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "poison-memory-row-isolated-and-abandoned",
+      "anchor": "docs/adr/0119-poison-memory-rows-are-isolated-and-abandoned.md",
+      "expected-result": "On a fresh scratch bank with no engine set, add_memory four ordinary notes and one containing POISON-7Q, so all five rows are pending. Start `python3 scripts/checklist-poison-embedding-stub.py --port 0 --log stub.log`, then run `model embedding set openai stub-embed <printed base URL> --api-key stub-key` against the scratch server. embed_deferred_entries returns {processed, pending} and does not fail or hang. Later calls return pending 1. `sqlite3 -readonly memory.db \"SELECT embed_state, embed_attempts, count(*) FROM entries GROUP BY 1, 2\"` shows four rows embedded and the poison row pending at embed_attempts 3. get_store_statistics.pending is 1, and the count of poison lines in stub.log stays the same across three more embed_deferred_entries calls. Negative control: stub.log holds a `poison 5` batch line followed by `ok 1` lines, so the engine refused the batch and answered the single rows. A build without ADR-0119 fails every embed_deferred_entries with ClientResultException, keeps all five rows pending and adds a poison line per call (ADR-0119)",
+      "command": "python3 scripts/checklist-poison-embedding-stub.py --port 0 --log stub.log (base http://127.0.0.1:57918/v1); scratch server 57915 fresh bank; add 4 clean notes + 1 note holding POISON-7Q; `ai-raccoon model embedding set openai stub-embed http://127.0.0.1:57918/v1 --api-key stub-key`; embed_deferred_entries x4 then x3 more; sqlite embed_state/embed_attempts",
+      "evidence": "pre: pending|0|5\nembed 1 -> processed 4, pending 1; embed 2-4 -> processed 0, pending 1\npost: embedded|0|4 and pending|3|1 (the poison row, embed_attempts 3)\nstub.log: ok 1 / poison 5 / ok 1 / ok 1 / ok 1 / ok 1 / poison 1 / poison 1 / poison 1 / ok 1 / poison 1 / poison 1 / ok 1  (6 poison lines)\nthree extra embed passes afterwards: stub.log still 6 poison lines; row stays pending|3",
+      "observed-result": "The four clean rows embedded despite the refused batch of 5; the poison row was retried alone, capped at 3 attempts and then abandoned (no further requests reach the stub) while the drain keeps reporting processed 0, pending 1.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "write-path-noise-filtering",
+      "anchor": "docs/adr/0039-noise-learning-substrate-and-shadow-mode.md",
+      "expected-result": "each registered write-path policy rejects what it claims to, the write reports the rejection, and the rejected content is retrievable from the noise store (ADR-0039)",
+      "command": "add_memory for 5 contents on the 2.9.0 server; `ai-raccoon --data-root d1 --port 57730 noise entries`; sqlite select * from noise_entries",
+      "evidence": "'[IMPORTANT: Background process abc completed normally. Command: dotnet build]' -> stored:false reason \"rejected by noise policy 'HermesBackgroundProcessLog'\"\n'[ASYNC DELEGATION BATCH COMPLETE] the agents you dispatched earlier has finished' -> stored:false same reason\n'received signal 15' -> stored:false same reason\n'received signal 15 while handling the ferry timetable' -> stored:true hash 8bcb9279...\n'The treasurer received a signal from the harbour master.' -> stored:true hash ba5cfeb0...\nnoise entries -> 'total: 3  HermesBackgroundProcessLog: 3'; noise_entries rows 1-3 are exactly the three rejected contents",
+      "observed-result": "The three Hermes notification shapes are refused and recorded; near-miss controls (extra text after 'received signal 15', ordinary prose containing 'received signal') are stored.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "read-path-query-guard",
+      "anchor": "docs/adr/0040-read-path-query-guard.md",
+      "expected-result": "the refuse and annotate tiers behave as ADR-0040 describes; the structural detector is off until `queryguard structural enable` and only ever annotates (ADR-0041)",
+      "command": "query on 57730 with a Hermes notification, an async-batch notification, a stack-frame query, a console log-level query, a clean query; `settings queryguard show|structural enable|disable`; structural fixture texts from scripts' model-score-fixture.json",
+      "evidence": "refuse1 '[IMPORTANT: Background process 4d2 completed normally. Command: dotnet build' -> invalid-params: This looks like tool output rather than a question...\nrefuse2 '[ASYNC DELEGATION BATCH COMPLETE] work you dispatched earlier has finished' -> invalid-params: ...\nwarn stack frame '...at System.Net.Http.HttpClient.Send(...)' -> results run, warning 'This query contains what looks like log or stack-trace output...'\nwarn log 'info: Microsoft.Hosting.Lifetime[14]' -> same warning\nclean 'ferret xylophone auction' -> warning null, n=2\nshow -> enabled: True  shadow: False  structural: False  threshold: 0.98939822280316\nstructural enable -> 'query guard structural detector enabled'; Hermes refuse query still refused\nstructural fixture queries (trace_dotnet, trace_node, trace_python, cli_sqlite): disabled -> '' ; enabled -> \"This query's shape (line layout, punctuation density, token structure) statistic...\" ; prose 'f: I want you to create PR for those changes' -> '' in both states; disable -> '' again",
+      "observed-result": "Both refuse shapes are refused, the two regex warn shapes annotate, clean queries pass, and the default-off structural detector annotates only when enabled (and only machine-output-shaped text, with a prose negative control), never refusing.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "long-query-keyword-terms-capped",
+      "anchor": "docs/adr/0126-long-query-fts-terms-capped-for-cost.md",
+      "expected-result": "Copy the live bank with VACUUM INTO (clear its watches) and serve the copy. A query for the first ~7,000 characters of CLAUDE.md, and one for ~7,000 characters of stopwords plus two content words, each return in seconds at vectorWeight 0, and data.warning says keyword matching is capped at the first 64 distinct words, with no clause saying it still sees the query in full. On a fresh bank with vectorWeight 0 and minRelativeScore 0, a marker word placed after 70 distinct filler words gets no hit, and the same word placed first gets an `fts` leg. Repeats do not use up the cap: the marker after 80 repeats of two words is still found. A 6-token query keeps the stopword `the`, and a 71-token query drops it. Negative control: install the release before the cap into a scratch --tool-path and run the same copy and queries. There the paste takes tens of seconds, the stopword run times out, and both the trailing marker and the 71-token `the` are found (ADR-0126)",
+      "command": "python3 i11b.py on (a) 2.9.0 on a 3,725-entry bank ingested from docs/*.md, (b) 2.9.0 on a VACUUM INTO copy of the live bank (25,829 entries, watches deleted+disabled) and (c) tool 1.56.0 (DOTNET_ROLL_FORWARD=Major) as the pre-cap control on the same docs corpus; vectorWeight=0 minRelativeScore=0",
+      "evidence": "2.9.0 docs bank: CLAUDE.md paste (7000 chars) 0.06s n=8 legs=['fts'] warnFTS64=True warnInFull=False; stopword paste 0.04s\n2.9.0 live-bank copy (25,829 entries): paste 1.76s n=8 legs=['fts'] warnFTS64=True; stopword paste 1.19s\n1.56.0 control (docs bank): paste 3.56s / stopword 4.38s, warning keeps 'in full' (warnInFull=True)\ncap probes 2.9.0: A marker after 70 distinct filler words -> n=0 (live copy 0.12s, [] too); B marker first -> ['Mark quokkaglyph here']; C 160 repeated words + marker -> wombatrune note found; D 6-token query with 'the' -> 'the' notes matched; F 71-token 'the'+marker inside first 64 -> ['Mark quokkaglyph here'] only\n1.56.0 control A (same probe) -> ['Mark quokkaglyph here'] (found: no cap) and F -> marker note plus 'the' notes",
+      "observed-result": "A pasted 7,000-char query now searches at most its first 64 distinct stopword-free words (marker after 70 distinct words is not found; repeated words count once; stopwords dropped) and the warning says so; the pre-cap 1.56.0 build finds the 71st-word marker, which proves the probe can distinguish the two. The 74-second case from the 1.56.1 changelog does not reproduce: 1.2-3.2 s on the large bank.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "get_watch_status lists live registrations and their sync state",
+      "command": "settings ingest scope add <P> watch1; settings watch enable <P> true; MCP add_watch; MCP get_watch_status; `watch status <P>`; `watch registered <P>`; query zephyrquill entryType=file",
+      "evidence": "add_watch -> {\"projectId\":\"6ecf69c2-...\",\"path\":\".../watch1\",\"pruned\":[]}\nget_watch_status -> {\"watches\":[{\"projectId\":\"6ecf69c2-...\",\"path\":\".../watch1\",\"state\":\"Healthy\",\"lastSync\":\"2026-11-13T10:44:44.228004+00:00\",\"skippedCount\":0,\"skipped\":[]}]}\nwatch status (CLI) -> state: healthy lastSync: 2026-11-13T10:44:44Z\nwatch registered -> project: 6ecf69c2-...  path: .../watch1  registered: 2026-11-13T10:44:42Z  lastChange: 2026-11-13T10:44:44Z\nquery zephyrquill -> path .../watch1/a.md",
+      "observed-result": "The live registration is listed with state Healthy and a last-sync time over MCP and the CLI, and the watched file's content is searchable.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "watch-catch-up-heals-a-missed-change",
+      "anchor": "docs/adr/0121-restart-catch-up-compares-each-file-with-its-own-fingerprint.md",
+      "expected-result": "Watch a scratch directory (`settings ingest scope add`, `settings watch enable`, add_watch) holding x.md, w.md and y.md, plus node_modules/pkg/index.md and .git/notes.md, each with a term found nowhere else. Wait for three watch_files rows and leave node_modules readable (a `chmod 000` decoy is absent whether or not it is excluded, so that leg could never fail), wait 2 s, then edit y.md so watches.last_change_ts moves past x.md's watch_files.updated_at. Read both values while the server runs, because a stopped WAL bank will not open read-only. Stop the server. Replace one word of x.md with a new term of the same byte length and `touch -t $(date -r <t> +%Y%m%d%H%M.%S)` it, where t is between x.md's updated_at and last_change_ts. Rewrite w.md at a different size with a new term, and touch it to before its own updated_at. Restart on the same data root. Within seconds query finds both new terms, watch_files shows new updated_at and size for x.md and w.md, and get_watch_status reads Healthy. Neither the node_modules term nor the .git term is ever found. Premise: before the restart, updated_at(x.md) <= mtime(x.md) <= last_change_ts. A build without ADR-0121 finds neither new term, because it re-queues only files with mtime > last_change_ts. The 5-minute heal pass (WatchHostedService.HealInterval, event 322 at Debug) is optional: it needs a server left up for over 5 minutes (ADR-0121)",
+      "command": "Scratch dir w7 with x.md w.md y.md, node_modules/pkg/index.md (nodemodterm_kv81) and a dot-git dir note (gitdirterm_pq27); scope add, watch enable, add_watch on server 58511; wait for 3 watch_files rows; edit y.md; read updated_at/last_change_ts; kill server pid 72309; same-length word swap in x.md (quillfern->emberwolf) touched to 1794566722, rewrite w.md (40->86 bytes, glimmerash) touched to 1794566700; restart on same data root and port; query terms",
+      "evidence": "premise: x.md watch_files.updated_at 1794566717, last_change_ts 1794566727, x.md mtime 1794566715 (before edit) -> updated_at <= mtime <= last_change_ts; x.md mtime after touch 1794566722 (between), w.md touched to 1794566700 (< its updated_at 1794566717), sizes x.md 54 -> 54, w.md 40 -> 86\nbefore restart: quillfern/marblethorn/brackenwick each found in their file; nodemodterm_kv81 [] ; gitdirterm_pq27 []\nafter restart (first poll 0.1 s): emberwolf -> ['/w7/x.md'], glimmerash -> ['/w7/w.md']; old term quillfern -> []; decoys [] []\nwatch_files after: 7/x.md|1794566748|54 ; 7/w.md|1794566748|86 ; y.md|1794566727|56; watches.last_change_ts 1794566748\nget_watch_status ... \"state\":\"Healthy\"",
+      "observed-result": "Both offline edits were healed on restart (the x.md one has mtime <= last_change_ts, which a build without ADR-0121 would skip) within 0.1 s of the first poll, updated_at/size advanced, status Healthy, and neither the node_modules nor the dot-git decoy term was ever found. The optional 5-minute heal pass was not run.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "promotion-queue-state",
+      "expected-result": "get_memories_sharing_ranking reports propose-tier candidates and queue state accurately",
+      "command": "fresh project in server 57730: 3 long durable-fact notes + 2 short notes; trigger_memory_sharing mode=propose; get_memories_sharing_ranking; sqlite promotion_queue; delete_memory_from_ranking <hash>; get ranking; propose again",
+      "evidence": "propose candidates: c40d77 1.3883333333333332 ['organic-note'], 1510f5 1.388..., ae342a 1.388..., bdb791 0.5 ['organic-note','too-short'], df455d 0.5 [...'too-short'] ; meta.waitingPromotionsCount 5\nranking rows [c40d77 1.388.., 1510f5, ae342a, bdb791 0.5, df455d 0.5] meta 5; promotion_queue rows for the project: the same 5 hashes with the same scores; seed hashes equal\ndiscard c40d77 -> {'discarded': 1} waitingPromotionsCount 4; ranking after discard 4 rows\nrepropose -> same 5 candidates listed, but queue count stays 4 (the discarded row is not re-queued; promotion_discards holds it)\nclear-all on another project: discarded 13 -> ranking rows 0",
+      "observed-result": "Proposing persists exactly the candidates the ranking returns with their scores/reasons; a discard removes one row, is idempotent (discarded 0 on a repeat or an unknown hash) and the discarded hash is not re-queued by a later propose. Note: document-derived candidates are capped at 3 per source document (SharedExtractionService.MaxQueuedPerSourceDocument = 3), which explains why 5 of 19 candidates on a large project were not queued.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "full-mcp-surface",
+      "expected-result": "every tool in derived.mcp-tool-count and every prompt in derived.mcp-prompt-count is listed and reachable",
+      "command": "MCP tools/list and prompts/list on the 2.9.0 scratch server, then tools/call for every listed tool with {projectId} only; prompts/get for each prompt",
+      "evidence": "tools/list -> 43 tools (derived.mcp-tool-count = 43); prompts/list -> 2 ['memory-usage-guide', 'workspace-consolidation-guide'] (derived.mcp-prompt-count = 2)\ntools/call of all 43: unreachable: []  (every tool answers: results, or typed invalid-argument for a missing required argument, or sync-not-configured)\nprompts/get memory-usage-guide -> ok msgs=1 ; workspace-consolidation-guide -> ok msgs=1",
+      "observed-result": "All 43 tools and both prompts are listed and reachable; counts equal the facts derived from source by new-run.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "observability-event-ids",
+      "anchor": "docs/reference/logging-event-ids.md",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "grep 'level: Category[id]' across all scratch serve logs (serve1..serve11, servel19m/x, dec) and compare to docs/reference/logging-event-ids.md rows (ranges expanded)",
+      "evidence": "emitted AiRaccoon ids: [426,428,436,437,443,444,446,447,448,450,510,523,525,601,650,651,660,672,673,674,675,692,694,703,899,910,911,1003,1005,1008]\nunresolved against docs/reference/logging-event-ids.md: []  (e.g. 694 has its own row; 1008 sits in the '1002-1013 EmbedDrainReporter' row)\nframework ids 0 and 14 (Microsoft.Hosting.Lifetime) ignored",
+      "observed-result": "Every event id the 2.9.0 servers emitted in this run resolves against the documented register.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "reserved-shared-target-documents-and-refusals",
+      "expected-result": "Shared watch publishes File rows to ordinary all-scope and shared all/shared queries; ordinary project-only has none; shared project-only and every ordinary-project-only tool refuse. Derive that set from declarations. Remove-watch retains content; re-add then delete-source removes mirrored document.",
+      "command": "fresh bank d9 (server 63255): settings access set shared full; ingest scope add shared <sharedocs>; watch enable shared true; add_watch shared; query as ordinary project and as shared with scope all|shared|project; remove_watch; re-add; delete the source file",
+      "evidence": "watch_files shared|/handbook.md\nordinary scope=all ['/handbook.md']; scope=shared ['/handbook.md']; scope=project []\nshared pid scope=project -> invalid-params: shared-project-unsupported: search shared with scope all or shared, without a workspace or label.; shared pid scope=all ['/handbook.md']; scope=shared ['/handbook.md']\nremove_watch -> ok; after remove: query all ['/handbook.md'], watch_files 0 (content retained)\nre-add -> ['/handbook.md']\nrm handbook.md -> query all [] after 1 s; entries from sharedocs: 0\nevery ordinary-project-only tool refusal listed under tool-scope-declared-on-the-tool",
+      "observed-result": "Shared watch content appears in all-scope and shared queries but not project-only; project-only search on shared and every ordinary-only tool refuse; remove_watch keeps content; re-add then deleting the source removes the mirrored document.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "reserved-shared-name-registration-refused",
+      "expected-result": "Exact reserved name mint refuses; lookup returns shared; SQLite projects remains empty before ordinary reader registration. Legacy registration under name shared prevents activation, CLI exits17, MCP shared-project-conflict, entries0.",
+      "command": "(a) d9: save_project_id_token name='shared'; get_project_id name='shared'; sqlite select count(*) from projects before any ordinary registration. (b) d10: bank with legacy projects row ('legacy-shared-id','shared') written while the server was stopped, then 2.9.0 restarted: CLI settings access/watch/ingest, MCP get_project_id/add_watch/add_memory/query for shared; sqlite entries/projects",
+      "evidence": "(a) mint -> reserved-name: 'shared' is the reserved shared target; it needs no minted id and cannot be registered under another id. Nothing was registered.\nlookup -> {\"projectId\":\"shared\"}; projects table rows: '0' (also still '0' after the shared watch was added), then 1 only after ordinary registration\n(b) get_project_id shared -> invalid-argument: shared-project-conflict: legacy private data or registration uses 'shared'; repair that owner before using the reserved target. No data was published.\nCLI settings access set shared full -> exit 17; settings watch enable shared true -> exit 17; settings ingest scope add shared <dir> -> exit 17 (same 400 shared-project-conflict)\nMCP add_watch / add_memory / query on shared -> shared-project-conflict\nentries 0, projects: legacy-shared-id|shared|...",
+      "observed-result": "The reserved name cannot be minted, lookup returns shared, projects stays empty until an ordinary reader registers, and a legacy registration named shared blocks activation (CLI 17, MCP shared-project-conflict, zero entries).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "tool-scope-declared-on-the-tool",
+      "expected-result": "Derive tool scope membership from declarations and compare with the live surface; every ordinary-project-only tool refuses the reserved shared target before side effects.",
+      "command": "python regex over src/AiRaccoon/Tools/*.cs pairing [McpServerTool(Name = ToolNames.X)] with [McpToolScope(ToolScope.*)] (+ the 13 DecisionTools attributes, all ToolScope.Project); live tools/list; call every tool with valid dummy required args and projectId='shared' (python3 i19.py), checking for shared-project-unsupported; sqlite counts before/after",
+      "evidence": "declared: 17 All + 26 Project = 43 = live tools/list; live-not-declared: none; declared-not-live: none\nevery one of the 26 Project tools answers 'invalid-argument: shared-project-unsupported: <tool> requires an ordinary project; shared supports document ingestion and watches.' (amend_decision/transition_decision/link_decisions re-run with correct argument shapes after the first dummy args failed argument validation: all three refuse the same way)\nthe 17 All tools do not refuse (e.g. query, get_index, get_store_statistics, embed_deferred_entries, add_watch, get_watch_status, remove_watch, sync_to_cloud -> sync-not-configured)\nstate before/after entries|projects|decisions|workspaces|watches|promotion_queue: 0|1|0|0|1|0 -> 0|1|0|0|1|0 (no side effects)\nmismatch list after the 3 reruns: []",
+      "observed-result": "The declared scope set equals the live surface and exactly the Project-scoped tools refuse the reserved shared target, before any side effect.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "renamed-tools-old-names-refused",
+      "expected-result": "Every legacy tool name from the 2.0.0 rename map refuses as MCP isError with unknown-tool and exact replacement guidance. Compare current tools and prompts to derived facts; a raw JSON-RPC unknown-tool error is insufficient.",
+      "command": "parse src/AiRaccoon/Tools/RenamedToolNames.cs (30 pairs); MCP tools/call of every old name on 2.9.0 server 57730; plus a never-existing name",
+      "evidence": "map size 30; old names that are current tools: []; targets not current: []\nmemory_search -> isError=True \"unknown-tool: 'memory_search' was renamed to 'query' in 2.0.0 — call 'query' instead.\"\ncode_get -> isError=True \"unknown-tool: 'code_get' was renamed to 'get_entry' in 2.0.0 — call 'get_entry' instead.\"\nall 30 pass the check isError and 'unknown-tool' prefix and exact new name in the text: bad []\nnot_a_tool -> unknown-tool: 'not_a_tool' is not a tool on this server. This server exposes 43 tools; call tools/list to see them.\ncurrent surface 43 tools / 2 prompts (derived facts) listed in full-mcp-surface",
+      "observed-result": "Every legacy name refuses as an MCP tool error with the exact replacement; a non-renamed unknown name gets the general message with the live tool count.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "typed-query-all-selections",
+      "anchor": "docs/adr/0141-typed-vector-partitions.md",
+      "expected-result": "Seed distinguishable Memory/File/Code plus an unclassified control. Drive all seven nonempty entryType subsets and omitted default, including mixed case/spacing. Narrow sets return only declared selected types; default/all includes unclassified. Confirm kind_mask exactly 1..7. (2.1.0 changelog, ADR-0141)",
+      "command": "scratch bank d1 project with: Memory note (memmarkerxq), File doc.md (filemarkerxq), Code code.py (codemarkerxq), control row set entry_type='none' (nonemarkerxq, through python+vec0 then re-embedded); query 'plumquat' with entryType each of 7 subsets, omitted, ' Memory , FILE ', 'CODE,memory'; sqlite kind_mask",
+      "evidence": "'memory'              memory-leg=[('memory', 'memmarkerxq')] code=[]\n'file'                memory-leg=[('file', 'filemarkerxq')] code=[]\n'code'                memory-leg=[] code=['codemarkerxq']\n'memory,file'         memory-leg=[('file', 'filemarkerxq'), ('memory', 'memmarkerxq'), ('none', 'nonemarkerxq')] code=[]\n'memory,code'         memory-leg=[('memory', 'memmarkerxq')] code=['codemarkerxq']\n'file,code'           memory-leg=[('file', 'filemarkerxq')] code=['codemarkerxq']\n'memory,file,code'    memory-leg=[('file', 'filemarkerxq'), ('memory', 'memmarkerxq'), ('none', 'nonemarkerxq')] code=['codemarkerxq']\nNone                  memory-leg=[('file', 'filemarkerxq'), ('memory', 'memmarkerxq'), ('none', 'nonemarkerxq')] code=['codemarkerxq']\n' Memory , FILE '     memory-leg=[('file', 'filemarkerxq'), ('memory', 'memmarkerxq'), ('none', 'nonemarkerxq')] code=[]\n'CODE,memory'         memory-leg=[('memory', 'memmarkerxq')] code=['codemarkerxq']\nkind_mask recorded for this project: [('plumquat', 1), ('plumquat', 1), ('plumquat', 4), ('plumquat', 1), ('plumquat', 4), ('plumquat', 2), ('plumquat', 5), ('plumquat', 3), ('plumquat', 6), ('plumquat', 7), ('plumquat', 7), ('plumquat', 5), ('plumquat', 3)]\ndistinct kind_mask across bank: [1, 2, 3, 4, 5, 6, 7]",
+      "observed-result": "Single/narrow sets return only their declared type (memory leg kinds memory / file; code corpus separately); memory+file, memory+file+code, the omitted default and the spaced mixed-case set return the unclassified control as well (documented: any set naming both memory and file applies no kind filter); distinct recorded kind_mask values across the bank are exactly 1..7. Observation: the check text says only the default/all includes unclassified; the product (and docs/reference/agent-memory-server.md:162, MemoryTools description) also include it for memory,file.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "typed-query-invalid-types",
+      "expected-result": "Empty set, unknown vocabulary and all-comma input are refused; duplicates/interior empty tokens follow current parser contract. (EntryTypeParameter, 2.1.0 changelog)",
+      "command": "query entryType in ['', '  ', ',', ',,', 'bogus', 'memory,bogus', 'memory,memory', 'memory,,file', 'memory,', 'file ,, code']",
+      "evidence": "== 22\n22 ''              isError=True \"invalid-params: The entry type is required: expected memory, code, or file. (Parameter 'value')\"\n22 '  '            isError=True \"invalid-params: The entry type is required: expected memory, code, or file. (Parameter 'value')\"\n22 ','             isError=True \"invalid-params: The entry type asks for no kind at all: expected memory, code, or file. (Parameter 'value')\"\n22 ',,'            isError=True \"invalid-params: The entry type asks for no kind at all: expected memory, code, or file. (Parameter 'value')\"\n22 'bogus'         isError=True \"invalid-params: Invalid entry type 'bogus': expected memory, code, or file. (Parameter 'value')\"\n22 'memory,bogus'  isError=True \"invalid-params: Invalid entry type 'bogus': expected memory, code, or file. (Parameter 'value')\"\n22 'memory,memory' ok kinds=['memory']\n22 'memory,,file'  ok kinds=['file', 'memory', 'none']\n22 'memory,'       ok kinds=['memory']\n22 'file ,, code'  ok kinds=['file']",
+      "observed-result": "Empty/blank, all-comma and unknown vocabulary are refused (invalid-params); duplicates, interior empty tokens and a trailing comma are accepted and behave as the cleaned set (current parser contract).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "typed-get-selector-and-overlapping-hash",
+      "expected-result": "get_entry requires one entryType, refuses missing/empty/composite/unknown; overlapping Memory/Code hash resolves chosen corpus; wrong taxonomy is unknown-hash without fallback. (2.1.0 changelog)",
+      "command": "get_entry across memory|file|code|none for Memory, File, unclassified and Code hashes; overlap built by ingesting overlap.py (code corpus) + add_memory of the same text, then UPDATE code_entries.hash = <memory hash> (python+vec0) and get_entry with each type",
+      "evidence": "24 file  memory-> unknown-hash: No entry with hash 'e2c470846aab957e557f971ae8a6a61d6f64f605d\n24 file  file  -> ok corpus/entryType=memory entryKind=file keys=['context', 'corpus', 'createdAt', 'entryKind', 'entryType', 'hash', 'path', 'value']\n24 file  code  -> unknown-hash: No entry with hash 'e2c470846aab957e557f971ae8a6a61d6f64f605d\n24 file  none  -> invalid-params: Invalid entry type 'none': expected memory, code, or file. \n24 none  memory-> unknown-hash: No entry with hash '5cb182f65ccb36dc372150f0bc781ab358e3f2615\n24 none  file  -> unknown-hash: No entry with hash '5cb182f65ccb36dc372150f0bc781ab358e3f2615\n24 none  code  -> unknown-hash: No entry with hash '5cb182f65ccb36dc372150f0bc781ab358e3f2615\n24 none  none  -> invalid-params: Invalid entry type 'none': expected memory, code, or file. \n24 memorymemory-> ok corpus/entryType=memory entryKind=memory keys=['context', 'corpus', 'createdAt', 'entryKind', 'entryType', 'hash', 'path', 'value']\n24 memoryfile  -> unknown-hash: No entry with hash '90656dec4eaeec5c902f58266f4697807c28dff3c\n24 memorycode  -> unknown-hash: No entry with hash '90656dec4eaeec5c902f58266f4697807c28dff3c\n24 memorynone  -> invalid-params: Invalid entry type 'none': expected memory, code, or file. \n24 code  memory-> unknown-hash: No entry with hash 'aea99542cb83dab57dcc19b9bdad6098241c6357c\n24 code  file  -> unknown-hash: No entry with hash 'aea99542cb83dab57dcc19b9bdad6098241c6357c\n24 code  code  -> ok corpus/entryType=code entryKind=code keys=['corpus', 'createdAt', 'entryKind', 'entryType', 'hash', 'lineEnd', 'lineStart', 'path', 'value']\n24 code  none  -> invalid-params: Invalid entry type 'none': expected memory, code, or file. \nunclassified row hash 5cb182f6... : get_entry memory/file/code -> unknown-hash; none -> invalid-params\noverlap (same hash in entries and code_entries): memory entries (1,) code_entries (1,)\nget memory -> corpus memory kind memory value \"def overlapq():\\n    return 'overlapmarke\" lines None\nget code -> corpus code kind code value \"def overlapq():\\n    return 'overlapmarke\" lines 1\nget file -> unknown-hash: No entry with hash 'e792579949b0de6f216ddbcfda4543613fb8d448dd1cbb114564d903",
+      "observed-result": "A selector is required and refused when missing/empty/composite/unknown ('none' is not a selectable type either); the right type resolves, any other taxonomy is unknown-hash with no fallback; with one hash in both corpora memory -> corpus memory, code -> corpus code, file -> unknown-hash. Finding: an unclassified (entry_type 'none') row is not readable through any get_entry entryType (memory/file/code all unknown-hash, 'none' invalid) although query hits can carry entryKind 'none'.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches the expected result. The unclassified-row gap is reported as a finding for the owner, not part of this item's expected result."
+    },
+    {
+      "item": "typed-get-public-fields",
+      "expected-result": "For each tested Memory, File and Code row, get_entry includes corpus matching the owning corpus (memory for Memory/File, code for Code); entryType remains corpus memory/code and entryKind states memory/file/code. (2.1.0 changelog)",
+      "command": "get_entry for each tested Memory, File and Code row (see typed/i22_26.txt)",
+      "evidence": "file row, type file -> ok corpus/entryType=memory entryKind=file keys=['context','corpus','createdAt','entryKind','entryType','hash','path','value']\nmemory row, type memory -> ok corpus/entryType=memory entryKind=memory\ncode row, type code -> ok corpus/entryType=code entryKind=code keys=['corpus','createdAt','entryKind','entryType','hash','lineEnd','lineStart','path','value']\n(get_entry JSON reads d['corpus'] equal to d['entryType'] for all three: memory,memory,code)",
+      "observed-result": "corpus is memory for Memory and File rows and code for Code; the deprecated entryType equals corpus; entryKind states memory/file/code.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "typed-file-and-note-declarations",
+      "expected-result": "Ingest a real document and add an agent note citing that same path. File mirror is File; note is Memory. Modify and re-ingest document; refreshed chunks remain File with no TTL. (2.1.0 changelog)",
+      "command": "ingest_file typed/doc.md; add_memory with sourceFile=<that doc path>; rewrite doc and re-ingest; sqlite entries (entry_type, ttl_days) for source_file",
+      "evidence": "== 25\nnote citing path: {\"data\":{\"hash\":\"675e9582d798f814e4e4c3ae5ad90311a\nrows after note: [('file', None, 0, '# Typed fixture document\\n\\nThe plumquat p', 'e2c47084'), ('memory', None, 1, 'Agent note about doc.md: the plumquat pr', '675e9582')]\nre-ingest: {\"data\":{\"indexed\":1},\"meta\":{\"waitingPromotionsCo\nrows after re-ingest: [('file', None, 0, '# Typed fixture document\\n\\nThe plumquat p', '2eb20504'), ('memory', None, 1, 'Agent note about doc.md: the plumquat pr', '675e9582')]\n",
+      "observed-result": "The mirrored document chunk is File and the note that cites its path is Memory; after the document is edited and re-ingested the refreshed chunk (new hash) is still File with ttl NULL and the note is unchanged.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "typed-memory-only-ttl",
+      "anchor": "docs/adr/0148-bank-guards-memory-only-ttl-and-the-kind-domain.md",
+      "expected-result": "In full access mode set/clear Memory TTL; refuse setting and clearing File and Code-only hashes, and retain negative controls. (2.1.0 changelog, ADR-0148)",
+      "command": "settings access set <P> full; set_memory_ttl on Memory (30, clear, 7), File (30, clear), Code hash, unclassified row, unknown hash; sqlite ttl_days. First attempt in default rw mode -> access-denied (recorded).",
+      "evidence": "\nset memory 30: {\"data\":{\"hash\":\"90656dec4eaeec5c902f58266f4697807c28dff3c8f37f0063fb959a00d7bbf1\",\"ttlDays\":30,\"rating\":1.0999797031691232,\"threshold\":0.3,\"canEverExpire\":false},\"meta\":{\"waitingPromotionsCount\":0}} | db [(30,)]\nclear memory: {\"data\":{\"hash\":\"90656dec4eaeec5c902f58266f4697807c28dff3c8f37f0063fb959a00d7bbf1\",\"rating\":1.0999797031691232,\"threshold\":0.3,\"canEverExpire\":false},\"meta\":{\"waitingPromotionsCount\":0}} | db [(None,)]\nset memory 7 (control again): {\"data\":{\"hash\":\"90656dec4eaeec5c902f58266f4697807c28dff3c8f37f0063fb959a00d7bbf1\",\"ttlDays\":7,\"rating\":1.0999797031691232,\"threshold\":0.3,\"canEverExpire\":false},\"meta\":{\"waitingPromotionsCount\":0}} | db [(7,)]\nset file 30: not-a-memory-entry: Entry '2eb2050434d13beb59946bffd33a6da3e1b6978b107c2680bea9b64b641feda6' in project '22616767-fbc1-40da-9024-509c28de460e' is not a memory entry; only memory entries take a TTL. Pa | db [(None,)]\nclear file: {\"data\":{\"hash\":\"2eb2050434d13beb59946bffd33a6da3e1b6978b107c2680bea9b64b641feda6\",\"rating\":0.5,\"threshold\":0.3,\"canEverExpire\":false},\"meta\":{\"waitingPromotionsCount\":0}} | db [(None,)]\nset code 30: unknown-hash: No entry with hash 'aea99542cb83dab57dcc19b9bdad6098241c6357c129f9845021d2ed45ee726d' in project '22616767-fbc1-40da-9024-509c28de460e'.\nclear code: unknown-hash: No entry with hash 'aea99542cb83dab57dcc19b9bdad6098241c6357c129f9845021d2ed45ee726d' in project '22616767-fbc1-40da-9024-509c28de460e'.\nset none 30: not-a-memory-entry: Entry '5cb182f65ccb36dc372150f0bc781ab358e3f2615f65db21ff960295782f363b' in project '22616767-fbc1-40da-9024-509c28de460e' is not a memory entry; only memory entries take a TTL. Pa | db [(None,)]\nunknown hash: unknown-hash: No entry with hash 'fffffffffffffffffffffffffffffffffffffffff",
+      "observed-result": "Memory TTL set/clear/set works and is stored. Setting a File TTL is refused (not-a-memory-entry), a Code hash is unknown-hash for both set and clear, the unclassified row refuses setting. BUT clearing a File TTL (ttlDays=null) is NOT refused: it returns success (a no-op, ttl already NULL). The check and the 2.1.0 changelog say clearing a File TTL is refused; MemorySql.cs:897-898 states clearing deliberately 'reaches any kind, because the sweep still honours a TTL a File row carried before 2.1.0'.",
+      "status": "fail",
+      "accepted": false,
+      "acceptance-reason": "Not accepted: behaviour contradicts the 2.1.0 changelog and this check's expected result ('refuse setting and clearing File'). Code comment shows the clear path is intentional; since schema v24 clears every non-Memory TTL the rationale may be obsolete. Owner decides: change the product or the changelog/check wording. No issue number known to this run."
+    },
+    {
+      "item": "typed-historical-ttl-cleanup",
+      "anchor": "docs/adr/0148-bank-guards-memory-only-ttl-and-the-kind-domain.md",
+      "expected-result": "Seed age/rating and existing non-Memory TTLs, including an explicit historical File TTL, in a pre-v24 scratch bank. Include a project-scoped Memory row with age greater than its TTL and rating below the cleanup threshold, TTL-free Memory/File controls with age greater than that TTL and rating below the same threshold, and Code rows; use distinct hashes without shared counterparts. Verify migration to schema v24 clears all non-Memory TTLs and preserves Memory TTLs; subsequent File TTL writes are rejected. Run cleanup without dry run and verify it deletes the expired Memory row while preserving TTL-free Memory/File and all Code. (2.1.0 changelog, ADR-0148)",
+      "command": "v19 bank built by installed ai-raccoon 2.0.1 (File TTL allowed then; file ttl 7, memory ttls 7/none, ages set to 60 days, ratings 0.1), copied, opened by 2.9.0 (migrates to v24); then settings access full; trigger_memory_cleanup dryRun then dryRun=false; set_memory_ttl on File; SQL update of File ttl",
+      "evidence": "pre: entries ids 1-4: (1) ttl 7 rating 0.1 age 60d memory, (2) ttl NULL rating 0.1 memory, (3) ttl 7 fresh memory, (4) File ttl 7 rating 0.1; code_entries 1 row; user_version 19\nmigration: user_version 24; post entries: (1) memory ttl 7, (2) memory NULL, (3) memory 7, (4) file ttl NULL (File TTL cleared, Memory TTLs preserved)\ndry run -> candidates only 4b4a3636... rating 0.1 ageDays 60.01\nset_memory_ttl on File -> not-a-memory-entry; SQL update of File ttl -> 'entries.ttl_days: only memory rows carry a TTL'\ncleanup dryRun=false -> deleted [\"4b4a3636b7bb...\"] ; remaining: 81695e49e0 memory (TTL-free, old, low rating), 6f8151badb memory ttl 7 (fresh), a4a0b4cd38 file; code_entries count 1",
+      "observed-result": "The migration clears non-Memory TTLs and keeps Memory TTLs; later File TTL writes are rejected both by the tool and by the bank trigger; the real cleanup deletes only the expired low-rated Memory row and preserves the TTL-free Memory, the File and all Code rows. First cleanup attempt returned bank-busy because my own python connection held an open transaction; it was closed and the call repeated.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "typed-transcript-sync-memory",
+      "expected-result": "Drive isolated transcript/cloud merge where credentials allow: transcript chunks declare Memory and eligible TTL survives; File sync/rechunk does not introduce TTL. If unavailable record substituted focused sync test evidence explicitly. (2.1.0 changelog)",
+      "command": "$T/AiRaccoon.Tests --filter-class '*MemoryOnlyTtlSyncTests' (+ the two migration classes) after `dotnet build tests/AiRaccoon.Tests -c Debug`",
+      "evidence": "Test run summary: Passed! ... total: 14  failed: 0  succeeded: 14  skipped: 0  duration: 2s 701ms  (classes MemoryOnlyTtlSyncTests, TypedEntryMigrationTests, EntryTypeMigrationTests)",
+      "observed-result": "No cloud credentials/transport are configured in this scratch environment, so the live transcript/cloud merge could not be driven; the focused sync tests (real SyncService, fake cloud transport) pass.",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Substituted: automated MemoryOnlyTtlSyncTests (xunit v3, real SyncService with fake cloud transport) stands in for the credentialed live merge, as the item allows. Live cloud transport not exercised."
+    },
+    {
+      "item": "typed-legacy-migrations",
+      "anchor": "docs/adr/0141-typed-vector-partitions.md",
+      "expected-result": "Upgrade real copied v19 and mixed-marker v20/v21 fixtures through installed package to current schema. Compare all durable IDs/embedding bytes, all prior search-quality columns, legacy mask mapping, explicit-kind preservation, integrity and product reopen. Disable watch registrations and external services in copies before serving. (2.1.0 changelog, ADR-0141)",
+      "command": "ai-raccoon 2.0.1 (installed to scratch tool path, DOTNET_ROLL_FORWARD=Major) built a real v19 bank (4 entries incl. a File, 1 code row, 4 search_quality rows with one graded 4); copy opened by installed 2.9.0; python+vec0 comparison pre/post; plus TypedEntryMigrationTests/EntryTypeMigrationTests for v20/v21 fixtures",
+      "evidence": "user_version pre/post (19,) (24,) integrity ('ok',) fk []\nentries ids/hash/embedding bytes identical (excluding ttl): True 4 4\ncode ids/hash/emb identical: True\nentries post cols tail ['total_chunks', 'source_id', 'embed_attempts', 'entry_type']\npost entry (1, '4b4a3636b7', 'memory', 7, None, 'Legacy memory zebra ')\npost entry (2, '81695e49e0', 'memory', None, None, 'Legacy memory zebra ')\npost entry (3, '6f8151badb', 'memory', 7, None, 'Legacy memory zebra ')\npost entry (4, 'a4a0b4cd38', 'file', None, 's/leg.md', '# Legacy doc\\n\\nlegfil')\nsearch_quality prior columns identical: True\nsearch_quality new cols: ['kind_mask']\npost sq (1, 'both', 7, None)\npost sq (2, 'memory', 5, 4)\npost sq (3, 'code', 2, None)\npost sq (4, 'both', 7, None)\ntrigger guards: ['entries_guard_bi', 'entries_guard_bu']\nvec partitions: [('file', 'file', 1), ('memory', 'memory', 3)]\nentry_type CHECK in sql: True\ntests: Passed! total 14 failed 0 (TypedEntryMigrationTests, EntryTypeMigrationTests, MemoryOnlyTtlSyncTests)",
+      "observed-result": "A real v19 bank upgrades to v24 through the installed 2.9.0 package: ids, hashes and embedding bytes are identical, all prior search_quality columns are identical, legacy kinds map (both->7, memory->5 = Memory+File, code->2), File vs Memory kinds are derived, integrity ok and the product reopened it. Mixed-marker v20/v21 banks were never released (the 2.1.0 changelog says unreleased development banks), so they cannot be produced from a released install.",
+      "status": "substituted",
+      "accepted": true,
+      "acceptance-reason": "Substituted for the v20/v21 half only: the repo's migration tests (TypedEntryMigrationTests, EntryTypeMigrationTests, 14 tests passing incl. MemoryOnlyTtlSyncTests) stand in for mixed-marker v20/v21 fixtures; the v19 leg was driven live with real banks."
+    },
+    {
+      "item": "typed-vector-partitions-and-recall",
+      "anchor": "docs/adr/0141-typed-vector-partitions.md",
+      "expected-result": "Read both native ctx/type layouts and row-kind agreement; exercise typed vector-leg queries with bundled engine. Separately attach actual minority-type pretruncation oracle experiment for both modalities; never infer recall correctness merely from DDL. (ADR-0141)",
+      "command": "python3 with vec0: sqlite_master DDL for vec tables; join entries to vec_entries on rowid; project with 3 File rows + 150 Memory notes (+120 headed notes for structure) -> MCP typed vector-leg queries (ftsWeight=0) and SQL partition KNN vs exhaustive cosine over stored vectors (both modalities)",
+      "evidence": "{\"data\":{\"processed\":0,\"pending\":0},\"meta\":{\"waitingPromotionsCount\":0}}\nkinds: [('file', 3), ('memory', 150)]\n== vector leg via MCP (ftsWeight=0), default candidateWindow max3x100, limit 10\n'file' kinds: ['file'] n= 3 legs: ['vector']\n'memory' kinds: ['memory'] n= 10 legs: ['vector']\nNone kinds: ['memory'] n= 10 legs: ['vector']\ncontent rows with vectors by kind: {'file': 3, 'memory': 150}\n  content   type=file   eligible=3 oracle-top=3 sql-partition-knn=3 identical-id-set=True\n  content   type=memory eligible=150 oracle-top=10 sql-partition-knn=10 identical-id-set=True\n  content: unrestricted post-hoc top10 holds 0 of 3 file rows (the minority a post-filter would lose)\n{\"data\":{\"processed\":0,\"pending\":0},\"meta\":{\"waitingPromotionsCount\":0}}\n== structure modality\nstructure rows by kind: {'file': 3, 'memory': 117}\n  structure type=file   eligible=3 sql-partition-knn=3 identical-id-set-vs-exhaustive-cosine=True\n  structure type=memory eligible=117 sql-partition-knn=10 identical-id-set-vs-exhaustive-cosine=True\n  structure: unrestricted top10 holds 0 of 3 file rows\ncontent rows by kind: {'file': 3, 'memory': 267}\n  content   type=file   eligible=3 sql-partition-knn=3 identical-id-set-vs-exhaustive-cosine=True\n  content   type=memory eligible=267 sql-partition-knn=10 identical-id-set-vs-exhaustive-cosine=True\n  content: unrestricted top10 holds 1 of 3 file rows\n== MCP typed query again (structure leg engaged by heading query)\nfile-only legs: ['vector'] kinds ['file'] 3\nvec layouts: [('CREATE VIRTUAL TABLE vec_entries USING vec0(ctx TEXT partition key, type TEXT partition key, embedding float[384] distance_metric=cosine)',), ('CREATE VIRTUAL TABLE vec_structure USING vec0(ctx TEXT partition key, type TEXT partition key, embedding float[384] distance_metric=cosine)',), ('CREATE VIRTUAL TABLE vec_code USING vec0(ctx TEXT partition key, embedding float[384] distance_metric=cosine)',)]\nrow-kind agreement (migrated bank): entries.entry_type == vec_entries.type for every row: [('file','file',1),('memory','memory',3)]",
+      "observed-result": "Both vec0 tables use (ctx TEXT partition key, type TEXT partition key, embedding float[384] cosine); row kind equals partition type; typed queries use the vector leg and return the minority File rows although 150 nearer Memory rows would fill an unrestricted top-k; for content and structure the partition-restricted KNN returns the identical id set as an exhaustive double-precision cosine oracle for file and memory, while the unrestricted top-10 holds 0 (structure) or 1 (content) of the 3 File rows. The repo's larger pinned-bank experiment is docs/work/2026-10-22-typed-partition-live.md (not re-run).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "typed-kind-domain-and-doctor",
+      "expected-result": "Fresh/released upgraded bank rejects out-of-domain stored kind; doctor counts unclassified and unknown development-bank markers. Default queries can return these, narrower sets exclude them. (2.1.0 changelog)",
+      "command": "python+vec0 INSERT/UPDATE of entry_type 'bogus'/NULL on a fresh bank (d1) and the v19->v24 upgraded bank; a VACUUM INTO copy (dl19x) with the guard triggers dropped, CHECK removed and an out-of-domain row inserted with ignore_check_constraints to simulate a development bank; `ai-raccoon doctor`; queries",
+      "evidence": "fresh(d1) insert entry_type 'bogus' -> rejected: entries.entry_type: not a known kind\nfresh(d1) insert entry_type None -> rejected: entries.entry_type: not a known kind\nfresh(d1) update entry_type='bogus' -> rejected: entries.entry_type: not a known kind\nupgraded v19->v24(dl19m) insert entry_type 'bogus' -> rejected: entries.entry_type: not a known kind\nupgraded v19->v24(dl19m) insert entry_type None -> rejected: entries.entry_type: not a known kind\nupgraded v19->v24(dl19m) update entry_type='bogus' -> rejected: entries.entry_type: not a known kind\ncheck removed: True\ndev bank rows: [('devmarker', 1), ('file', 1), ('memory', 2)] integrity ('ok',)\n== d1\nentries without a kind: 1\ndoctor verifies schema shape only; it never repairs a bank\n== dl19m\nentries without a kind: 0\ndoctor verifies schema shape only; it never repairs a bank\n== dl19x (dev bank copy)\nentries without a kind: 0\nentries with an unknown kind: 1\ndoctor verifies schema shape only; it never repairs a bank\nremedy: start the server (ai-raccoon serve) — it repairs the schema on every open\ndev-bank query None [('none', 'dev bank row'), ('memory', 'Legacy memory '), ('file', '# Legacy doc\\n\\n'), ('memory', 'Legacy memory ')]\ndev-bank query 'memory' [('memory', 'Legacy memory '), ('memory', 'Legacy memory ')]\ndev-bank query 'file' [('file', '# Legacy doc\\n\\n')]\ndev-bank query 'memory,file' [('none', 'dev bank row'), ('memory', 'Legacy memory '), ('file', '# Legacy doc\\n\\n'), ('memory', 'Legacy memory ')]",
+      "observed-result": "Both a fresh and an upgraded-from-release bank reject an out-of-domain/NULL kind ('entries.entry_type: not a known kind'); doctor prints 'entries without a kind: 1' for the bank holding one unclassified row and, on the simulated development bank, 'entries with an unknown kind: 1'; default and memory,file queries return the unclassified/unknown row (entryKind none), memory-only and file-only exclude it.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "typed-code-independent-engine",
+      "anchor": "docs/adr/0085-a-second-code-only-corpus-in-the-same-bank.md",
+      "expected-result": "Code-only lookup/query works against separate corpus without memory engine dependency or memory-engine warning. (2.1.0 changelog, ADR-0085)",
+      "command": "fresh bank d11 (server 49304): `model code set default` only; `settings model show`; ingest_file typed/code.py; query entryType=code; get_entry code; control memory-only query",
+      "evidence": "registered a06291e0-cd5e-4bb0-b4b6-9744eef47dea\ningest code: {\"data\":{\"indexed\":1},\"meta\":{\"waitingPromotionsCount\":0}}\ncode embedded: 1 ; entries: 0\ncode-only query: code hits ['def plumquat_codemarkerxq(value):\\n    \"\"'] | warning: None\nlegs [] dict_keys(['hash', 'ranking', 'path', 'snippet', 'lineStart', 'lineEnd'])\nget_entry code: False {\"data\":{\"hash\":\"aea99542cb83dab57dcc19b9bdad6098241c6357c129f9845021d2ed45ee726d\",\"value\":\"def plumquat_codemarkerxq(va\nmemory-only (control) warning: memory engine not configured — the memory section is FTS5-only; run 'ai-raccoon model embedding set local' to activate the bundled memory embedding model",
+      "observed-result": "With no memory embedding provider ('provider: (none — FTS5-only search)') and the code engine active, a code-only query returns the code hit with warning None, get_entry code works, and only the memory-only control shows the memory-engine warning.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "decision-tool-replies-match-output-schema",
+      "anchor": "docs/adr/0142-native-project-decision-graph.md",
+      "expected-result": "Validate every decision tool's structuredContent against the outputSchema that tools/list advertises (jsonschema Draft 2020-12), the way Claude Code does, for record_decision, get_decision, query_decisions, find_decision_precedents, get_decision_graph and preview_decisions. Every reply must validate. A raw JSON-RPC client that reads only content[0].text cannot fail this item, so the other decision items do not cover it. (ADR-0142; MCP structured output)",
+      "command": "python3 dec/run.py <port> (jsonschema 4.26.0, Draft 2020-12 validation of structuredContent against the tools/list outputSchema for every successful decision tool reply) on fresh scratch server 62528",
+      "evidence": "SCHEMA {\"register_decision_task\": [7, 0], \"record_decision\": [96, 0], \"get_decision\": [39, 0], \"amend_decision\": [3, 0], \"transition_decision\": [4, 0], \"query_decisions\": [35, 0], \"link_decisions\": [14, 0], \"supersede_decision\": [1, 0], \"get_decision_graph\": [12, 0], \"find_decision_precedents\": [2, 0], \"unlink_decisions\": [1, 0], \"export_decisions\": [4, 0], \"preview_decisions\": [1, 0]}\nPASS [decision-tool-replies-match-output-schema] preview_decisions all returns :: {'text': 'Project 76e634f3-3c9b-4763-a8d7-53ff41e214a3; selected tasks: 3\\nTask bounds-chain: Graph bounds f",
+      "observed-result": "Every successful structured reply of every decision tool (including record_decision 96, get_decision 39, query_decisions 35, find_decision_precedents, get_decision_graph 12, preview_decisions) validated with zero errors.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "decision-record-and-replay",
+      "anchor": "docs/adr/0142-native-project-decision-graph.md",
+      "expected-result": "register_decision_task then record_decision on a registered scratch project. A record without status is proposed, status=accepted is accepted, and an empty required field is refused as invalid-argument. Resending the same sessionId+requestId returns replayed=true with the same decisionId and revision; judge 'no duplicate' by the export counts, not by the replay flag alone. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "python3 dec/run.py 62528 (copy of the prior 2.9.0 decision-graph driver adapted to this run's scratch server/tool path): Records, replay and empty-field refusal",
+      "evidence": "PASS [decision-record-and-replay] register scratch project :: [0, \"registered 76e634f3-3c9b-4763-a8d7-53ff41e214a3\", \"n.Settings.CliSettingsBackend[687]\\n      ai-raccoon: the backend on por\nPASS [decision-record-and-replay] register task platform-architecture + replay :: [[false, {\"taskId\": \"platform-architecture\", \"title\": \"Platform architecture\", \"registeredOrder\": 1, \"regist\nPASS [decision-record-and-replay] register task storage-migration + replay :: [[false, {\"taskId\": \"storage-migration\", \"title\": \"Storage migration\", \"registeredOrder\": 2, \"registeredAt\": \"20\nPASS [decision-record-and-replay] register task bounds-chain + replay :: [[false, {\"taskId\": \"bounds-chain\", \"title\": \"Graph bounds fixture\", \"registeredOrder\": 3, \"registeredAt\": \"2026-11-1\nPASS [decision-record-and-replay] record A status=accepted -> accepted :: [false, \"accepted\"]\nPASS [decision-record-and-replay] record B status=accepted -> accepted :: [false, \"accepted\"]\nPASS [decision-record-and-replay] record C status=accepted -> accepted :: [false, \"accepted\"]\nPASS [decision-record-and-replay] record D status=(omitted) -> proposed :: [false, \"proposed\"]\nPASS [decision-record-and-replay] record E status=(omitted) -> proposed :: [false, \"proposed\"]\nPASS [decision-record-and-replay] record F status=(omitted) -> proposed :: [false, \"proposed\"]\nPASS [decision-record-and-replay] record G status=(omitted) -> proposed :: [false, \"proposed\"]\nPASS [decision-record-and-replay] record H status=accepted -> accepted :: [false, \"accepted\"]\nPASS [decision-record-and-replay] record H2 status=accepted -> accepted :: [false, \"accepted\"]\nPASS [decision-record-and-replay] record I status=accepted -> accepted :: [false, \"accepted\"]\nPASS [decision-record-and-replay] same sessionId+requestId replays :: [{\"decisionId\": \"01a1d4ea-ea1b-74d2-ae2b-3d5dd24ba42a\", \"version\": 1, \"taskId\": \"platform-architecture\", \"projectRevisio\nPASS [decision-record-and-replay] empty outcome refused invalid-argument :: [true, \"invalid-argument: Parameter \\\"outcome\\\" (string) must not be null or whitespace, was whitespace. (Paramete",
+      "observed-result": "Records, replay and empty-field refusal: every sub-check in dec/run.out passed (95/95 over all decision items, 0 FAIL).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "decision-version-conflicts-refused",
+      "anchor": "docs/adr/0142-native-project-decision-graph.md",
+      "expected-result": "Each write guard must be seen refusing: amend with a stale expectedVersion -> decision-conflict naming currentVersion; accepted->proposed -> decision-invalid-transition; link_decisions with a stale expectedProjectRevision -> decision-conflict; amending a superseded decision -> decision-invalid-transition. Pair each refusal with the same call succeeding on fresh values. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "python3 dec/run.py 62528 (copy of the prior 2.9.0 decision-graph driver adapted to this run's scratch server/tool path): Each write guard refused then succeeding on fresh values",
+      "evidence": "PASS [decision-version-conflicts-refused] amend A twice on fresh versions :: [[false, {\"decisionId\": \"01a1d4ea-e918-7366-bfd5-458cb9a9759f\", \"version\": 2, \"taskId\": \"platform-architecture\", \nPASS [decision-version-conflicts-refused] amend A with stale expectedVersion -> decision-conflict naming currentVersion :: [true, \"decision-conflict: The decision changed; read its current v\nPASS [decision-version-conflicts-refused] A history holds 3 versions :: [1, 2, 3]\nPASS [decision-version-conflicts-refused] transition D proposed->accepted :: [false, {\"decisionId\": \"01a1d4ea-e980-7664-8646-2930f4b37abd\", \"version\": 2, \"taskId\": \"platform-architecture\", \"\nPASS [decision-version-conflicts-refused] transition D accepted->proposed -> decision-invalid-transition :: [true, \"decision-invalid-transition: Cannot transition from Accepted to Proposed.\"\nPASS [decision-version-conflicts-refused] transition F -> rejected :: [false, {\"decisionId\": \"01a1d4ea-e9ba-78b9-87cc-2771163332ea\", \"version\": 2, \"taskId\": \"platform-architecture\", \"project\nPASS [decision-version-conflicts-refused] transition G -> rejected :: [false, {\"decisionId\": \"01a1d4ea-e9df-7074-a4a0-d7d936dd7097\", \"version\": 2, \"taskId\": \"platform-architecture\", \"project\nPASS [decision-version-conflicts-refused] transition I -> deprecated :: [false, {\"decisionId\": \"01a1d4ea-ea0e-71fd-9b02-7f8a338fd20a\", \"version\": 2, \"taskId\": \"storage-migration\", \"projectRe\nPASS [decision-version-conflicts-refused] link with stale expectedProjectRevision -> decision-conflict :: [true, \"decision-conflict: Decision revision conflict: expected 30, current 31. (cur\nPASS [decision-version-conflicts-refused] same link on fresh revision succeeds :: [false, {\"edgeId\": \"01a1d4ea-eba7-740b-bca2-89316132f90c\", \"sourceId\": \"01a1d4ea-ea0e-71fd-9b02-7f8a338fd20a\nPASS [decision-version-conflicts-refused] amend superseded H -> decision-invalid-transition :: [true, \"decision-invalid-transition: Cannot amend a Superseded decision.\"]\nPASS [decision-version-conflicts-refused] paired amend on active A succeeds :: [false, {\"decisionId\": \"01a1d4ea-e918-7366-bfd5-458cb9a9759f\", \"version\": 4, \"taskId\": \"platform-architecture\",",
+      "observed-result": "Each write guard refused then succeeding on fresh values: every sub-check in dec/run.out passed (95/95 over all decision items, 0 FAIL).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "decision-graph-query-and-precedents",
+      "anchor": "docs/adr/0142-native-project-decision-graph.md",
+      "expected-result": "link_decisions depends_on appears in get_decision_graph with both nodes. query_decisions by literal text and by category return only the matching decision, and a no-match term returns [] (negative control). After supersede_decision, find_decision_precedents omits the superseded decision unless includeInactive=true. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "python3 dec/run.py 62528 (copy of the prior 2.9.0 decision-graph driver adapted to this run's scratch server/tool path): depends_on graph, text/category query with negative control, supersede and includeInactive",
+      "evidence": "PASS [decision-graph-query-and-precedents] link B depends_on A :: [false, {\"edgeId\": \"01a1d4ea-eadf-74a8-9b43-9fed6b2bae9c\", \"sourceId\": \"01a1d4ea-e944-7e5e-bdc8-189e89e04cce\", \"targetId\": \"\nPASS [decision-graph-query-and-precedents] link C depends_on A :: [false, {\"edgeId\": \"01a1d4ea-eaf6-79a6-9a2d-78fdbf551ce5\", \"sourceId\": \"01a1d4ea-e968-740b-8a7f-801373cfd147\", \"targetId\": \"\nPASS [decision-graph-query-and-precedents] link D depends_on B :: [false, {\"edgeId\": \"01a1d4ea-eb07-79ab-ac65-002eda296c3e\", \"sourceId\": \"01a1d4ea-e980-7664-8646-2930f4b37abd\", \"targetId\": \"\nPASS [decision-graph-query-and-precedents] link D depends_on C :: [false, {\"edgeId\": \"01a1d4ea-eb1b-76d6-becd-3cebc6ada9f6\", \"sourceId\": \"01a1d4ea-e980-7664-8646-2930f4b37abd\", \"targetId\": \"\nPASS [decision-graph-query-and-precedents] link E supports B :: [false, {\"edgeId\": \"01a1d4ea-eb2a-7ba3-a07e-f3aeab86bc39\", \"sourceId\": \"01a1d4ea-e9a6-78cf-b3cd-df55766163d6\", \"targetId\": \"01\nPASS [decision-graph-query-and-precedents] link F contradicts E :: [false, {\"edgeId\": \"01a1d4ea-eb3c-7990-8c90-7525b39efe42\", \"sourceId\": \"01a1d4ea-e9a6-78cf-b3cd-df55766163d6\", \"targetId\": \nPASS [decision-graph-query-and-precedents] link G contradicts A :: [false, {\"edgeId\": \"01a1d4ea-eb4f-766e-9f72-6889b6e66bf5\", \"sourceId\": \"01a1d4ea-e918-7366-bfd5-458cb9a9759f\", \"targetId\": \nPASS [decision-graph-query-and-precedents] link H depends_on A :: [false, {\"edgeId\": \"01a1d4ea-eb5f-7b3e-b10b-ed1b4bd5dcba\", \"sourceId\": \"01a1d4ea-e9ef-7956-96a9-e3a65c13bc9f\", \"targetId\": \"\nPASS [decision-graph-query-and-precedents] link H2 depends_on A :: [false, {\"edgeId\": \"01a1d4ea-eb6e-7d59-943f-d8d26674bf90\", \"sourceId\": \"01a1d4ea-ea01-70c6-9f26-6dbfa4c72bcc\", \"targetId\": \nPASS [decision-graph-query-and-precedents] link E supports D :: [false, {\"edgeId\": \"01a1d4ea-eb7f-7f45-bf26-8bc597166742\", \"sourceId\": \"01a1d4ea-e9a6-78cf-b3cd-df55766163d6\", \"targetId\": \"01\nPASS [decision-graph-query-and-precedents] link D supports E :: [false, {\"edgeId\": \"01a1d4ea-eb8d-7b08-8de0-98ea683092fa\", \"sourceId\": \"01a1d4ea-e980-7664-8646-2930f4b37abd\", \"targetId\": \"01\nPASS [decision-graph-query-and-precedents] self link A->A refused :: [true, \"decision-invalid-link: A decision cannot link to itself.\"]\nPASS [decision-graph-query-and-precedents] depends_on cycle A->D (D->B->A exists) refused :: [true, \"decision-invalid-link: The DependsOn link would create a cycle.\"]\nPASS [decision-graph-query-and-precedents] link kind supersedes via link_decisions refused :: [true, \"invalid-argument: Parameter \\\"kind\\\" must be true, was false. (Parameter 'kind')\"]\nPASS [decision-graph-query-and-precedents] revision unchanged by the three refusals :: [32, 32]\nPASS [decision-graph-query-and-precedents] supersede H by H2 :: [false, {\"replacement\": {\"decisionId\": \"01a1d4ea-ea01-70c6-9f26-6dbfa4c72bcc\", \"version\": 1, \"taskId\": \"storage-migration\", \"p\nPASS [decision-graph-query-and-precedents] H status is superseded :: superseded\nPASS [decision-graph-query-and-precedents] r",
+      "observed-result": "depends_on graph, text/category query with negative control, supersede and includeInactive: every sub-check in dec/run.out passed (95/95 over all decision items, 0 FAIL).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "decision-cli-parity-and-export",
+      "anchor": "docs/adr/0142-native-project-decision-graph.md",
+      "expected-result": "ai-raccoon decisions record/query/get --history/preview reach the same records through the server. export --all --output writes a file with mode 0600 on macOS and Linux, and permissions governed by the destination ACL on Windows, whose counts match what was written (decisions, versions, edges); a second export to the same path without --force exits 10. An unregistered project exits 18; a record file naming taskId exits 10 and sends nothing. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "python3 dec/run.py 62528 (copy of the prior 2.9.0 decision-graph driver adapted to this run's scratch server/tool path): CLI record/query/get --history/preview/export parity, 0600 mode, --force, exit codes",
+      "evidence": "PASS [decision-cli-parity-and-export] MCP export all: decisions count matches written :: {\"counts\": {\"tasks\": 3, \"decisions\": 14, \"versions\": 22, \"edges\": 15, \"boundaryNodes\": 0, \"imports\": \nPASS [decision-cli-parity-and-export] MCP export versions = sum of currentVersion via get_decision :: {\"counts\": 22, \"expected\": 22}\nPASS [decision-cli-parity-and-export] MCP export edges = 15 written (11 + I->A + supersedes + 2 chain) :: {\"tasks\": 3, \"decisions\": 14, \"versions\": 22, \"edges\": 15, \"boundaryNodes\": 0, \"impo\nPASS [decision-cli-parity-and-export] cli record exits 0 :: [0, \"{\\n  \\\"projectId\\\": \\\"76e634f3-3c9b-4763-a8d7-53ff41e214a3\\\",\\n  \\\"projectRevision\\\": 41,\\n  \\\"value\\\": {\\n    \\\"decisionId\\\"\nPASS [decision-cli-parity-and-export] MCP query sees the CLI-recorded decision :: [\"01a1d4ea-f407-77f5-b8e1-4eb03caa7bfc\", [{\"decision\": {\"decisionId\": \"01a1d4ea-f407-77f5-b8e1-4eb03caa7bfc\"\nPASS [decision-cli-parity-and-export] cli query 'zirconb' finds only B (same as MCP) :: [0, \"{\\n  \\\"projectId\\\": \\\"76e634f3-3c9b-4763-a8d7-53ff41e214a3\\\",\\n  \\\"projectRevision\\\": 41,\\n  \\\"va\nPASS [decision-cli-parity-and-export] cli get A --history shows 4 versions :: [0, \"{\\n  \\\"projectId\\\": \\\"76e634f3-3c9b-4763-a8d7-53ff41e214a3\\\",\\n  \\\"projectRevision\\\": 41,\\n  \\\"value\\\": {\\n\nPASS [decision-cli-parity-and-export] cli preview --all exits 0 and names A :: [0, \"Project 76e634f3-3c9b-4763-a8d7-53ff41e214a3; selected tasks: 3\\nTask bounds-chain: Graph bounds fixture\\n\nPASS [decision-cli-parity-and-export] cli export --all --output: mode 0600, counts == MCP export counts :: {\"code\": 0, \"mode\": \"0o600\", \"cli\": {\"tasks\": 3, \"decisions\": 15, \"versions\": 23, \"\nPASS [decision-cli-parity-and-export] second export without --force exits 10 :: [10, \"te/tmp/claude-501/-Users-arasz-RiderProjects-ai-raccoon/bf8e943b-ec9f-46ab-9ea0-50d05c56ae6d/scratchpad/\nPASS [decision-cli-parity-and-export] unregistered project exits 18 :: [18, \" not registered. Look up this repository's id with get_project_id, mint a new one with save_project_id_token, or \nPASS [decision-cli-parity-and-export] record file naming taskId exits 10, revision unchanged :: [10, \"c/bad.json must hold one JSON object with unique fields and without taskId, sessionId, r",
+      "observed-result": "CLI record/query/get --history/preview/export parity, 0600 mode, --force, exit codes: every sub-check in dec/run.out passed (95/95 over all decision items, 0 FAIL).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "decision-access-mode-read-only",
+      "anchor": "docs/adr/0142-native-project-decision-graph.md",
+      "expected-result": "settings access set <id> ro: record_decision over MCP returns access-denied, the CLI exits 17, projectRevision is unchanged and reads still work. After serve --restart on the same scratch port the project is still ro. Restore rw before any further write step. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "python3 dec/run.py 62528 (copy of the prior 2.9.0 decision-graph driver adapted to this run's scratch server/tool path): ro mode access-denied/exit 17, unchanged revision, survives serve --restart, restore rw",
+      "evidence": "PASS [decision-access-mode-read-only] settings access set ro :: [0, \"access set to ro for project 76e634f3-3c9b-4763-a8d7-53ff41e214a3\", \"n.Settings.CliSettingsBackend[687]\\n      ai-raccoon\nPASS [decision-access-mode-read-only] MCP record in ro -> access-denied :: [true, \"access-denied: record_decision requires mode rw (current ro); run 'ai-raccoon settings access set 76e634f3-\nPASS [decision-access-mode-read-only] MCP link in ro -> access-denied :: [true, \"access-denied: link_decisions requires mode rw (current ro); run 'ai-raccoon settings access set 76e634f3-3c9\nPASS [decision-access-mode-read-only] CLI record in ro exits 17 :: [17, \"equires mode rw (current ro); run 'ai-raccoon settings access set 76e634f3-3c9b-4763-a8d7-53ff41e214a3 rw' to raise t\nPASS [decision-access-mode-read-only] revision unchanged, reads work :: [41, 41]\nPASS [decision-access-mode-read-only] after serve --restart still access-denied :: [[true, \"access-denied: record_decision requires mode rw (current ro); run 'ai-raccoon settings access set \nPASS [decision-access-mode-read-only] graph survives restart (D upstream diamond) ::\nPASS [decision-access-mode-read-only] restore rw; a write succeeds :: [0, \"n.Settings.CliSettingsBackend[687]\\n      ai-raccoon: the backend on port 62528 keeps running after this command ex",
+      "observed-result": "ro mode access-denied/exit 17, unchanged revision, survives serve --restart, restore rw: every sub-check in dec/run.out passed (95/95 over all decision items, 0 FAIL).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "decision-semantica-import",
+      "anchor": "docs/adr/0142-native-project-decision-graph.md",
+      "expected-result": "decisions import-semantica with tests/AiRaccoon.Tests/Resources/Semantica/export-graph-json-0.7.0.json: preview with the legacy tasks unregistered exits 17; a mapping with one decision's status removed exits 17 with a missing-status blocker; the clean preview exits 0 and prints the --apply command; apply creates decisions in their mapped statuses with replayed=false; re-running apply returns replayed=true and leaves the revision unchanged; export shows importRecords equal to entities+relationships. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "python3 dec/run.py 62528 (copy of the prior 2.9.0 decision-graph driver adapted to this run's scratch server/tool path): import-semantica preview/mapping/apply/replay/export counts",
+      "evidence": "PASS [decision-semantica-import] preview with legacy tasks unregistered exits 17 :: [17, \"s.CliSettingsBackend[687]\\n      ai-raccoon: the backend on port 62528 keeps running after this comm\nPASS [decision-semantica-import] mapping without a status exits 17 with missing-status :: [17, \"gs.CliSettingsBackend[687]\\n      ai-raccoon: the backend on port 62528 keeps running after th\nPASS [decision-semantica-import] clean preview exits 0 and prints --apply :: [0, \"ai-raccoon decisions import-semantica --project-id 76e634f3-3c9b-4763-a8d7-53ff41e214a3 --input /Users/arasz\nPASS [decision-semantica-import] apply replayed=false, re-apply replayed=true, revision unchanged :: [0, \"{\\n  \\\"projectId\\\": \\\"76e634f3-3c9b-4763-a8d7-53ff41e214a3\\\",\\n  \\\"projectRevision\\\"\nPASS [decision-semantica-import] export importRecords == entities + relationships :: {\"imports\": 22, \"source\": 22, \"statuses\": [\"accepted\", \"accepted\", \"proposed\", \"rejected\"]}",
+      "observed-result": "import-semantica preview/mapping/apply/replay/export counts: every sub-check in dec/run.out passed (95/95 over all decision items, 0 FAIL).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "decision-unlink-keeps-history",
+      "anchor": "docs/adr/0142-native-project-decision-graph.md",
+      "expected-result": "unlink_decisions with a stale expectedProjectRevision -> decision-conflict; with the current revision the edge leaves get_decision_graph but stays in export_decisions with removedAt and removalActor; unlinking a supersedes edge -> decision-invalid-transition (supersession is permanent). (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "python3 dec/run.py 62528 (copy of the prior 2.9.0 decision-graph driver adapted to this run's scratch server/tool path): stale-revision unlink conflict, current unlink, history retention, supersedes unlink refused",
+      "evidence": "PASS [decision-unlink-keeps-history] unlink stale revision -> decision-conflict :: [true, \"decision-conflict: Decision revision conflict: expected 33, current 34. (currentProjectRevision=34)\nPASS [decision-unlink-keeps-history] unlink current revision :: [false, {\"edgeId\": \"01a1d4ea-eba7-740b-bca2-89316132f90c\", \"sourceId\": \"01a1d4ea-ea0e-71fd-9b02-7f8a338fd20a\", \"targetId\": \"01\nPASS [decision-unlink-keeps-history] edge gone from graph :: 01a1d4ea-eba7-740b-bca2-89316132f90c\nPASS [decision-unlink-keeps-history] unlink supersedes edge -> decision-invalid-transition :: [true, \"decision-invalid-transition: A supersession edge is permanent.\"]\nPASS [decision-unlink-keeps-history] unlinked edge stays in export with removedAt + removalActor :: [{\"edgeId\": \"01a1d4ea-eba7-740b-bca2-89316132f90c\", \"sourceId\": \"01a1d4ea-ea0e-71fd-9b02-7",
+      "observed-result": "stale-revision unlink conflict, current unlink, history retention, supersedes unlink refused: every sub-check in dec/run.out passed (95/95 over all decision items, 0 FAIL).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "decision-graph-bounds",
+      "anchor": "docs/adr/0142-native-project-decision-graph.md",
+      "expected-result": "On a chain X1 depends_on X2 depends_on X3, get_decision_graph from X1 upstream: depth 0 = seed alone with truncated reason depth; depth 1 = 2 nodes, reason depth; depth 2 = 3 nodes, not truncated; maxNodes 2 = 2 nodes, reason nodes. downstream from X1 returns the seed alone (direction control). depth 11 and maxNodes 0 -> invalid-argument. Upstream = edges whose source is the node (DecisionService.Views.cs). (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "python3 dec/run.py 62528 (copy of the prior 2.9.0 decision-graph driver adapted to this run's scratch server/tool path): chain depth/maxNodes/direction/invalid args",
+      "evidence": "PASS [decision-graph-bounds] X1 upstream depth 0 = 1 nodes, reason depth :: {\"nodes\": 1, \"truncated\": true, \"reasons\": [\"depth\"]}\nPASS [decision-graph-bounds] X1 upstream depth 1 = 2 nodes, reason depth :: {\"nodes\": 2, \"truncated\": true, \"reasons\": [\"depth\"]}\nPASS [decision-graph-bounds] X1 upstream depth 2 = 3 nodes, reason None :: {\"nodes\": 3, \"truncated\": false, \"reasons\": []}\nPASS [decision-graph-bounds] X1 upstream maxNodes 2 = 2 nodes, reason nodes :: {\"nodes\": 2, \"truncated\": true, \"reasons\": [\"nodes\"]}\nPASS [decision-graph-bounds] X1 downstream = seed alone (direction control) :: 1\nPASS [decision-graph-bounds] depth 11 -> invalid-argument :: [true, \"invalid-argument: Parameter \\\"depth\\\" (int) must be between or equal to <0> and <10>, was <11>. (Parameter 'depth')\\nActu\nPASS [decision-graph-bounds] maxNodes 0 -> invalid-argument :: [true, \"invalid-argument: Parameter \\\"maxNodes\\\" (int) must be between or equal to <1> and <500>, was <0>. (Parameter 'maxNodes",
+      "observed-result": "chain depth/maxNodes/direction/invalid args: every sub-check in dec/run.out passed (95/95 over all decision items, 0 FAIL).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "decision-mcp-export-size-cap",
+      "anchor": "docs/adr/0142-native-project-decision-graph.md",
+      "expected-result": "Record enough decisions in one task to pass 1 MiB (reasoning is capped at 16 000 chars, so about 80 x 15 000). MCP export_decisions of that task -> decision-export-too-large naming the byte size and the CLI command; ai-raccoon decisions export of the same task exits 0 and its counts match what was recorded. (ADR-0142, docs/how-to/record-project-decisions.md)",
+      "command": "python3 dec/run.py 62528 (copy of the prior 2.9.0 decision-graph driver adapted to this run's scratch server/tool path): 80 x 15000-char decisions, MCP export cap, CLI export",
+      "evidence": "PASS [decision-mcp-export-size-cap] MCP export of 80 x 15000-char task -> decision-export-too-large naming bytes + CLI :: decision-export-too-large: The export is 1258711 bytes, over the 104\nPASS [decision-mcp-export-size-cap] CLI export of same task exits 0, counts match :: {\"code\": 0, \"bytes\": 1297784, \"counts\": {\"tasks\": 1, \"decisions\": 80, \"versions\": 80, \"edges\": 0, \"bounda",
+      "observed-result": "80 x 15000-char decisions, MCP export cap, CLI export: every sub-check in dec/run.out passed (95/95 over all decision items, 0 FAIL).",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run."
+    },
+    {
+      "item": "consistent-live-database-backup",
+      "expected-result": "Create a consistent backup before upgrade, validate SQLite integrity, preserve a durable copy and record its digest.",
+      "command": "stat ~/.ai-raccoon/memory.db(+wal); sqlite3 -readonly 'file:$HOME/.ai-raccoon/memory.db?mode=ro' \"VACUUM INTO '$S/backup/memory-backup.db'\"; sqlite3 -readonly backup 'pragma integrity_check; pragma quick_check; select count(*) from entries; pragma user_version'; shasum -a 256; cp to memory-backup.durable.db; shasum -a 256 again; stat live again",
+      "evidence": "/Users/arasz/.ai-raccoon/memory.db size=1197465600 mtime=1794574101\n/Users/arasz/.ai-raccoon/memory.db-wal size=4202432 mtime=1794574281\nvacuum-rc=0\nintegrity_check: ok ; quick_check: ok ; entries 25836 ; user_version 24\nbd9c07dc6c7ad8ea9e8de5a90e0104506a4542a5b32bd733575fc122367045f4  backup/memory-backup.db\nbd9c07dc6c7ad8ea9e8de5a90e0104506a4542a5b32bd733575fc122367045f4  backup/memory-backup.durable.db\n/Users/arasz/.ai-raccoon/memory.db size=1197465600 mtime=1794574101\n/Users/arasz/.ai-raccoon/memory.db-wal size=4202432 mtime=1794574323",
+      "observed-result": "A transactionally consistent snapshot of the live bank was taken through a read-only connection (VACUUM INTO), integrity_check/quick_check return ok, the 25,836-entry copy is stored at $S/backup/memory-backup.durable.db with SHA-256 bd9c07dc...45f4 (copy digest equals source digest). memory.db size and mtime are unchanged; the -wal mtime moved only because the user's own live server (pid 77332) keeps writing it.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Observed result matches the expected result; command run and output read in this run. The backup is in the session scratch directory, which is a durable copy only for the session; the owner should move it if it must be kept."
+    }
+  ]
+}
