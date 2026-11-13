@@ -1,0 +1,26 @@
+{
+ "schema": 1,
+ "results-dir": "docs/work/checklist",
+ "rules": [
+  "Never write to the live data directory; start every server with a scratch data directory you created.",
+  "Never bind the default port; use an ephemeral port and read the bound port back from the server's output."
+ ],
+ "facts": {
+  "version": {"command": "cat VERSION", "nonzero": false},
+  "public-command-count": {"command": "python3 scripts/count-commands.py", "nonzero": true}
+ },
+ "items": [
+  {
+   "item": "install-matches-tree",
+   "expected-result": "A fresh install reports derived.version and a build hash equal to the commit under test.",
+   "anchor": "README.md",
+   "negative-control": "Install the previous release first; the item must fail until the new build replaces it."
+  },
+  {
+   "item": "write-then-read-after-restart",
+   "expected-result": "A record written through the public interface is returned unchanged after the server restarts on the same scratch data.",
+   "anchor": "README.md",
+   "negative-control": "Read from a second, empty scratch directory: the record must be absent."
+  }
+ ]
+}

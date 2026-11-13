@@ -1,10 +1,10 @@
 # Delegation map — AiRaccoon
 
-> Scaffolded by ai-badger 0.219.0. Regenerated on every scaffold; do not edit.
+> Scaffolded by ai-badger 0.220.0. Regenerated on every scaffold; do not edit.
 
 ## Stacks
 
-dotnet, mcp, python, github, ai-raccoon, changelog
+dotnet, mcp, python, github, changelog
 
 ## Personas available here
 
