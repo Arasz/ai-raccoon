@@ -172,7 +172,7 @@ def derive_fact(name: str, fact: dict, root: Path) -> str:
     """Run one fact command; raise ValueError naming the fact when its value is untrustworthy."""
     try:
         done = subprocess.run(fact["command"], shell=True, cwd=root, capture_output=True,
-                              text=True, timeout=FACT_TIMEOUT, check=False)
+                              text=True, env=git_env(), timeout=FACT_TIMEOUT, check=False)
     except subprocess.TimeoutExpired as exc:
         raise ValueError(f"fact {name!r}: timed out after {FACT_TIMEOUT}s") from exc
     value = done.stdout.strip()
@@ -237,7 +237,12 @@ def cmd_new_run(args: argparse.Namespace) -> int:
            "derived": derived, "findings-against-prior-runs": [],
            "items": [skeleton_item(entry) for entry in data["items"]]}
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(dump_json(run), encoding="utf-8")
+    try:
+        with target.open("w" if args.force else "x", encoding="utf-8") as handle:
+            handle.write(dump_json(run))
+    except FileExistsError as exc:
+        raise UsageError(f"{target} exists (written while the facts ran); pass --force to "
+                         "overwrite") from exc
     print(target)
     for rule in data.get("rules", []):
         print(f"rule: {rule}")
@@ -252,6 +257,22 @@ def reason_of(item: dict) -> str:
     return ""
 
 
+def findings_problems(findings: Any) -> list[str]:
+    """Problems in `findings-against-prior-runs`: a list of non-empty objects or strings."""
+    if not isinstance(findings, list):
+        return ["run file: `findings-against-prior-runs` must be a list"]
+    return [f"findings-against-prior-runs[{index}]: must be a non-empty object or string"
+            for index, entry in enumerate(findings)
+            if not (is_text(entry) or (isinstance(entry, dict) and entry))]
+
+
+def render_finding(entry: Any) -> str:
+    """One finding as a markdown line; an object renders as `key: value` pairs."""
+    if isinstance(entry, dict):
+        return "; ".join(f"{key}: {value}" for key, value in entry.items())
+    return str(entry)
+
+
 def validate_run(run: Any, checks: Any) -> list[str]:
     """Return every completeness problem of a parsed run file; *checks* is parsed or None."""
     if not isinstance(run, dict):
@@ -262,6 +283,7 @@ def validate_run(run: Any, checks: Any) -> list[str]:
     if not isinstance(items, list):
         return ["run file: `items` must be a list"]
     problems = scope_problems(run["run"]["scope"]) if "scope" in run["run"] else []
+    problems += findings_problems(run.get("findings-against-prior-runs", []))
     ids = set()
     for index, item in enumerate(items):
         where = f"items[{index}]"
@@ -361,7 +383,7 @@ def render_report(run: dict) -> tuple[str, bool, bool]:
     out += [f"- {i['item']}: {reason_of(i) or 'no reason given'}" for i in rejected] or ["none"]
     out += ["", "## Findings against prior runs", ""]
     findings = run.get("findings-against-prior-runs") or []
-    out += [f"- {f}" for f in findings] or ["none"]
+    out += [f"- {render_finding(f)}" for f in findings] or ["none"]
     return "\n".join(out) + "\n", bool(pending), bool(rejected)
 
 
