@@ -65,7 +65,7 @@ Older releases: [What's new history](docs/reference/whats-new-history.md). A rel
 
 ## Breaking changes
 
-Upgrading from an older version? Check [Breaking changes](docs/reference/breaking-changes.md) for what to do past each version. The latest one is 2.9.0.
+Upgrading from an older version? Check [Breaking changes](docs/reference/breaking-changes.md) for what to do past each version. The latest one is 2.9.1.
 
 ## Performance
 
