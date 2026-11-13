@@ -1,8 +1,9 @@
 {
-  "lastUpdated": "2026-11-12",
+  "lastUpdated": "2026-11-13",
   "notesRef": ".ai-badger/status-notes.json",
   "historyRef": ".ai-badger/status-history.json",
   "completedTasks": [
+{"id":"air-refuse-file-ttl-clear-docs","title":"set_memory_ttl refuses clearing a non-Memory TTL (ADR-0150); docs and checks match the 2.9.0 checklist findings; release 2.9.1","pr":961,"finished":"2026-11-13"},
 {"id":"air-fix-deferred-2x-review-items","title":"Fix the 8 checked #917 items: search carrier, get_entry corpus, v24 TTL/kind guard triggers, declared kind survives copies and re-ingest, one vec-table spec, one ToolNames; release 2.9.0","pr":954,"finished":"2026-11-12"},
     {
       "id": "air-upgrade-dotnet-11-runtime-async",
