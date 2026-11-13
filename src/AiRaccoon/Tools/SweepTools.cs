@@ -45,8 +45,7 @@ public sealed class SweepTools(
         + "its rating must decay under the threshold first. The returned canEverExpire says whether that rating gate is already met; "
         + "when it is false, no amount of age will expire this entry as things stand. "
         + "Side effect: an entry carrying a TTL drops out of trigger_memory_sharing's promotion candidates unless that call passes includeTtlRows. "
-        + "Only memory entries take a TTL: setting one on a file entry is refused as not-a-memory-entry. "
-        + "Clearing (ttlDays null) works on any entry in the project, including a file entry's TTL stored before 2.1.0. "
+        + "Only memory entries take a TTL: setting or clearing one on a file or unclassified entry is refused as not-a-memory-entry. "
         + "Requires full access mode.")]
     public async Task<ApiEnvelope<TtlResult>> SetTtl(
         [Description("The project id.")] [Optional] [DefaultParameterValue("")]
