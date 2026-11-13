@@ -52,7 +52,7 @@ The full walkthrough, including indexing your code, is [Get started with AiRacco
 - A watcher buffer overflow rescans within seconds, and `watch.buffer-size.global` sets the buffer size (2.5.0). [Release notes](docs/changelog/2.5.0-watcher-overflow-rescan.md)
 - Agents record decisions with versions, status and typed links, and `ai-raccoon decisions export|preview` reads them back (2.4.0). [Release notes](docs/changelog/2.4.0-native-decision-graph.md)
 - The log names where ONNX Runtime placed each model's nodes, per execution provider (2.3.0). [Release notes](docs/changelog/2.3.0-onnx-node-placement-log.md)
-- Query hits name their `entryKind`, which passes straight into `get_entry` (2.2.0). [Release notes](docs/changelog/2.2.0-entry-kind-on-query-hits.md)
+- Query hits name their `entryKind`, which passes straight into `get_entry` for `memory` and `file` hits (2.2.0). [Release notes](docs/changelog/2.2.0-entry-kind-on-query-hits.md)
 - `query entryType=memory|file|code` picks what to search; omit it to search everything (2.1.0). [Upgrade notes](docs/changelog/2.1.0-typed-search-memory-ttl.md)
 - The built-in `shared` target indexes documents outside a repository, with no project id to mint (1.62.0). [Release notes](docs/changelog/1.62.0-shared-document-watches.md)
 - `ai-raccoon watch add|remove|status` manage watches from a terminal, and the watcher indexes Jupyter notebooks by cell (1.59.0). [CLI reference](docs/reference/cli-reference.md)

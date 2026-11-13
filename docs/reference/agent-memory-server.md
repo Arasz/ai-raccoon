@@ -192,8 +192,8 @@ config channel (see [Command-line options](#command-line-options)).
   read the full chunk with `get_entry`. A memory-section hit carries `entryKind` — `memory`,
   `file`, or `none` for an unclassified row. For a `memory` or `file` hit it is the
   `entryType` to pass `get_entry`. `get_entry` cannot read an unclassified row: `none` is not an
-  accepted `entryType`, and `memory` or `file` refuse that hash as `unknown-hash`. Use the hit's
-  `value` instead. Every `query` writes a `search_quality` row
+  accepted `entryType`, and `memory` or `file` refuse that hash as `unknown-hash`. The hit's
+  `snippet` is the only text the server returns for it. Every `query` writes a `search_quality` row
   (ADR-0094): a selection including Memory or File records the memory hit count and files; a Code-only
   selection records the code hit count with an empty
   file list. Code paths never enter the table — neither the code corpus nor the telemetry
@@ -1222,7 +1222,7 @@ source of truth; a test cross-checks this table against it.
 | `path-not-found` | Ingest/watch path does not exist | `path-not-found: Path '<path>' does not exist.` |
 | `unknown-workspace` | `workspaceId` does not exist, or is not active, for the project | `unknown-workspace: Workspace '<id>' does not exist for project '<project>'.` |
 | `unknown-hash` | `hash` (e.g. passed to `share_memory`) does not exist in the project's scope | `unknown-hash: No entry with hash '<hash>' in project '<project>'.` |
-| `not-a-memory-entry` | `set_memory_ttl` was asked to set a TTL on an entry of the caller's project that is not a Memory entry (a File entry, or one with no kind). Clearing with `ttlDays: null` still works on it; a hash another project owns stays `unknown-hash` | `not-a-memory-entry: Entry '<hash>' in project '<project>' is not a memory entry; only memory entries take a TTL. Pass ttlDays null to clear a TTL it already carries.` |
+| `not-a-memory-entry` | `set_memory_ttl` was asked to set or clear (`ttlDays: null`) a TTL on an entry of the caller's project that is not a Memory entry (a File entry, or one with no kind); a hash another project owns stays `unknown-hash` | `not-a-memory-entry: Entry '<hash>' in project '<project>' is not a memory entry; only memory entries take a TTL.` |
 | `schema-version-unsupported` | The bank's stored schema version is newer than this binary supports (issue #200) | `schema-version-unsupported: bank schema v<n> is newer than this binary supports (v<m>); update ai-raccoon` |
 | `watching-disabled` | Watching is disabled for the project | `watching-disabled: Watching is disabled for project '<project>'. Run 'ai-raccoon settings watch enable <projectId|*> true' to enable it.` |
 | `watch-overlap` | `add_watch`'s path is already covered by an existing watch (no overlapping watches — the broader watch wins; adding a broader watch instead prunes the narrower ones rather than refusing) | `watch-overlap: Path '<path>' is already covered by watch '<covering-path>'.` |
