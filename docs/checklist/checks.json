@@ -122,7 +122,7 @@
   },
   {
    "item": "typed-query-all-selections",
-   "expected-result": "Seed distinguishable Memory/File/Code plus an unclassified control. Drive all seven nonempty entryType subsets and omitted default, including mixed case/spacing. Narrow sets return only declared selected types; default/all includes unclassified. Confirm kind_mask exactly 1..7. (2.1.0 changelog, ADR-0141)",
+   "expected-result": "Seed distinguishable Memory/File/Code plus an unclassified control. Drive all seven nonempty entryType subsets and omitted default, including mixed case/spacing. Narrow sets return only declared selected types; any selection naming both memory and file (default/all included) also returns unclassified rows. Confirm kind_mask exactly 1..7. (2.1.0 changelog, ADR-0141)",
    "anchor": "docs/adr/0141-typed-vector-partitions.md"
   },
   {
@@ -143,7 +143,7 @@
   },
   {
    "item": "typed-memory-only-ttl",
-   "expected-result": "In full access mode set/clear Memory TTL; refuse setting and clearing File and Code-only hashes, and retain negative controls. (2.1.0 changelog, ADR-0148)",
+   "expected-result": "In full access mode set/clear Memory TTL; refuse setting and clearing File, unclassified and Code-only hashes, and retain negative controls. (2.1.0 changelog, ADR-0148, ADR-0150)",
    "anchor": "docs/adr/0148-bank-guards-memory-only-ttl-and-the-kind-domain.md"
   },
   {

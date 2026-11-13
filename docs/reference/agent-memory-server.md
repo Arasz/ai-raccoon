@@ -190,8 +190,10 @@ config channel (see [Command-line options](#command-line-options)).
   proportional to their fused score) — not the positional, rank-derived placeholder of an earlier
   wave. Code hits carry `lineStart`/`lineEnd` (1-based) instead of `chunkIndex`/`totalChunks`;
   read the full chunk with `get_entry`. A memory-section hit carries `entryKind` — `memory`,
-  `file`, or `none` for an unclassified row — which is the `entryType` to pass `get_entry`
-  for a `memory` or `file` hit. Every `query` writes a `search_quality` row
+  `file`, or `none` for an unclassified row. For a `memory` or `file` hit it is the
+  `entryType` to pass `get_entry`. `get_entry` cannot read an unclassified row: `none` is not an
+  accepted `entryType`, and `memory` or `file` refuse that hash as `unknown-hash`. The hit's
+  `snippet` is the only text the server returns for it. Every `query` writes a `search_quality` row
   (ADR-0094): a selection including Memory or File records the memory hit count and files; a Code-only
   selection records the code hit count with an empty
   file list. Code paths never enter the table — neither the code corpus nor the telemetry
@@ -371,11 +373,12 @@ config channel (see [Command-line options](#command-line-options)).
   tool boundary: a project not in `full` mode is skipped, not reaped, even while the
   reaper is armed and the pass is running against every other project (see
   [ADR-0025](../adr/0025-the-sweep-reaper.md)).
-- **`set_memory_ttl`:** sets a TTL only for Memory entries, including transcripts. Clearing
-  (`ttlDays: null`) works on an entry of any kind in the project: cleanup still honors an
-  explicit File TTL stored before 2.1.0, and clearing it is how that entry stops being
-  sweepable. Setting a TTL on a File entry is refused as `not-a-memory-entry`. Without a TTL an
-  entry can never be swept.
+- **`set_memory_ttl`:** sets or clears a TTL only for Memory entries, including transcripts.
+  Setting or clearing a TTL on a File or unclassified entry is refused as `not-a-memory-entry`;
+  since schema v24 no such row can carry a TTL
+  ([ADR-0148](../adr/0148-bank-guards-memory-only-ttl-and-the-kind-domain.md),
+  [ADR-0150](../adr/0150-clearing-a-ttl-is-memory-only.md)). Without a TTL an entry can never be
+  swept.
   `ttlDays` is 1..36500, or `null` to clear it; `0` is rejected. A TTL is necessary
   but not sufficient: fresh entries start at rating 0.5 against a 0.3 threshold, so
   `ttlDays=7` does not expire an entry at age 30. The returned `canEverExpire` reports
@@ -1219,7 +1222,7 @@ source of truth; a test cross-checks this table against it.
 | `path-not-found` | Ingest/watch path does not exist | `path-not-found: Path '<path>' does not exist.` |
 | `unknown-workspace` | `workspaceId` does not exist, or is not active, for the project | `unknown-workspace: Workspace '<id>' does not exist for project '<project>'.` |
 | `unknown-hash` | `hash` (e.g. passed to `share_memory`) does not exist in the project's scope | `unknown-hash: No entry with hash '<hash>' in project '<project>'.` |
-| `not-a-memory-entry` | `set_memory_ttl` was asked to set a TTL on an entry of the caller's project that is not a Memory entry (a File entry, or one with no kind). Clearing with `ttlDays: null` still works on it; a hash another project owns stays `unknown-hash` | `not-a-memory-entry: Entry '<hash>' in project '<project>' is not a memory entry; only memory entries take a TTL. Pass ttlDays null to clear a TTL it already carries.` |
+| `not-a-memory-entry` | `set_memory_ttl` was asked to set or clear (`ttlDays: null`) a TTL on an entry of the caller's project that is not a Memory entry (a File entry, or one with no kind); a hash another project owns stays `unknown-hash` | `not-a-memory-entry: Entry '<hash>' in project '<project>' is not a memory entry; only memory entries take a TTL.` |
 | `schema-version-unsupported` | The bank's stored schema version is newer than this binary supports (issue #200) | `schema-version-unsupported: bank schema v<n> is newer than this binary supports (v<m>); update ai-raccoon` |
 | `watching-disabled` | Watching is disabled for the project | `watching-disabled: Watching is disabled for project '<project>'. Run 'ai-raccoon settings watch enable <projectId|*> true' to enable it.` |
 | `watch-overlap` | `add_watch`'s path is already covered by an existing watch (no overlapping watches — the broader watch wins; adding a broader watch instead prunes the narrower ones rather than refusing) | `watch-overlap: Path '<path>' is already covered by watch '<covering-path>'.` |

@@ -184,6 +184,7 @@ has every name; the records keep theirs, because a record is frozen.
 | [0147 — `get_entry` reports the corpus in `corpus`, and its output `entryType` is deprecated](0147-get-entry-reports-corpus-and-deprecates-entry-type.md) | The output `entryType` names the corpus while the input names the kind. Output gains `corpus` (same value), the output `entryType` is deprecated and removed in 3.0.0 (#947), and the name is never reused for the kind because that would change its meaning silently | — |
 | [0148 — The bank guards memory-only TTL and the kind domain with triggers](0148-bank-guards-memory-only-ttl-and-the-kind-domain.md) | Schema v24 clears the TTL of every non-memory row, then adds a BEFORE INSERT and a BEFORE UPDATE trigger that abort on a non-memory TTL or an unknown `entry_type`; a trigger, not a CHECK, so no `entries` rebuild and dev banks without the column CHECK are covered; the doctor counts non-memory TTL rows | — |
 | [0149 — Manual checks live in the project](0149-manual-checks-live-in-the-project.md) | The checks are `docs/checklist/checks.json`, run by the framework skill `run-manual-checklist`; the fact script and the poison embedding stub are project scripts under `scripts/`; results stay in `docs/work/checklist/` | — |
+| [0150 — Clearing a TTL is Memory-only, like setting one](0150-clearing-a-ttl-is-memory-only.md) | `set_memory_ttl` refuses clearing on a non-Memory entry as `not-a-memory-entry`; schema v24 already removed every non-Memory TTL, so the clear opened in 2.2.0 had nothing left to clear | — |
 
 ## Numbers never used
 
