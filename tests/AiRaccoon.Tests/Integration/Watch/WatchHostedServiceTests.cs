@@ -25,6 +25,15 @@ public sealed class WatchHostedServiceTests
 {
     private const string Project = "acme";
 
+    /// <summary>
+    ///     ADR-0151: a reconcile pass opens the bank once per registration for the watch list and
+    ///     twice more per enabled registration for its settings, so a one-second poll was 3-4
+    ///     unpooled opens per second forever at idle. Only registration pickup latency rides on this
+    ///     value — the digest drain keeps its own one-second tick.
+    /// </summary>
+    [RetryFact]
+    public void PollInterval_IsTenSeconds() => WatchHostedService.PollInterval.ShouldBe(TimeSpan.FromSeconds(10));
+
     private static (WatchTestStack Stack, WatchEventSource Source, WatchCatchUp CatchUp, WatchHostedService Hosted)
         NewStack(IOperationTelemetry? telemetry = null)
     {

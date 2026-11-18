@@ -305,6 +305,11 @@ internal sealed class FakeIgnoreRulesProvider : IIgnoreRulesProvider
     /// <summary>Runs on every load — lets a test delete a file after the digest saw it exist.</summary>
     public Action? OnLoad { get; set; }
 
+    /// <summary>Roots whose cached rules were invalidated, in call order.</summary>
+    public List<string> Invalidated { get; } = [];
+
+    public void Invalidate(string root) => Invalidated.Add(root);
+
     public Task<IgnoreRules> LoadAsync(string root, CancellationToken cancellationToken = default)
     {
         OnLoad?.Invoke();
@@ -319,12 +324,20 @@ internal sealed class FakeIgnoreRulesProvider : IIgnoreRulesProvider
     }
 }
 
-/// <summary>IWatchScanInitiator fake: records every EnqueueInitialScan call.</summary>
+/// <summary>IWatchScanInitiator fake: records every EnqueueInitialScan call, and lets a test assert
+/// what was true at the moment the request arrived.</summary>
 internal sealed class FakeWatchScanInitiator : IWatchScanInitiator
 {
     public List<(string ProjectId, string Path)> Calls { get; } = [];
 
-    public void EnqueueInitialScan(string projectId, string path) => Calls.Add((projectId, path));
+    /// <summary>Runs when a request arrives — the seam for ordering assertions.</summary>
+    public Action<string, string>? OnEnqueue { get; set; }
+
+    public void EnqueueInitialScan(string projectId, string path)
+    {
+        OnEnqueue?.Invoke(projectId, path);
+        Calls.Add((projectId, path));
+    }
 }
 
 /// <summary>IWatchScanLease fake: grants by default, with injectable results and call counters.</summary>

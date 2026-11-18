@@ -51,7 +51,14 @@ public sealed partial class WatchHostedService : BackgroundService
         _eventSource.Overflowed += OnWatchOverflowed;
     }
 
-    public static TimeSpan PollInterval { get; } = TimeSpan.FromSeconds(1);
+    /// <summary>
+    ///     How often the registration list and each registration's enabled setting are re-read. A pass
+    ///     opens the bank once for the list and twice per enabled registration for its settings, so a
+    ///     one-second poll was 3-4 unpooled opens per second forever at idle (ADR-0151). What rides on
+    ///     this value is how fast a registration another process added, removed or disabled is acted
+    ///     on — never how fast an event drains, which is <see cref="WatchPipeline.TickInterval" />'s.
+    /// </summary>
+    public static TimeSpan PollInterval { get; } = TimeSpan.FromSeconds(10);
 
     /// <summary>
     ///     How often every enabled, non-stopped watch gets a changed-files scan, so a change whose

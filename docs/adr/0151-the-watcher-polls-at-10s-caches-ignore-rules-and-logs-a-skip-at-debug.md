@@ -1,0 +1,37 @@
+# ADR-0151: The watcher polls at 10 s, caches the ignore file until it moves, and logs a skipped replace at Debug
+
+Date: 2026-11-18
+
+Status: Accepted for 2.10.0.
+
+Amends: [0086 §5](0086-watch-overlap-and-ai-raccoon-ignore.md) — `ai-raccoon.ignore` is no longer read fresh once per scan/digest event.
+
+## Context
+
+A Windows report: ai-raccoon reads from disk constantly, and the log continuously repeats `Replace-by-path waited 0.0 ms … 0 row(s) written` (EventId 899). The trace on 2026-11-18 found three separate costs, none of them a wrong write.
+
+1. **The reconcile pass runs at 1 Hz.** `WatchHostedService.PollInterval` is one second. Every pass, per registration, opens the bank three times: `ListWatchesAsync`, then two `GetSettingAsync` calls inside `IsEnabledAsync` (`WatchHostedService.cs:331-337`), plus `ResolveConcurrencyAsync`'s setting reads whenever jobs exist. That is 3–4 unpooled bank opens per second at idle, forever. The measured diagnosis of 2026-09-25 counted ~29 opens/s with 8 registrations, about 3–4 % of one core.
+2. **Every filesystem event re-reads the ignore file.** `WatchDigestExecutor.IsExcludedAsync` calls `IgnoreRulesProvider.LoadAsync`, which stats, reads and parses `<root>/ai-raccoon.ignore`; `FileIngestor` calls it again for the same event. Windows delivers several events per save (an editor's atomic save is a create plus two changes; Defender and OneDrive re-touch files), so this is the per-event read that adds up.
+3. **A skip is logged like a finding.** EventId 899 has three sites: the replace that ran (`Replace.cs:293`), the guard declining under the lock because a racing digest already committed the fingerprint (`Replace.cs:320`), and a claim another digest holds (`Replace.cs:339`). The last two are correct behaviour — the other digest is writing that path's fingerprint — and both pass `0` rows, so a healthy skip is printed at Information exactly like a write. The exception is a holder that crashed mid-chunk: its claim stays until `ClaimStaleAfter` (5 minutes), so skips in that window defer to a digest that will not finish, and the next event after the claim goes stale retries.
+
+## Decision
+
+Three changes in one commit. No schema change, no new dependency.
+
+1. **`WatchHostedService.PollInterval` goes from 1 s to 10 s.** The digest drain keeps its own 1 s tick (`WatchPipeline.TickInterval`) — an event still drains promptly. What gets slower is how fast the server notices a registration another process added, removed or disabled, and the stale-registration sweep. Ten seconds is the delay between passes, not a deadline: a registration written after a pass has read the list is picked up by the next pass, so the wait is up to one interval plus that pass's own duration.
+2. **`IgnoreRulesProvider` caches the parsed rules per root**, keyed by the ignore file's last write time and length. The entry is reused while both are unchanged and re-read as soon as either moves. A digest of the ignore file itself drops the entry first, and so does a rename that moves it away or onto the name — which for a move away also queues the full rescan a delete already queued, since files the removed rules excluded are now eligible — the event is positive evidence the rules may have moved, and it is what covers a same-stamp edit (a coarse-timestamp filesystem, or a rewrite that keeps both fields). A load that finds the file absent drops the entry too, so a delete-and-restore cannot serve rules from before the gap. An invalidation also stops an in-flight load from caching the parse it read before it. This narrows ADR-0086 §5 from "read fresh once per scan/digest event" to "read once, re-read when the file moves or a digest sees an edit to it".
+3. **EventId 899 stays Information for a replace that ran.** Both skip sites move to a new EventId 896 at Debug. `write.replace.wait_ms`, `held_ms` and `rows` record on all three sites regardless, so a skip stays measurable without being logged by default.
+
+## Alternatives
+
+- **Do nothing.** Rejected: the cost is structural (a per-second poll and a per-event file read), and on a repo under active edit it grows with event volume, not with useful work.
+- **Coalesce per path in `WatchPipeline`** so a second event joins the digest already in flight instead of racing it. This removes the duplicate read as well as both skip log sites, and it stays a valid follow-up — but it changes the pipeline's dispatch shape, which is more than this fix needs. The log-level move makes the noise disappear now.
+- **Cache the rules with a time-to-live instead of a file stamp.** Rejected: a TTL serves stale rules for its whole length after an ignore-file edit, and the edit is precisely the moment rules must change — the digest answers an ignore-file change with a full rescan. A stamp read is one `stat`, not a content read.
+- **Throttle or suppress EventId 899.** Rejected: a rate limiter is more machinery than a level, and the line's content is worth keeping at the site that produced it.
+
+## Consequences
+
+- **Positive.** Idle bank opens fall about tenfold; one event no longer opens, reads and parses the ignore file twice; the default log no longer reports a correct skip as a write.
+- **Negative.** A watch added, removed or disabled from a second process (the CLI) is acted on at the next pass instead of within a second: up to one interval plus that pass's own duration later. `add_watch` writes the registration and the watcher starts at that pass, so a caller that wants its first digest sooner needs a pass triggered by the registration itself, which this change does not add. The same widened window covers a watch another process removes and re-adds between passes: its reconcile slot survives, so the re-added watch keeps the slot and misses the initial scan its fresh `lastChangeTs = 0` asks for — a gap that predates this record, that this interval widens tenfold, and that only registration identity closes. An unchanged ignore file is no longer re-parsed at all, so an edit is seen when it moves the last write time or the length, or when the digest sees the edit event and invalidates the entry; a coarse-timestamp filesystem (FAT, 2 s) whose edit event never arrives (a stopped watch) can serve the previous rules until the next stamp move. Nothing short of reading the file on every event closes that last case, and that read is the cost this record removes.
+- **Negative — the same widening reaches a project-id repair.** A registration the repair renamed keeps emitting under its old id for up to one more interval, and the digest's fold is marker-gated (`WatchService.FoldAsync`'s d-425 MUST-1 contract), so a digest that lands inside the repair window can write under the loser id that ADR-0127 §3 already refuses to honour on the read path. This change neither creates nor closes that race; it widens the window by one interval, and closing it means giving the watch write boundary the marker-free fold ADR-0127 gave `ToolGate` — a repair-coordination decision with its own record.
+- **Confirmation.** `WatchHostedServiceTests` pins `PollInterval`; `IgnoreRulesProviderTests` proves one parse serves repeated loads, that a moved file is re-read, and that an invalidation reads a file whose stamp did not move; `WatchDigestExecutorTests` proves a digest of the ignore file invalidates its root before the rescan it queues, and that a rename moving the file away invalidates it and queues the same rescan; `ReplaceCoreTransactionSpanLogTests` proves a replace logs 899 at Information and a skip logs 896 at Debug.

@@ -317,7 +317,7 @@ public sealed partial class SqliteMemoryStore
             {
                 await CommitTransaction(connection, cancellationToken);
                 var declinedHeldMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
-                Log.TransactionHeld(logger, waitMs, declinedHeldMs, 0);
+                Log.ReplaceSkipped(logger, waitMs, declinedHeldMs, "a racing digest already committed the fingerprint");
                 RecordReplaceLockMetrics(projectId, waitMs, declinedHeldMs, 0);
                 return false;
             }
@@ -336,7 +336,7 @@ public sealed partial class SqliteMemoryStore
             }
 
             var heldMs = timeProvider.GetElapsedTime(heldFrom).TotalMilliseconds;
-            Log.TransactionHeld(logger, waitMs, heldMs, 0);
+            Log.ReplaceSkipped(logger, waitMs, heldMs, "another digest holds this path's claim");
             RecordReplaceLockMetrics(projectId, waitMs, heldMs, 0);
 
             return claimed;
@@ -380,6 +380,14 @@ public sealed partial class SqliteMemoryStore
         [LoggerMessage(EventId = 899, Level = LogLevel.Information,
             Message = "Replace-by-path waited {WaitMs:F1} ms for the write lock and held it {HeldMs:F1} ms ({Rows} row(s) written)")]
         public static partial void TransactionHeld(ILogger logger, double waitMs, double heldMs, int rows);
+
+        /// <summary>
+        ///     ADR-0151: a digest that lost the race for its own path wrote nothing, which is the
+        ///     correct outcome — Debug, so a healthy skip is not printed beside the writes.
+        /// </summary>
+        [LoggerMessage(EventId = 896, Level = LogLevel.Debug,
+            Message = "Replace-by-path skipped ({Reason}): waited {WaitMs:F1} ms for the write lock and held it {HeldMs:F1} ms (0 row(s) written)")]
+        public static partial void ReplaceSkipped(ILogger logger, double waitMs, double heldMs, string reason);
     }
 
     /// <summary><see cref="ReplaceCoreAsync" />'s outcome: whether it ran at all, the rows it wrote, and which corpus.</summary>

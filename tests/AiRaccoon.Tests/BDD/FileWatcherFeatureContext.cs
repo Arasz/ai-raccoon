@@ -87,7 +87,7 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
 
     /// <summary>
     ///     One reconcile pass + await the catch-up scan it enqueued. Idempotent — the hosted
-    ///     loop reconciles every second in production, so extra passes are harmless; new
+    ///     loop reconciles on WatchHostedService.PollInterval (10 s) in production, so extra passes are harmless; new
     ///     registrations get a watcher + initial scan exactly once.
     /// </summary>
     public async Task ReconcileOnceAsync(CancellationToken cancellationToken = default)
