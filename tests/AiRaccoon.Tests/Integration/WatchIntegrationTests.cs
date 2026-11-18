@@ -788,7 +788,7 @@ public sealed class WatchIntegrationTests
             WatchCatchUp? catchUp = null;
             Pipeline = new WatchPipeline(new WatchScheduler(),
                 new WatchDigestExecutor(Memory, WatchStore, Time,
-                    new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
+                    TestIgnoreRules.Create(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
                     new SqliteProjectIdsMigrationGate(_factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher(), TestData.SharedScope),
                 new WatchRetryPolicy(),
                 ScanGuard, Memory, Time, new FakeLogger<WatchPipeline>(_logs));
@@ -804,7 +804,7 @@ public sealed class WatchIntegrationTests
                 new FakeLogger<WatchEventSource>(_logs));
             CatchUp = catchUp = new WatchCatchUp(Pipeline, WatchStore, ScanGuard,
                 new SqliteWatchScanLease(_factory, Time), Time, new FakeLogger<WatchCatchUp>(_logs),
-                new IgnoreRulesProvider(), new IndexableFileWalk());
+                TestIgnoreRules.Create(), new IndexableFileWalk());
             Hosted = new WatchHostedService(Memory, WatchStore, Pipeline, EventSource, CatchUp, Time,
                 TestTelemetry.None, new FakeLogger<WatchHostedService>(_logs));
             Service = new WatchService(WatchStore, Memory, Pipeline, Time, new WatchOverlapResolver(),

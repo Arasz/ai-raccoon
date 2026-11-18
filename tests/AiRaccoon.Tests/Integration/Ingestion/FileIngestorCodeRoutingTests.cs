@@ -253,7 +253,7 @@ public sealed class FileIngestorCodeRoutingTests : IDisposable
         var matcher = new FileTypeMatcher([new MarkdownFileTypeHandler(TestData.RealMarkdownChunker())]);
         var codeIngestor = new CodeIngestor(new CodeFileTypeMatcher(), new StubCodeChunker(), TimeProvider.System);
         return new FileIngestor(matcher, sourceStore, TimeProvider.System, TestData.CreateEmbeddingService(),
-            new IgnoreRulesProvider(), new CodeFileTypeMatcher(), codeIngestor,
+            TestIgnoreRules.Create(), new CodeFileTypeMatcher(), codeIngestor,
             watchStore ?? NullWatchStore.Instance, NullEmbedDrainPump.Instance, new IndexableFileWalk(), TestData.SharedScope, new EntryKindClassifier());
     }
 

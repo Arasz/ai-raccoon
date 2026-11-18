@@ -41,6 +41,7 @@ using AiRaccoon.Projects;
 using AiRaccoon.Setup.Models;
 using AiRaccoon.Tools;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.FileProviders;
 using SqliteMemoryStore = AiRaccoon.Infrastructure.Sqlite.Memory.SqliteMemoryStore;
 
 namespace AiRaccoon.Setup;
@@ -273,6 +274,7 @@ internal static partial class AppRegistrations
             services.AddSingleton<IFileTypeHandler>(static sp => new JsonFileTypeHandler(sp.GetRequiredService<IJsonChunker>()));
             services.AddSingleton<IFileTypeHandler>(static sp => new NotebookFileTypeHandler(sp.GetRequiredService<INotebookChunker>()));
             services.AddSingleton<IReadOnlyCollection<IFileTypeHandler>>(static sp => [.. sp.GetServices<IFileTypeHandler>()]);
+            services.AddSingleton<Func<string, IFileProvider>>(IgnoreRulesProvider.CreatePhysicalProvider);
             services.AddRequiredSingleton<IIgnoreRulesProvider, IgnoreRulesProvider>();
             services.AddRequiredSingleton<IFileTypeMatcher, FileTypeMatcher>();
             services.AddRequiredSingleton<ICodeFileTypeMatcher, CodeFileTypeMatcher>();
