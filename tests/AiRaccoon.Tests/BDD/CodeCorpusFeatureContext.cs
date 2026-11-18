@@ -252,10 +252,11 @@ public sealed class CodeCorpusFeatureContext : IDisposable
         CatchUp = catchUp = new WatchCatchUp(Pipeline, WatchStore, scanGuard,
             new SqliteWatchScanLease(Factory, TimeProvider), TimeProvider, NullLogger<WatchCatchUp>.Instance,
             TestIgnoreRules.Create(), new IndexableFileWalk());
+        var reconcileSignal = new WatchReconcileSignal();
         Hosted = new WatchHostedService(Store, WatchStore, Pipeline, EventSource, CatchUp, TimeProvider,
-            TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
+            TestTelemetry.None, NullLogger<WatchHostedService>.Instance, reconcileSignal);
         WatchServiceInstance = new WatchService(WatchStore, Store, Pipeline, TimeProvider, new WatchOverlapResolver(),
-            new SqliteProjectIdsMigrationGate(Factory));
+            new SqliteProjectIdsMigrationGate(Factory), reconcileSignal);
         WatchToolsInstance = new WatchTools(WatchServiceInstance, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck));
     }
 }

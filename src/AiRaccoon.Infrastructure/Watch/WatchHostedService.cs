@@ -25,6 +25,7 @@ public sealed partial class WatchHostedService : BackgroundService
     private readonly ILogger<WatchHostedService> _logger;
     private readonly IMemoryStore _memory;
     private readonly WatchPipeline _pipeline;
+    private readonly WatchReconcileSignal _reconcileSignal;
     private readonly HashSet<WatchKey> _registered = [];
     private readonly IWatchStore _store;
     private readonly IOperationTelemetry _telemetry;
@@ -34,8 +35,9 @@ public sealed partial class WatchHostedService : BackgroundService
 
     public WatchHostedService(IMemoryStore memory, IWatchStore store, WatchPipeline pipeline,
         WatchEventSource eventSource, WatchCatchUp catchUp, TimeProvider timeProvider,
-        IOperationTelemetry telemetry, ILogger<WatchHostedService> logger)
+        IOperationTelemetry telemetry, ILogger<WatchHostedService> logger, WatchReconcileSignal reconcileSignal)
     {
+        _reconcileSignal = reconcileSignal;
         _memory = memory;
         _store = store;
         _pipeline = pipeline;
@@ -52,11 +54,8 @@ public sealed partial class WatchHostedService : BackgroundService
     }
 
     /// <summary>
-    ///     How often the registration list and each registration's enabled setting are re-read. A pass
-    ///     opens the bank once for the list and twice per enabled registration for its settings, so a
-    ///     one-second poll was 3-4 unpooled opens per second forever at idle (ADR-0151). What rides on
-    ///     this value is how fast a registration another process added, removed or disabled is acted
-    ///     on — never how fast an event drains, which is <see cref="WatchPipeline.TickInterval" />'s.
+    ///     How long the loop sleeps between passes. A watch change made in this process wakes it at once,
+    ///     so this bounds only a change another process made — never how fast an event drains.
     /// </summary>
     public static TimeSpan PollInterval { get; } = TimeSpan.FromSeconds(10);
 
@@ -140,6 +139,8 @@ public sealed partial class WatchHostedService : BackgroundService
 
     private void OnWatchUnregistered(string projectId, string path)
     {
+        // The key leaves _registered here, so the stale-registration sweep never sees it: stop its watcher now.
+        _eventSource.Stop(projectId, path);
         lock (_activeGate)
         {
             _active.Remove(new WatchKey(projectId, path));
@@ -172,7 +173,7 @@ public sealed partial class WatchHostedService : BackgroundService
 
             try
             {
-                await Task.Delay(PollInterval, _timeProvider, stoppingToken);
+                await WaitForNextPassAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -181,6 +182,24 @@ public sealed partial class WatchHostedService : BackgroundService
         }
 
         await pipelineLoop;
+    }
+
+    /// <summary>Waits for <see cref="PollInterval" /> on the time provider or for a wake request, whichever comes first.</summary>
+    private async Task WaitForNextPassAsync(CancellationToken stoppingToken)
+    {
+        using var wake = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        var delay = Task.Delay(PollInterval, _timeProvider, wake.Token);
+        var requested = _reconcileSignal.WaitAsync(wake.Token).AsTask();
+        await Task.WhenAny(delay, requested);
+        await wake.CancelAsync();
+        try
+        {
+            await Task.WhenAll(delay, requested);
+        }
+        catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+        {
+            // The loser of the race was cancelled above.
+        }
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

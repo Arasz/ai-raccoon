@@ -383,6 +383,7 @@ internal static partial class AppRegistrations
                 return new WatchEventSource(sp.GetRequiredService<WatchPipeline>().Enqueue,
                     error => Log.WatchEventSourceError(logger, error.ProjectId, error.WatchPath, error.Message), logger);
             });
+            services.AddSingleton<WatchReconcileSignal>();
             services.AddHostedService<WatchHostedService>();
         }
 

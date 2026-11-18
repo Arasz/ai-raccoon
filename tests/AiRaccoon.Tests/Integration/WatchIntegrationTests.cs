@@ -805,10 +805,11 @@ public sealed class WatchIntegrationTests
             CatchUp = catchUp = new WatchCatchUp(Pipeline, WatchStore, ScanGuard,
                 new SqliteWatchScanLease(_factory, Time), Time, new FakeLogger<WatchCatchUp>(_logs),
                 TestIgnoreRules.Create(), new IndexableFileWalk());
+            var reconcileSignal = new WatchReconcileSignal();
             Hosted = new WatchHostedService(Memory, WatchStore, Pipeline, EventSource, CatchUp, Time,
-                TestTelemetry.None, new FakeLogger<WatchHostedService>(_logs));
+                TestTelemetry.None, new FakeLogger<WatchHostedService>(_logs), reconcileSignal);
             Service = new WatchService(WatchStore, Memory, Pipeline, Time, new WatchOverlapResolver(),
-                new NeverMigratedGate());
+                new NeverMigratedGate(), reconcileSignal);
         }
 
         public FakeTimeProvider Time { get; }
