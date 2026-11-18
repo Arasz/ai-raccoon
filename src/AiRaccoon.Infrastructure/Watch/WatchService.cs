@@ -19,7 +19,8 @@ public sealed class WatchService(
     WatchPipeline pipeline,
     TimeProvider timeProvider,
     IWatchOverlapResolver overlapResolver,
-    IProjectIdsMigrationGate migrationGate) : IWatchService
+    IProjectIdsMigrationGate migrationGate,
+    WatchReconcileSignal reconcileSignal) : IWatchService
 {
     public async Task<WatchAddOutcome> AddAsync(string projectId, string path, CancellationToken cancellationToken = default)
     {
@@ -57,6 +58,7 @@ public sealed class WatchService(
                 // Exact literal-path re-add: idempotent no-op — still ensure the pipeline's
                 // runtime state exists (RegisterWatch is itself idempotent).
                 pipeline.RegisterWatch(projectId, normalized);
+                reconcileSignal.Request();
                 return new WatchAddOutcome([], decision.CoveringPath);
 
             case WatchOverlapOutcome.Rejected:
@@ -73,6 +75,7 @@ public sealed class WatchService(
                 }
 
                 pipeline.RegisterWatch(projectId, normalized);
+                reconcileSignal.Request();
                 return new WatchAddOutcome(prunedPaths, null);
         }
     }
@@ -83,6 +86,7 @@ public sealed class WatchService(
         var normalized = IngestPath.Normalize(path);
         var removed = await store.RemoveWatchAsync(projectId, normalized, cancellationToken);
         pipeline.UnregisterWatch(projectId, normalized);
+        reconcileSignal.Request();
         return removed;
     }
 

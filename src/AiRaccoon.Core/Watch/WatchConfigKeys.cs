@@ -10,6 +10,8 @@ namespace AiRaccoon.Core.Watch;
 public static class WatchConfigKeys
 {
     public const string EnabledGlobal = "watch.enabled.global";
+
+    private const string EnabledPrefix = "watch.enabled.";
     public const string ConcurrencyGlobal = "watch.concurrency.global";
 
     /// <summary>Machine-global only: the buffer is a per-watcher OS allocation, not a per-project choice. See <see cref="WatchBuffer" />.</summary>
@@ -20,4 +22,7 @@ public static class WatchConfigKeys
 
     /// <summary>The per-project key; the id segment folds at construction (air-merge P4 — see <see cref="AiRaccoon.Core.Ingestion.IngestScopeKeys" />).</summary>
     public static string ConcurrencyProject(string projectId) => $"watch.concurrency.{ProjectIdAliasMap.Default.Fold(projectId)}";
+
+    /// <summary>Whether <paramref name="key" /> is the global or a per-project watch-enabled key.</summary>
+    public static bool IsEnabledKey(string key) => key.StartsWith(EnabledPrefix, StringComparison.Ordinal) && key.Length > EnabledPrefix.Length;
 }

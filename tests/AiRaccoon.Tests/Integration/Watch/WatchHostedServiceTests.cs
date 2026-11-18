@@ -43,8 +43,117 @@ public sealed class WatchHostedServiceTests
         var catchUp = new WatchCatchUp(stack.Pipeline, stack.Store, stack.ScanGuard, stack.ScanLease, stack.Time,
             NullLogger<WatchCatchUp>.Instance, stack.IgnoreRules, new IndexableFileWalk());
         var hosted = new WatchHostedService(stack.Memory, stack.Store, stack.Pipeline, source, catchUp, stack.Time,
-            telemetry ?? TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
+            telemetry ?? TestTelemetry.None, NullLogger<WatchHostedService>.Instance, stack.Signal);
         return (stack, source, catchUp, hosted);
+    }
+
+    /// <summary>
+    ///     ADR-0152: the loop sleeps PollInterval between passes, so an in-process add must wake it.
+    ///     The fake clock is never advanced, so only the wake can run the second pass.
+    /// </summary>
+    [RetryFact]
+    public async Task AddAsync_WhileTheLoopSleeps_StartsTheWatcherAndTheInitialScanWithoutTheClockMoving()
+    {
+        using var dir = TempDir.New("hosted-wake-add");
+        using var probe = new BackgroundTelemetryProbe(WatchHostedService.OperationName);
+        var (stack, source, catchUp, hosted) = NewStack(probe.Telemetry);
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await hosted.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            await Eventually(() => probe.Passes.Count >= 1);
+
+            await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+
+            await Eventually(() => source.IsWatching(Project, dir.Path) && catchUp.LastScan is not null);
+        }
+        finally
+        {
+            await hosted.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [RetryFact]
+    public async Task RemoveAsync_WhileTheLoopSleeps_StopsTheWatcherWithoutTheClockMoving()
+    {
+        using var dir = TempDir.New("hosted-wake-remove");
+        using var probe = new BackgroundTelemetryProbe(WatchHostedService.OperationName);
+        var (stack, source, _, hosted) = NewStack(probe.Telemetry);
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await hosted.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            await Eventually(() => probe.Passes.Count >= 1);
+            await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+            await Eventually(() => source.IsWatching(Project, dir.Path));
+
+            await stack.Service.RemoveAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+
+            await Eventually(() => !source.IsWatching(Project, dir.Path));
+        }
+        finally
+        {
+            await hosted.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [RetryFact]
+    public async Task Signal_WhileTheLoopSleeps_RunsAnotherPassWithoutTheClockMoving()
+    {
+        using var dir = TempDir.New("hosted-wake-signal");
+        using var probe = new BackgroundTelemetryProbe(WatchHostedService.OperationName);
+        var (stack, source, _, hosted) = NewStack(probe.Telemetry);
+        stack.Enable();
+        await hosted.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            await Eventually(() => probe.Passes.Count >= 1);
+            await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+            stack.Signal.Request();
+
+            await Eventually(() => source.IsWatching(Project, dir.Path));
+        }
+        finally
+        {
+            await hosted.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [RetryFact]
+    public async Task Signal_AfterTheProjectIsDisabled_StopsTheActiveWatcherWithoutTheClockMoving()
+    {
+        using var dir = TempDir.New("hosted-wake-disable");
+        using var probe = new BackgroundTelemetryProbe(WatchHostedService.OperationName);
+        var (stack, source, _, hosted) = NewStack(probe.Telemetry);
+        stack.Enable();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        await hosted.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            await Eventually(() => source.IsWatching(Project, dir.Path));
+
+            stack.Memory.Settings[WatchConfigKeys.EnabledProject(Project)] = "false";
+            stack.Signal.Request();
+
+            await Eventually(() => !source.IsWatching(Project, dir.Path));
+        }
+        finally
+        {
+            await hosted.StopAsync(CancellationToken.None);
+        }
+    }
+
+    private static async Task Eventually(Func<bool> condition)
+    {
+        var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 10;
+        while (!condition())
+        {
+            Stopwatch.GetTimestamp().ShouldBeLessThan(deadline, "the reconcile pass did not run without the clock advancing");
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
     }
 
     [RetryFact]

@@ -200,18 +200,19 @@ public sealed class FileWatcherFeatureContext : MemoryFeatureContext
         WatchCatchUp? catchUp = null;
         Pipeline = new WatchPipeline(new WatchScheduler(),
             new WatchDigestExecutor(Store, WatchStore, TimeProvider,
-                new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
+                TestIgnoreRules.Create(), new Lazy<IWatchScanInitiator>(() => catchUp!), EmbedDrainPump,
                 new SqliteProjectIdsMigrationGate(Factory), TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher(), TestData.SharedScope),
             new WatchRetryPolicy(), scanGuard, Store, TimeProvider,
             NullLogger<WatchPipeline>.Instance);
         EventSource = new WatchEventSource(Pipeline.Enqueue, Errors.Add, NullLogger<WatchEventSource>.Instance);
         CatchUp = catchUp = new WatchCatchUp(Pipeline, WatchStore, scanGuard,
             new SqliteWatchScanLease(Factory, TimeProvider), TimeProvider, NullLogger<WatchCatchUp>.Instance,
-            new IgnoreRulesProvider(), new IndexableFileWalk());
+            TestIgnoreRules.Create(), new IndexableFileWalk());
+        var reconcileSignal = new WatchReconcileSignal();
         Hosted = new WatchHostedService(Store, WatchStore, Pipeline, EventSource, CatchUp, TimeProvider,
-            TestTelemetry.None, NullLogger<WatchHostedService>.Instance);
+            TestTelemetry.None, NullLogger<WatchHostedService>.Instance, reconcileSignal);
         Service = new WatchService(WatchStore, Store, Pipeline, TimeProvider, new WatchOverlapResolver(),
-            new SqliteProjectIdsMigrationGate(Factory));
+            new SqliteProjectIdsMigrationGate(Factory), reconcileSignal);
         Tools = new WatchTools(Service, new ToolGate(new MemoryAccessGuard(Store), new FakePromotionQueue(), new NeverMigratingStore(), new AllowingRegistrationGuard(), TestData.ScopeCheck));
     }
 }

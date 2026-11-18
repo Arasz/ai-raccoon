@@ -34,8 +34,10 @@ internal sealed class WatchTestStack
             new WatchScheduler(), Executor, RetryPolicy, ScanGuard,
             Memory, Time, NullLogger<WatchPipeline>.Instance);
         Service = new WatchService(Store, Memory, Pipeline, Time, OverlapResolver,
-            migrationGate ?? new NeverMigratedGate());
+            migrationGate ?? new NeverMigratedGate(), Signal);
     }
+
+    public WatchReconcileSignal Signal { get; } = new();
 
     public FakeTimeProvider Time { get; } = new(FixedNow);
 

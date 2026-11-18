@@ -273,7 +273,7 @@ public sealed class SharedProjectTests : IDisposable
         await watches.AddWatchAsync("shared", _root, 0, 0, ct);
         await File.WriteAllTextAsync(Path.Combine(_root, "ai-raccoon.ignore"), "private.md", ct);
         var executor = new WatchDigestExecutor(_store, watches, new FakeTimeProvider(),
-            new IgnoreRulesProvider(), new Lazy<IWatchScanInitiator>(() => Substitute.For<IWatchScanInitiator>()),
+            TestIgnoreRules.Create(), new Lazy<IWatchScanInitiator>(() => Substitute.For<IWatchScanInitiator>()),
             TestData.NewEmbedDrainPump(), new SqliteProjectIdsMigrationGate(_factory),
             TestData.RealFileTypeMatcher(), new CodeFileTypeMatcher(), TestData.SharedScope);
 
