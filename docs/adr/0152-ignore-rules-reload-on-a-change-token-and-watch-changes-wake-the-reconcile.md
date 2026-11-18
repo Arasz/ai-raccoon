@@ -2,7 +2,7 @@
 
 Date: 2026-11-18
 
-Status: Proposed for 2.10.1.
+Status: Accepted for 2.10.1.
 
 Amends: [0151](0151-the-watcher-polls-at-10s-caches-ignore-rules-and-logs-a-skip-at-debug.md) decisions 1 and 2.
 

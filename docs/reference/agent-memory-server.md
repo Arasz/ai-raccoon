@@ -402,11 +402,11 @@ config channel (see [Command-line options](#command-line-options)).
   is removed individually, e.g. `settings watch remove CLAUDE.md`). `add_watch` registers a
   file or directory and returns immediately (the initial scan runs in the background —
   status reports `scanning`); a registration becomes live — watcher started, initial scan
-  queued — at the server's next registration poll, which runs about every 10 seconds, so a
-  registration written just after a pass has read the list waits for that pass plus the next
-  interval (10 s is the delay between passes, not a deadline); a registration another process
-  made is seen by the same poll; an exact re-add of an already-watched path is a no-op
-  (`absorbedBy` in the result names it). **No overlapping watches**
+  queued — when the watch loop next reconciles. A change this process made wakes that loop at
+  once (an `add_watch`, a `remove_watch`, or a server-side write of a watch-enabled setting); a
+  registration another process made is seen by the registration poll, which runs about every 10
+  seconds (10 s is the delay between passes, not a deadline); an exact re-add of an
+  already-watched path is a no-op (`absorbedBy` in the result names it). **No overlapping watches**
   (docs/work/2026-08-21-code-search-implementation-plan.md §2.2/§5.5): a path already covered
   by an existing watch is refused (`watch-overlap:`, naming the covering watch — nothing is
   written); registering a broader watch instead prunes every watch it contains (registration

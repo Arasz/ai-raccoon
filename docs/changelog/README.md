@@ -11,6 +11,7 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [2.10.1 — a watch change in this server applies at once, and the ignore rules never keep a stale parse](2.10.1-watch-change-wakes-the-reconcile.md)
 - [2.10.0 — the watcher polls every 10 s, keeps its ignore rules, and a skip stops logging as a write](2.10.0-watcher-churn-poll-rules-cache.md)
 - [2.9.0 — a row keeps its declared kind, and the bank guards it](2.9.0-declared-kind-survives-copies.md)
 - [2.8.0 — AiRaccoon runs on .NET 11](2.8.0-dotnet-11.md)
