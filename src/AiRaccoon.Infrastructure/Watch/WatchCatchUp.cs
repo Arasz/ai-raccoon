@@ -87,7 +87,7 @@ public sealed partial class WatchCatchUp(
     }
 
     private static bool IsIgnoredFile(IgnoreRules rules, string root, string file) =>
-        !string.Equals(Path.GetFileName(file), IgnoreRulesProvider.FileName, StringComparison.Ordinal) &&
+        !IgnoreRulesProvider.IsIgnoreFileName(Path.GetFileName(file)) &&
         rules.IsIgnored(Path.GetRelativePath(root, file), false);
 
     /// <summary>

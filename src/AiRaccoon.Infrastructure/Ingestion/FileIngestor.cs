@@ -232,7 +232,7 @@ public sealed class FileIngestor(
     /// </summary>
     private static async Task<FileIngestResult> SkipUnroutedAsync(string path, CancellationToken cancellationToken)
     {
-        if (string.Equals(Path.GetFileName(path), IgnoreRulesProvider.FileName, StringComparison.Ordinal))
+        if (IgnoreRulesProvider.IsIgnoreFileName(Path.GetFileName(path)))
         {
             return new FileIngestResult(0, true);
         }
@@ -509,7 +509,7 @@ public sealed class FileIngestor(
             return false;
         }
 
-        if (string.Equals(Path.GetFileName(path), IgnoreRulesProvider.FileName, StringComparison.Ordinal) &&
+        if (IgnoreRulesProvider.IsIgnoreFileName(Path.GetFileName(path)) &&
             IngestPath.PathComparer.Equals(Path.GetDirectoryName(path), Path.TrimEndingDirectorySeparator(root)))
         {
             return false;

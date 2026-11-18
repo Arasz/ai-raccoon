@@ -489,6 +489,52 @@ public sealed class WatchDigestExecutorTests
         stack.ScanInitiator.Calls.ShouldContain((Project, dir.Path));
     }
 
+    /// <summary>
+    ///     ADR-0151: the event is positive evidence the rules may have moved, so the cache is dropped
+    ///     before the rescan reads them — a stamp comparison alone cannot see every edit (a coarse
+    ///     filesystem, or a rewrite that keeps the write time and the length).
+    /// </summary>
+    [Fact]
+    public async Task Digest_IgnoreFileEdited_InvalidatesTheCachedRules()
+    {
+        using var dir = TempDir.New("digest-ignore-edit-invalidate");
+        var ignoreFile = dir.File(IgnoreRulesProvider.FileName);
+        await File.WriteAllTextAsync(ignoreFile, "bin/\n", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        // The order is the contract: the scan this event queues reads the rules, so the cache must be
+        // dropped before the request, asserted at the moment the request arrives.
+        var invalidatedBeforeScan = false;
+        stack.ScanInitiator.OnEnqueue = (_, root) => invalidatedBeforeScan = stack.IgnoreRules.Invalidated.Contains(root);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, ignoreFile, WatchEventKind.Changed, null,
+            TestContext.Current.CancellationToken);
+
+        stack.IgnoreRules.Invalidated.ShouldContain(dir.Path);
+        stack.ScanInitiator.Calls.ShouldContain((Project, dir.Path));
+        invalidatedBeforeScan.ShouldBeTrue("the cached rules must be dropped before the rescan is queued");
+    }
+
+    /// <summary>A rename can move the ignore file away: the rules on disk changed, so the cache drops.</summary>
+    [Fact]
+    public async Task Digest_IgnoreFileRenamedAway_InvalidatesTheCachedRules()
+    {
+        using var dir = TempDir.New("digest-ignore-rename-away");
+        var ignoreFile = dir.File(IgnoreRulesProvider.FileName);
+        var renamed = dir.File("ai-raccoon.ignore.bak");
+        await File.WriteAllTextAsync(ignoreFile, "bin/\n", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, renamed, WatchEventKind.Renamed, ignoreFile,
+            TestContext.Current.CancellationToken);
+
+        stack.IgnoreRules.Invalidated.ShouldContain(dir.Path);
+        stack.ScanInitiator.Calls.ShouldContain((Project, dir.Path),
+            "a rename away removes the rules, exactly as a delete does, so it earns the same rescan");
+    }
+
     [Fact]
     public async Task Digest_IgnoreFileDeleted_TriggersAFullRescan()
     {

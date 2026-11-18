@@ -59,10 +59,27 @@ public sealed class WatchDigestExecutor(
         var normalizedWatch = IngestPath.Normalize(watchPath);
         var normalized = IngestPath.Normalize(filePath);
         var isIgnoreFile = IsIgnoreFileItself(normalizedWatch, normalized);
+        // A rename both ways counts: the destination may be the ignore file, or the source may be one
+        // moving away — either way the rules the watch holds are no longer the rules on disk, and the
+        // rescan this event triggers must not run on the parse from before it (ADR-0151).
+        var ignoreFileMovedAway = oldPath is not null && !isIgnoreFile &&
+                                  IsIgnoreFileItself(normalizedWatch, IngestPath.Normalize(oldPath));
+        if (isIgnoreFile || ignoreFileMovedAway)
+        {
+            ignoreRulesProvider.Invalidate(normalizedWatch);
+        }
 
         if (kind == WatchEventKind.Renamed && oldPath is not null)
         {
             await DeletePathAsync(projectId, normalizedWatch, IngestPath.Normalize(oldPath), cancellationToken);
+        }
+
+        if (ignoreFileMovedAway)
+        {
+            // A rename away removes the rules exactly as a delete does, so it earns the same full
+            // rescan: files the old rules excluded are now eligible (ADR-0151). Queued after the old
+            // path's chunks are gone, so the scan cannot read what this event is deleting.
+            scanInitiator.Value.EnqueueInitialScan(projectId, normalizedWatch);
         }
 
         if (Directory.Exists(normalized))
@@ -169,7 +186,7 @@ public sealed class WatchDigestExecutor(
     }
 
     private static bool IsIgnoreFileItself(string normalizedWatch, string normalizedPath) =>
-        string.Equals(Path.GetFileName(normalizedPath), IgnoreRulesProvider.FileName, StringComparison.Ordinal) &&
+        IgnoreRulesProvider.IsIgnoreFileName(Path.GetFileName(normalizedPath)) &&
         IngestPath.PathComparer.Equals(Path.GetDirectoryName(normalizedPath), normalizedWatch);
 
     /// <summary>
