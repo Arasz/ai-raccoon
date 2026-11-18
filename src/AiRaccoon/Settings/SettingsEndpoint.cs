@@ -3,7 +3,9 @@ using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
 using AiRaccoon.Core.Projects;
 using AiRaccoon.Hosting.Node;
+using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
+using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Projects;
 
 namespace AiRaccoon.Settings;
@@ -48,7 +50,7 @@ internal static partial class SettingsEndpoint
                 });
 
             webApplication.MapPut(SettingsProtocol.Path,
-                async (SettingWrite write, ISettingsStore store, IProjectRegistrationGuard registration, CancellationToken ctx) =>
+                async (SettingWrite write, ISettingsStore store, IProjectRegistrationGuard registration, WatchReconcileSignal reconcileSignal, CancellationToken ctx) =>
                 {
                     if (string.IsNullOrWhiteSpace(write.Key))
                     {
@@ -84,13 +86,14 @@ internal static partial class SettingsEndpoint
                     }
 
                     await store.SetSettingAsync(key, write.Value, ctx);
+                    WakeWatchLoopIfEnabledKey(reconcileSignal, key);
                     Log.KeyWritten(logger, key);
                     return Results.NoContent();
                 });
 
             // Absent is the same as removed, matching every settings handler that deletes a row.
             webApplication.MapDelete(SettingsProtocol.Path,
-                async (string? key, ISettingsStore store, IModelMigrationStore migrations, CancellationToken ctx) =>
+                async (string? key, ISettingsStore store, IModelMigrationStore migrations, WatchReconcileSignal reconcileSignal, CancellationToken ctx) =>
                 {
                     if (string.IsNullOrEmpty(key))
                     {
@@ -110,6 +113,7 @@ internal static partial class SettingsEndpoint
                         }
 
                         await store.DeleteSettingAsync(resolvedKey, ctx);
+                        WakeWatchLoopIfEnabledKey(reconcileSignal, resolvedKey);
                         Log.KeyDeleted(logger, resolvedKey);
                         return Results.NoContent();
                     }
@@ -176,6 +180,15 @@ internal static partial class SettingsEndpoint
                         return Results.BadRequest(ex.Message);
                     }
                 });
+        }
+    }
+
+    /// <summary>Wakes the watch reconcile loop after a write of a watch-enabled key, so the toggle applies now.</summary>
+    private static void WakeWatchLoopIfEnabledKey(WatchReconcileSignal reconcileSignal, string key)
+    {
+        if (WatchConfigKeys.IsEnabledKey(key))
+        {
+            reconcileSignal.Request();
         }
     }
 

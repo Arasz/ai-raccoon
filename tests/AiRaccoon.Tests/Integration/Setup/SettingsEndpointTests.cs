@@ -9,6 +9,7 @@ using AiRaccoon.Infrastructure.Chunking;
 using AiRaccoon.Infrastructure.Embedding.Manifest;
 using AiRaccoon.Infrastructure.Options;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Settings;
 using AiRaccoon.Setup;
 using AiRaccoon.Tests.Unit.Projects;
@@ -58,6 +59,61 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         await _app.DisposeAsync();
         TestData.DeleteTempRoot(_dataRoot);
         ProjectIdAliasMap.ResetDefault();
+    }
+
+    /// <summary>
+    ///     ADR-0152: the CLI's `watch enable|disable` is a settings write in this process, so it must wake
+    ///     the reconcile loop instead of waiting out its poll interval.
+    /// </summary>
+    [RetryTheory]
+    [InlineData("watch.enabled.global", 1)]
+    [InlineData("watch.concurrency.global", 0)]
+    [InlineData("noise.enabled.global", 0)]
+    public async Task Put_OfAWatchEnabledKey_WakesTheWatchReconcileLoop(string key, int expectedWakes)
+    {
+        var signal = _app.Services.GetRequiredService<WatchReconcileSignal>();
+        var before = signal.RequestCount;
+
+        var response = await _client.PutAsJsonAsync("/settings", new SettingWrite(key, "false"), TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (signal.RequestCount - before).ShouldBe(expectedWakes);
+    }
+
+    [RetryFact]
+    public async Task Delete_OfAWatchEnabledKey_WakesTheWatchReconcileLoop()
+    {
+        var signal = _app.Services.GetRequiredService<WatchReconcileSignal>();
+        var before = signal.RequestCount;
+
+        var response = await _client.DeleteAsync("/settings?key=watch.enabled.global", TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (signal.RequestCount - before).ShouldBe(1);
+    }
+
+    [RetryFact]
+    public async Task Put_OfAWatchEnabledKeyForAnUnregisteredProject_IsRefusedAndDoesNotWakeTheLoop()
+    {
+        var signal = _app.Services.GetRequiredService<WatchReconcileSignal>();
+        var before = signal.RequestCount;
+
+        var response = await _client.PutAsJsonAsync("/settings", new SettingWrite($"watch.enabled.{Unknown}", "true"), TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        signal.RequestCount.ShouldBe(before);
+    }
+
+    [RetryFact]
+    public async Task Put_OfAWatchEnabledKeyWithNoProject_DoesNotWakeTheLoop()
+    {
+        var signal = _app.Services.GetRequiredService<WatchReconcileSignal>();
+        var before = signal.RequestCount;
+
+        var response = await _client.PutAsJsonAsync("/settings", new SettingWrite("watch.enabled.", "true"), TestContext.Current.CancellationToken);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        signal.RequestCount.ShouldBe(before);
     }
 
     /// <summary>

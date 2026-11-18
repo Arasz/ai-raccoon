@@ -122,6 +122,30 @@ public sealed class WatchHostedServiceTests
         }
     }
 
+    [RetryFact]
+    public async Task Signal_AfterTheProjectIsDisabled_StopsTheActiveWatcherWithoutTheClockMoving()
+    {
+        using var dir = TempDir.New("hosted-wake-disable");
+        using var probe = new BackgroundTelemetryProbe(WatchHostedService.OperationName);
+        var (stack, source, _, hosted) = NewStack(probe.Telemetry);
+        stack.Enable();
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        await hosted.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            await Eventually(() => source.IsWatching(Project, dir.Path));
+
+            stack.Memory.Settings[WatchConfigKeys.EnabledProject(Project)] = "false";
+            stack.Signal.Request();
+
+            await Eventually(() => !source.IsWatching(Project, dir.Path));
+        }
+        finally
+        {
+            await hosted.StopAsync(CancellationToken.None);
+        }
+    }
+
     private static async Task Eventually(Func<bool> condition)
     {
         var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 10;
