@@ -38,7 +38,8 @@ public sealed class SkippedFileNotFingerprintedTests : IDisposable
         var first = await store.ReplaceIfFileChangedAsync("acme", file, "same-hash", TestContext.Current.CancellationToken);
 
         first.Skipped.ShouldBe(SkipReason.UnsupportedType);
-        (await StoredHashAsync(provider, file)).ShouldNotBe("same-hash", "a skip must never hash-skip the unchanged file");
+        (await StoredHashAsync(provider, file)).ShouldBe(MemorySql.SkippedFileHashPrefix + "same-hash",
+            "a skip keeps a skip-marked stamp, never the real hash that would hash-skip the unchanged file");
         var second = await store.ReplaceIfFileChangedAsync("acme", file, "same-hash", TestContext.Current.CancellationToken);
         second.Replaced.ShouldBeTrue("the skip marker matches no real hash, so a digest of the unchanged file runs again");
         second.Skipped.ShouldBe(SkipReason.UnsupportedType);
@@ -62,7 +63,8 @@ public sealed class SkippedFileNotFingerprintedTests : IDisposable
         var turned = await store.ReplaceIfFileChangedAsync("acme", file, "hash-b", TestContext.Current.CancellationToken);
 
         turned.Skipped.ShouldBe(SkipReason.Binary);
-        (await StoredHashAsync(provider, file)).ShouldNotBe("hash-a", "the old hash must not outlive the content it described");
+        (await StoredHashAsync(provider, file)).ShouldBe(MemorySql.SkippedFileHashPrefix + "hash-b",
+            "the old hash must not outlive the content it described");
         (await CountChunksAsync(provider, file)).ShouldBe(0);
 
         await File.WriteAllTextAsync(file, original, TestContext.Current.CancellationToken);
@@ -90,6 +92,7 @@ public sealed class SkippedFileNotFingerprintedTests : IDisposable
         var watchStore = new WatchStore(provider.GetRequiredService<ISqliteConnectionFactory>(),
             provider.GetRequiredService<ISharedProjectScope>());
         var stamps = await watchStore.ListFileStampsAsync("acme", TestContext.Current.CancellationToken);
+        stamps[IngestPath.Normalize(file)].Skipped.ShouldBeTrue("the stamp query must report the skip-marked row");
         WatchCatchUp.IsDue(file, stamps).ShouldBeFalse("an unchanged skipped file must not be digested on every catch-up pass");
 
         await File.WriteAllTextAsync(file, "binary\0blob grown", TestContext.Current.CancellationToken);
