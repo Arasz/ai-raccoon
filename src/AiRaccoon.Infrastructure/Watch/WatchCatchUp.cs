@@ -181,7 +181,7 @@ public sealed partial class WatchCatchUp(
             pipeline.ClearSkips(projectId, path);
         }
 
-        var retrySkipped = changedOnly && IsFirstChangedScanSinceStart(projectId, path);
+        var retrySkipped = changedOnly && !HasRetriedSkips(projectId, path);
         var nextRenew = timeProvider.GetUtcNow() + SqliteWatchScanLease.HeartbeatInterval;
         foreach (var file in EnumerateFiles(walk, path, stamps, ignoreRules, retrySkipped))
         {
@@ -204,6 +204,11 @@ public sealed partial class WatchCatchUp(
         }
 
         await ReconcileAsync(projectId, path, ignoreRules, cancellationToken);
+        if (retrySkipped)
+        {
+            MarkSkipsRetried(projectId, path);
+        }
+
         return true;
     }
 
@@ -232,14 +237,22 @@ public sealed partial class WatchCatchUp(
     }
 
     /// <summary>
-    ///     True once per watch per process: that scan also retries skip-marked files, so the
-    ///     in-memory skip list is rebuilt after a start (ADR-0153).
+    ///     Whether a completed changed-files pass already retried this watch's skip-marked files in this
+    ///     process; until one has, each pass retries them, so the skip list is rebuilt after a start (ADR-0153).
     /// </summary>
-    private bool IsFirstChangedScanSinceStart(string projectId, string path)
+    private bool HasRetriedSkips(string projectId, string path)
     {
         lock (_skipRetryGate)
         {
-            return _skipsRetried.Add(new WatchKey(projectId, path));
+            return _skipsRetried.Contains(new WatchKey(projectId, path));
+        }
+    }
+
+    private void MarkSkipsRetried(string projectId, string path)
+    {
+        lock (_skipRetryGate)
+        {
+            _skipsRetried.Add(new WatchKey(projectId, path));
         }
     }
 
