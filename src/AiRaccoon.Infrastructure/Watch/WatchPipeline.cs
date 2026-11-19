@@ -320,13 +320,15 @@ public sealed partial class WatchPipeline(
         }
         catch (Exception ex)
         {
+            Log.DigestFailed(logger, evt.Path, ex);
             var state = retryPolicy.RecordFailure(evt.ProjectId, job.WatchPath, timeProvider.GetUtcNow());
             lock (_gate)
             {
                 // Same rule on the failure path: a removed watch stays removed.
                 if (_runtime.TryGetValue(new WatchKey(evt.ProjectId, job.WatchPath), out var current))
                 {
-                    _runtime[new WatchKey(evt.ProjectId, job.WatchPath)] = current with { State = state, LastError = ex.Message };
+                    _runtime[new WatchKey(evt.ProjectId, job.WatchPath)] =
+                        current with { State = state, LastError = $"{evt.Path}: {ex.Message}" };
                 }
             }
         }
@@ -421,5 +423,8 @@ public sealed partial class WatchPipeline(
 
         [LoggerMessage(EventId = 303, Level = LogLevel.Debug, Message = "Watch skipped {Path}: {Reason}")]
         public static partial void FileSkipped(ILogger logger, string path, string reason);
+
+        [LoggerMessage(EventId = 304, Level = LogLevel.Warning, Message = "Watch digest of {Path} failed")]
+        public static partial void DigestFailed(ILogger logger, string path, Exception exception);
     }
 }

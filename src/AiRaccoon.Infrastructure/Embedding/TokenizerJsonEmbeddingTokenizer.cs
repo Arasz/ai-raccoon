@@ -34,11 +34,39 @@ public sealed partial class TokenizerJsonEmbeddingTokenizer : IEmbeddingTokenize
     /// <summary>Content tokens only — never the post-processor's prepend/append specials.</summary>
     public int CountTokens(string text) => EncodeToIds(text, false).Count;
 
+    /// <summary>
+    ///     Replaces each unpaired surrogate with U+FFFD, as UTF-8 encoding does: <c>string.Normalize</c>
+    ///     throws on one, and a decoded JSON escape such as <c>\uD83D</c> produces one (ADR-0154).
+    /// </summary>
+    internal static string ReplaceLoneSurrogates(string text)
+    {
+        var start = text.AsSpan().IndexOfAnyInRange('\uD800', '\uDFFF');
+        if (start < 0)
+        {
+            return text;
+        }
+
+        var chars = text.ToCharArray();
+        for (var i = start; i < chars.Length; i++)
+        {
+            if (char.IsHighSurrogate(chars[i]) && i + 1 < chars.Length && char.IsLowSurrogate(chars[i + 1]))
+            {
+                i++;
+            }
+            else if (char.IsSurrogate(chars[i]))
+            {
+                chars[i] = '�';
+            }
+        }
+
+        return new string(chars);
+    }
+
     public IReadOnlyList<int> EncodeToIds(string text, bool addSpecialTokens)
     {
         ArgumentNullException.ThrowIfNull(text);
         var contentIds = new List<int>();
-        foreach (var span in _addedTokens.Split(text))
+        foreach (var span in _addedTokens.Split(ReplaceLoneSurrogates(text)))
         {
             if (span.Id is { } id)
             {

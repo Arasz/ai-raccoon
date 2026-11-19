@@ -152,6 +152,16 @@ public sealed class WatchDigestExecutor(
             return null;
         }
 
+        if (isIgnoreFile)
+        {
+            // ADR-0154: a control file, not content — it keeps its real hash and never reaches the
+            // replace, so only a changed file queues the rescan.
+            await TouchAsync(projectId, normalizedWatch, normalized, hash, cancellationToken);
+            await watchStore.SetFileSizeAsync(projectId, normalized, size, cancellationToken);
+            scanInitiator.Value.EnqueueInitialScan(projectId, normalizedWatch);
+            return null;
+        }
+
         // Delete + re-ingest + fingerprint are one transaction in the store: the pre-check above is
         // only a cheap filter, and a concurrent process either loses the race and skips or, on a
         // crash mid-digest, rolls back — the file is never left chunkless behind a matching hash.
@@ -162,11 +172,6 @@ public sealed class WatchDigestExecutor(
         embedDrainPump.SignalWritten(replaceResult.Corpus);
 
         await watchStore.UpdateLastChangeAsync(projectId, normalizedWatch, Now(), cancellationToken);
-
-        if (isIgnoreFile)
-        {
-            scanInitiator.Value.EnqueueInitialScan(projectId, normalizedWatch);
-        }
 
         return replaceResult.Skipped;
     }

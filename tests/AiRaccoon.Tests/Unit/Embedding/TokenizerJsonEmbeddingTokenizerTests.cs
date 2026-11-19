@@ -27,6 +27,32 @@ public class TokenizerJsonEmbeddingTokenizerTests
         tokenizer.EncodeToIds("ab c", addSpecialTokens: false).ShouldBe([6, 7]);
     }
 
+    /// <summary>
+    ///     ADR-0154: a JSON escape such as <c>\uD83D</c> decodes to a lone surrogate, which
+    ///     <c>string.Normalize</c> rejects. The tokenizer reads it as U+FFFD, as UTF-8 storage does.
+    /// </summary>
+    /// <remarks>The bundled engine's NFC normalizer; the tiny byte-level fixture has no vocabulary for U+FFFD's bytes.</remarks>
+    [Fact]
+    public void LoneSurrogate_UnderNfc_IsTokenizedAsTheReplacementCharacter()
+    {
+        var tokenizer = TokenizerJsonEmbeddingTokenizer.Create(Path.Combine(BundledModel.ResolveDirectory(), "tokenizer.json"));
+
+        tokenizer.EncodeToIds("a\uD83Db", addSpecialTokens: false)
+            .ShouldBe(tokenizer.EncodeToIds("a�b", addSpecialTokens: false));
+    }
+
+
+    // A [Fact], not a theory: xUnit serializes theory arguments as UTF-8, which would replace the
+    // lone surrogates before the test runs.
+    [Fact]
+    public void ReplaceLoneSurrogates_KeepsPairs_AndReplacesOnlyUnpairedHalves()
+    {
+        TokenizerJsonEmbeddingTokenizer.ReplaceLoneSurrogates("a😀b").ShouldBe("a😀b");
+        TokenizerJsonEmbeddingTokenizer.ReplaceLoneSurrogates("\uDE00\uD83D").ShouldBe("��");
+        TokenizerJsonEmbeddingTokenizer.ReplaceLoneSurrogates("a\uD83D").ShouldBe("a�");
+        TokenizerJsonEmbeddingTokenizer.ReplaceLoneSurrogates("plain").ShouldBe("plain");
+    }
+
     [Fact]
     public void ByteLevelBpe_LeavesAnUnmergedPairAsSeparateSymbols()
     {

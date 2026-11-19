@@ -276,6 +276,23 @@ public sealed class WatchPipelineTests
         status.LastSync.ShouldBe(WatchTestStack.FixedNow);
     }
 
+    /// <summary>ADR-0154: the status names the file whose digest failed, so it can be found.</summary>
+    [Fact]
+    public async Task Status_DigestFailure_LastErrorNamesTheFile()
+    {
+        using var dir = TempDir.New("pipeline-status-error-path");
+        var file = dir.File("a.md");
+        await File.WriteAllTextAsync(file, "v1", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.Pipeline.RegisterWatch(Project, dir.Path);
+        stack.Memory.IngestError = new IOException("disk boom");
+        stack.Pipeline.Enqueue(new WatchEvent(Project, file, WatchEventKind.Created));
+
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Pipeline.GetStatuses(Project).Single().LastError.ShouldBe($"{file}: disk boom");
+    }
+
     [Fact]
     public async Task Status_DigestFailure_SetsRetryingWithError_NextSuccessClearsIt()
     {
