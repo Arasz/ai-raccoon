@@ -9,7 +9,7 @@ or `3` exists anywhere in the solution today.
 
 ## Status: measured, zero duplicates
 
-Measured directly against `src/` on this branch: **220** `[LoggerMessage]`-attributed
+Measured directly against `src/` on this branch: **221** `[LoggerMessage]`-attributed
 methods, every one carrying an explicit `EventId`, **zero duplicates**. The table below
 is that measurement, not a hand-maintained list — see "How this table is produced"
 below to reproduce it.
@@ -181,7 +181,7 @@ One block per source file that owns a `Log` class or equivalent:
 | 200-202 | `src/AiRaccoon.Infrastructure/Sync/S3CloudStore.cs` |
 | 203-205 | `src/AiRaccoon.Infrastructure/Sync/AzureBlobCloudStore.cs` |
 | 299-301 | `src/AiRaccoon.Infrastructure/Watch/WatchEventSource.cs` (299 added 2026-11-06, ADR-0143: one Warning per debounced buffer-overflow window, with its count) |
-| 302-303 | `src/AiRaccoon.Infrastructure/Watch/WatchPipeline.cs` (303 added 2026-10-18: `FileSkipped` at Debug, a digest skipped a file as unsupported-type, binary or unparseable) |
+| 302-304 | `src/AiRaccoon.Infrastructure/Watch/WatchPipeline.cs` (303 added 2026-10-18: `FileSkipped` at Debug, a digest skipped a file as unsupported-type, binary or unparseable; 304 added 2026-11-19: `DigestFailed` at Warning, a digest failed, with the file path and the exception) |
 | 310-312 | `src/AiRaccoon.Infrastructure/Watch/WatchCatchUp.cs` |
 | 320-324 | `src/AiRaccoon.Infrastructure/Watch/WatchHostedService.cs` (324 added 2026-11-06, ADR-0143: the buffer-size setting could not be read, so the watcher starts with the default) |
 | 330 | `src/AiRaccoon/Setup/AppRegistrations.cs` |
