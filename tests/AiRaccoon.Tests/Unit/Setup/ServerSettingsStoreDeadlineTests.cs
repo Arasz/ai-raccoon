@@ -56,7 +56,9 @@ public sealed class ServerSettingsStoreDeadlineTests
     [Fact]
     public async Task GetSetting_SlowerThanTheRequestDeadline_ThrowsUnavailable()
     {
-        var store = NewStore(new DelayingHandler(SlowerThanTheDeadline), ShortDeadline);
+        // A handler that never answers: only the deadline can end the call, so a starved runner
+        // cannot let the response win the race against the deadline timer.
+        var store = NewStore(new DelayingHandler(Timeout.InfiniteTimeSpan), ShortDeadline);
 
         var error = await Should.ThrowAsync<SettingsServerUnavailableException>(
             () => store.GetSettingAsync("sweep.threshold", TestContext.Current.CancellationToken));
