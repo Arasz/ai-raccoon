@@ -1,4 +1,4 @@
-# ADR-0154: The ignore file keeps a real fingerprint, and invalid text is skipped
+# ADR-0154: The ignore file keeps a real fingerprint, and the tokenizer reads a lone surrogate as U+FFFD
 
 Date: 2026-11-19
 
@@ -26,8 +26,10 @@ message, so the file could not be found.
 1. **The ignore file never goes through replace-by-path.** The digest compares the file's real hash with its
    stored fingerprint. Equal: a touch, no rescan. Different: it stores the real hash and queues one full rescan.
    The ignore file is a control file, not content, so it has no chunks to replace.
-2. **Text with invalid UTF-16 is skipped as `unparseable`** before chunking. The file is listed under the watch's
-   skipped files, and the watch stays healthy.
+2. **The bundled tokenizer reads an unpaired surrogate as U+FFFD** before it normalizes the text. This is the
+   replacement UTF-8 encoding makes when the chunk is stored, so the token count matches the stored text. The
+   file is indexed and the watch stays healthy. A query that holds an unpaired surrogate no longer throws either.
+   Rejected: skipping the file as `unparseable`. One escape in a property name would then hide the whole file.
 3. **A digest failure names its file.** `lastError` is `<path>: <message>`, and the failure is logged with the
    exception (EventId 304).
 
@@ -36,4 +38,4 @@ message, so the file could not be found.
 - An unchanged ignore file costs one hash per digest and starts no scan. An edit starts exactly one scan.
 - A fingerprint row written by an older build (none, or `skip:`) differs from the real hash, so the first digest
   after the upgrade queues one more rescan and then stores the real hash.
-- A file with invalid text costs one ingest per change, as other skipped files do (ADR-0153).
+- Content that decodes to an unpaired surrogate (a JSON property name or a notebook cell holding `\uD83D`) is indexed with U+FFFD in its place.
