@@ -256,9 +256,6 @@ public sealed partial class SqliteMemoryStore
         }
     }
 
-    /// <summary>Prefix of a skipped file's stored hash; no SHA-256 hex digest starts with it.</summary>
-    internal const string SkippedFileHashPrefix = "skip:";
-
     private static async Task RollbackTransaction(SqliteConnection connection) => await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: CancellationToken.None));
 
     private async Task<ReplaceCoreResult> ExecuteReplacementAsync(SqliteConnection connection, FileIngestResult ingestResult, string projectId, string path, string? fileHash, string? context,
@@ -294,7 +291,7 @@ public sealed partial class SqliteMemoryStore
                         {
                             projectId,
                             path,
-                            fileHash = SkippedFileHashPrefix + fileHash,
+                            fileHash = MemorySql.SkippedFileHashPrefix + fileHash,
                             updatedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
                         }, cancellationToken));
                 break;

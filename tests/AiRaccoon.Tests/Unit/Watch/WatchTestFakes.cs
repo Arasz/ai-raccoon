@@ -5,6 +5,7 @@ using AiRaccoon.Core.Projects;
 using AiRaccoon.Core.Watch;
 using AiRaccoon.Infrastructure.Embedding;
 using AiRaccoon.Infrastructure.Ingestion;
+using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Tests.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -249,7 +250,8 @@ internal sealed class FakeWatchStore : IWatchStore, IWatchRegisteredStore
         return Task.FromResult<IReadOnlyDictionary<string, WatchFileStamp>>(FileHashes
             .Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal))
             .ToDictionary(kv => kv.Key[prefix.Length..],
-                kv => new WatchFileStamp(kv.Value.UpdatedAt, FileSizes.TryGetValue(kv.Key, out var size) ? size : null),
+                kv => new WatchFileStamp(kv.Value.UpdatedAt, FileSizes.TryGetValue(kv.Key, out var size) ? size : null,
+                    kv.Value.Hash.StartsWith(MemorySql.SkippedFileHashPrefix, StringComparison.Ordinal)),
                 IngestPath.PathComparer));
     }
 

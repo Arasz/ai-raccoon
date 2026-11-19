@@ -230,8 +230,11 @@ internal static class MemorySql
     public const string SelectWatchFilesByProject =
         "SELECT path FROM watch_files WHERE project_id = @projectId";
 
+    /// <summary>Prefix of a skipped file's stored hash (ADR-0153); no SHA-256 hex digest starts with it.</summary>
+    public const string SkippedFileHashPrefix = "skip:";
+
     public const string SelectWatchFileStampsByProject =
-        "SELECT path, updated_at, size FROM watch_files WHERE project_id = @projectId";
+        "SELECT path, updated_at, size, file_hash LIKE '" + SkippedFileHashPrefix + "%' AS skipped FROM watch_files WHERE project_id = @projectId";
 
     public const string UpdateWatchFileSize =
         "UPDATE watch_files SET size = @size WHERE project_id = @projectId AND path = @path";

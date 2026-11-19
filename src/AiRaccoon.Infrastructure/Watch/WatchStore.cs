@@ -56,7 +56,7 @@ public interface IWatchStore
 }
 
 /// <summary>A fingerprint's unix-second write time and the file length the digest saw (null before sizes were recorded).</summary>
-public sealed record WatchFileStamp(long UpdatedAt, long? Size);
+public sealed record WatchFileStamp(long UpdatedAt, long? Size, bool Skipped = false);
 
 /// <summary>
 ///     Dapper impl of IWatchStore over the watches/watch_files tables (MemorySql consts); also
@@ -211,10 +211,10 @@ public sealed class WatchStore(ISqliteConnectionFactory factory, ISharedProjectS
         CancellationToken cancellationToken = default)
     {
         await using var connection = await factory.OpenBankAsync(cancellationToken);
-        var rows = await connection.QueryAsync<(string Path, long UpdatedAt, long? Size)>(
+        var rows = await connection.QueryAsync<(string Path, long UpdatedAt, long? Size, bool Skipped)>(
             new CommandDefinition(MemorySql.SelectWatchFileStampsByProject, new { projectId },
                 cancellationToken: cancellationToken));
-        return rows.ToDictionary(r => r.Path, r => new WatchFileStamp(r.UpdatedAt, r.Size), IngestPath.PathComparer);
+        return rows.ToDictionary(r => r.Path, r => new WatchFileStamp(r.UpdatedAt, r.Size, r.Skipped), IngestPath.PathComparer);
     }
 
     public async Task SetFileSizeAsync(string projectId, string path, long size,

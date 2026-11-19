@@ -30,8 +30,12 @@ arrives, and the old hash must not outlive the content it described.
 
 - An unchanged skipped file costs nothing per pass. EventId 899 logs once per real change of the file.
 - Reconcile, ignore and remove paths delete a skip row the same way as a real fingerprint.
-- A file a stand-in code chunker refused is retried only when it changes or a full scan runs; a changed-only
-  restart catch-up does not retry it.
-- `get_watch_status` lists skipped files from memory. After a restart, a routed skipped file that has not changed is
-  not digested, so it leaves the list until it changes or a full scan runs. A file no corpus routes is still listed.
+- A file a stand-in code chunker refused is retried when it changes, when a full scan runs, and once after each
+  server start.
+- A skipped file costs one replace per watch per server start.
+4. **The first changed-files scan of each watch after a server start also retries skip-marked files.** The stamp
+   query reports `file_hash LIKE 'skip:%'`, and `WatchCatchUp` keeps, per process, the watches it has already
+   scanned this way. `get_watch_status` lists skipped files from memory, so this pass rebuilds the list after a
+   restart: the file-watcher rule that a skipped file is never hidden holds for routed files too. Later scans
+   leave the unchanged file alone, so a recovery or heal scan cannot start the loop again.
 - A file no corpus routes (`SkipUnroutedAsync`) is unchanged: it never reaches the replace and keeps no row.
