@@ -32,4 +32,6 @@ arrives, and the old hash must not outlive the content it described.
 - Reconcile, ignore and remove paths delete a skip row the same way as a real fingerprint.
 - A file a stand-in code chunker refused is retried only when it changes or a full scan runs; a changed-only
   restart catch-up does not retry it.
+- `get_watch_status` lists skipped files from memory. After a restart, a routed skipped file that has not changed is
+  not digested, so it leaves the list until it changes or a full scan runs. A file no corpus routes is still listed.
 - A file no corpus routes (`SkipUnroutedAsync`) is unchanged: it never reaches the replace and keeps no row.
