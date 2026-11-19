@@ -535,6 +535,54 @@ public sealed class WatchDigestExecutorTests
             "a rename away removes the rules, exactly as a delete does, so it earns the same rescan");
     }
 
+    /// <summary>
+    ///     ADR-0154: the ignore file keeps its real hash and never reaches replace-by-path, so the
+    ///     rescan its edit queues does not queue another one when it digests the unchanged file.
+    /// </summary>
+    [Fact]
+    public async Task Digest_IgnoreFileUnchangedAfterItsRescan_QueuesNoFurtherRescan()
+    {
+        using var dir = TempDir.New("digest-ignore-unchanged");
+        var ignoreFile = dir.File(IgnoreRulesProvider.FileName);
+        await File.WriteAllTextAsync(ignoreFile, "bin/\n", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        // No corpus routes the ignore file: a replace of it is skipped, as the real ingest does.
+        stack.Memory.SkipReasons[ignoreFile] = SkipReason.UnsupportedType;
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, ignoreFile, WatchEventKind.Changed, null,
+            TestContext.Current.CancellationToken);
+        await Executor(stack).DigestAsync(Project, dir.Path, ignoreFile, WatchEventKind.Changed, null,
+            TestContext.Current.CancellationToken);
+
+        stack.ScanInitiator.Calls.ShouldBe([(Project, dir.Path)]);
+        stack.Memory.ReplaceCalls.ShouldBe(0);
+        (await stack.Store.GetFileHashAsync(Project, ignoreFile, TestContext.Current.CancellationToken))
+            .ShouldBe(WatchDigestExecutor.ComputeHash(ignoreFile, "bin/\n"));
+    }
+
+    /// <summary>ADR-0154: an edit after the stored hash queues exactly one rescan and stores the new hash.</summary>
+    [Fact]
+    public async Task Digest_IgnoreFileEditedAfterItsHashIsStored_QueuesOneRescan()
+    {
+        using var dir = TempDir.New("digest-ignore-edit-once");
+        var ignoreFile = dir.File(IgnoreRulesProvider.FileName);
+        await File.WriteAllTextAsync(ignoreFile, "obj/\n", TestContext.Current.CancellationToken);
+        var stack = new WatchTestStack();
+        stack.Memory.SkipReasons[ignoreFile] = SkipReason.UnsupportedType;
+        await stack.Store.AddWatchAsync(Project, dir.Path, 0, 0, TestContext.Current.CancellationToken);
+        await stack.Store.UpsertFileHashAsync(Project, ignoreFile, WatchDigestExecutor.ComputeHash(ignoreFile, "bin/\n"),
+            1, TestContext.Current.CancellationToken);
+
+        await Executor(stack).DigestAsync(Project, dir.Path, ignoreFile, WatchEventKind.Changed, null,
+            TestContext.Current.CancellationToken);
+
+        stack.ScanInitiator.Calls.ShouldBe([(Project, dir.Path)]);
+        stack.Memory.ReplaceCalls.ShouldBe(0);
+        (await stack.Store.GetFileHashAsync(Project, ignoreFile, TestContext.Current.CancellationToken))
+            .ShouldBe(WatchDigestExecutor.ComputeHash(ignoreFile, "obj/\n"));
+    }
+
     [Fact]
     public async Task Digest_IgnoreFileDeleted_TriggersAFullRescan()
     {
