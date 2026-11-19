@@ -10,6 +10,12 @@
       "finished": "2026-11-19"
     },
     {
+      "id": "air-skipped-file-redigest-every-poll",
+      "title": "A skipped file keeps a skip-marked watch stamp, so catch-up stops re-ingesting it every pass (EventId 899 storm on a Windows shared watch); the first catch-up after a start retries skips so status lists them (ADR-0153); deadline test de-flaked; release 2.10.2",
+      "pr": 966,
+      "finished": "2026-11-19"
+    },
+    {
       "id": "air-ignore-cache-watch-wake-coverage",
       "title": "Ignore rules cache behind a change token taken before the read; an in-process watch add/remove/enable wakes the reconcile loop (ADR-0152, amends 0151); release 2.10.1",
       "pr": 964,
