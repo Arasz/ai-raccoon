@@ -26,6 +26,9 @@ public sealed partial class WatchCatchUp(
     /// </summary>
     private const int MaxRescanAttempts = 5;
 
+    private readonly Lock _skipRetryGate = new();
+    private readonly HashSet<WatchKey> _skipsRetried = [];
+
     /// <summary>Task of the most recently enqueued scan (tests await it for determinism).</summary>
     internal Task? LastScan { get; private set; }
 
@@ -54,11 +57,11 @@ public sealed partial class WatchCatchUp(
     ///     and denied directories and ignore-rule matches; a file target lists itself, a missing one nothing.
     /// </summary>
     internal static IEnumerable<string> EnumerateFiles(IndexableFileWalk walk, string path, IReadOnlyDictionary<string, WatchFileStamp>? stamps,
-        IgnoreRules? ignoreRules = null)
+        IgnoreRules? ignoreRules = null, bool retrySkipped = false)
     {
         if (!Directory.Exists(path))
         {
-            if (File.Exists(path) && IsDue(path, stamps))
+            if (File.Exists(path) && IsDue(path, stamps, retrySkipped))
             {
                 yield return path;
             }
@@ -79,7 +82,7 @@ public sealed partial class WatchCatchUp(
                 continue;
             }
 
-            if (IsDue(file, stamps))
+            if (IsDue(file, stamps, retrySkipped))
             {
                 yield return file;
             }
@@ -94,7 +97,7 @@ public sealed partial class WatchCatchUp(
     ///     Whether the scan queues <paramref name="file" />. A fingerprinted file deleted since the walk
     ///     listed it is not due: the reconcile pass removes its fingerprint, and the scan carries on.
     /// </summary>
-    internal static bool IsDue(string file, IReadOnlyDictionary<string, WatchFileStamp>? stamps)
+    internal static bool IsDue(string file, IReadOnlyDictionary<string, WatchFileStamp>? stamps, bool retrySkipped = false)
     {
         if (stamps is null || !stamps.TryGetValue(IngestPath.Normalize(file), out var stamp))
         {
@@ -105,6 +108,11 @@ public sealed partial class WatchCatchUp(
         if (!info.Exists)
         {
             return false;
+        }
+
+        if (retrySkipped && stamp.Skipped)
+        {
+            return true;
         }
 
         return new DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeSeconds() >= stamp.UpdatedAt ||
@@ -173,8 +181,9 @@ public sealed partial class WatchCatchUp(
             pipeline.ClearSkips(projectId, path);
         }
 
+        var retrySkipped = changedOnly && !HasRetriedSkips(projectId, path);
         var nextRenew = timeProvider.GetUtcNow() + SqliteWatchScanLease.HeartbeatInterval;
-        foreach (var file in EnumerateFiles(walk, path, stamps, ignoreRules))
+        foreach (var file in EnumerateFiles(walk, path, stamps, ignoreRules, retrySkipped))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -195,6 +204,11 @@ public sealed partial class WatchCatchUp(
         }
 
         await ReconcileAsync(projectId, path, ignoreRules, cancellationToken);
+        if (retrySkipped)
+        {
+            MarkSkipsRetried(projectId, path);
+        }
+
         return true;
     }
 
@@ -219,6 +233,26 @@ public sealed partial class WatchCatchUp(
             {
                 pipeline.Enqueue(new WatchEvent(projectId, file, WatchEventKind.Deleted));
             }
+        }
+    }
+
+    /// <summary>
+    ///     Whether a completed changed-files pass already retried this watch's skip-marked files in this
+    ///     process; until one has, each pass retries them, so the skip list is rebuilt after a start (ADR-0153).
+    /// </summary>
+    private bool HasRetriedSkips(string projectId, string path)
+    {
+        lock (_skipRetryGate)
+        {
+            return _skipsRetried.Contains(new WatchKey(projectId, path));
+        }
+    }
+
+    private void MarkSkipsRetried(string projectId, string path)
+    {
+        lock (_skipRetryGate)
+        {
+            _skipsRetried.Add(new WatchKey(projectId, path));
         }
     }
 

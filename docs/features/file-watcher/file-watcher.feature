@@ -466,8 +466,10 @@ Feature: File watcher
     Rule: Files a watch cannot index are reported as skipped, never hidden
         # 2026-10-18: a file neither corpus can take (unsupported type, binary content, or a
         # memory file that parses to nothing) is listed in get_watch_status with its reason,
-        # and is never fingerprinted — so every catch-up retries it, and a file that becomes
-        # ingestable indexes without a content change.
+        # and never keeps a real hash. Since 2.10.2 (ADR-0153) a routed file the replace skips keeps a
+        # skip-marked stamp: catch-up leaves it alone until its mtime or size changes, except the
+        # first catch-up after a start, which retries it so the status lists it again. The watch
+        # classifies a file no corpus routes before any replace, so that file keeps no stamp at all.
         Scenario: a watched directory with an unsupported and a binary file reports them as skipped
             Given a watch for "proj-a" on path "/repo" with an unsupported file "tool.xyz" and a binary file "image.dat"
             Then get_watch_status for "proj-a" reports the watch healthy with 2 skipped files

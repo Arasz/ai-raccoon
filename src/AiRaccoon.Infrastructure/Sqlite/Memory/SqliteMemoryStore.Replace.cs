@@ -283,7 +283,17 @@ public sealed partial class SqliteMemoryStore
                         }, cancellationToken));
                 break;
             case true:
-                await connection.ExecuteAsync(Def(MemorySql.DeleteWatchFile, new { projectId, path }, cancellationToken));
+                // ADR-0153: a skip-marked stamp — catch-up sees the file as unchanged, yet the marker
+                // equals no real hash, so the next digest of this path still runs the replace.
+                await connection.ExecuteAsync(
+                    Def(MemorySql.UpsertWatchFile,
+                        new
+                        {
+                            projectId,
+                            path,
+                            fileHash = MemorySql.SkippedFileHashPrefix + fileHash,
+                            updatedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
+                        }, cancellationToken));
                 break;
         }
 

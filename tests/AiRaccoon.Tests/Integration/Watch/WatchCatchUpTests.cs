@@ -1,6 +1,7 @@
 using AiRaccoon.Infrastructure.Ingestion;
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Watch;
+using AiRaccoon.Infrastructure.Sqlite;
 using AiRaccoon.Infrastructure.Watch;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -291,6 +292,71 @@ public sealed class WatchCatchUpTests
 
         stack.Memory.Ingested.Select(i => i.Path).ShouldContain(newer);
         stack.Memory.Ingested.Select(i => i.Path).ShouldNotContain(older);
+    }
+
+    /// <summary>
+    ///     A skip-marked stamp is retried by the first changed-files scan after a start, so the status
+    ///     lists the skipped file again; later scans leave the unchanged file alone.
+    /// </summary>
+    [RetryFact]
+    public async Task EnqueueChangedFiles_RetriesASkipMarkedFileOncePerStart_ThenLeavesItAlone()
+    {
+        using var dir = TempDir.New("catchup-skip-restart");
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        var now = stack.Time.GetUtcNow().ToUnixTimeSeconds();
+        var skipped = dir.File("skipped.md");
+        await WriteAllTextAsync(skipped, "zephyrone", TestContext.Current.CancellationToken);
+        Stamp(skipped, DateTimeOffset.FromUnixTimeSeconds(now - 7200));
+        await stack.Store.UpsertFileHashAsync(Project, IngestPath.Normalize(skipped), MemorySql.SkippedFileHashPrefix + "zephyrhash",
+            now - 3600, TestContext.Current.CancellationToken);
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueChangedFiles(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Memory.Ingested.Select(i => i.Path).ShouldContain(skipped, "the first scan after a start must retry a skipped file");
+
+        stack.Memory.Ingested.Clear();
+        await stack.Store.UpsertFileHashAsync(Project, IngestPath.Normalize(skipped), MemorySql.SkippedFileHashPrefix + "zephyrhash",
+            now - 3600, TestContext.Current.CancellationToken);
+        catchUp.EnqueueChangedFiles(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Memory.Ingested.Select(i => i.Path).ShouldNotContain(skipped, "a later scan must leave the unchanged skipped file alone");
+    }
+
+    /// <summary>A first scan that ends before its walk completes leaves the startup retry for the next scan.</summary>
+    [RetryFact]
+    public async Task EnqueueChangedFiles_FirstScanCancelledMidWalk_KeepsTheStartupRetryForTheNextScan()
+    {
+        using var dir = TempDir.New("catchup-skip-retry-kept");
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        await stack.Service.AddAsync(Project, dir.Path, TestContext.Current.CancellationToken);
+        var now = stack.Time.GetUtcNow().ToUnixTimeSeconds();
+        var skipped = dir.File("skipped.md");
+        await WriteAllTextAsync(skipped, "zephyrone", TestContext.Current.CancellationToken);
+        Stamp(skipped, DateTimeOffset.FromUnixTimeSeconds(now - 7200));
+        await stack.Store.UpsertFileHashAsync(Project, IngestPath.Normalize(skipped), MemorySql.SkippedFileHashPrefix + "zephyrhash",
+            now - 3600, TestContext.Current.CancellationToken);
+        var catchUp = NewCatchUp(stack);
+        using var firstScan = new CancellationTokenSource();
+        stack.ScanLease.OnAcquire = firstScan.Cancel;
+
+        catchUp.EnqueueChangedFiles(Project, dir.Path, firstScan.Token);
+        await catchUp.LastScan!.ContinueWith(_ => { }, TaskScheduler.Default);
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Memory.Ingested.ShouldBeEmpty("the cancelled first scan must enqueue nothing");
+
+        stack.ScanLease.OnAcquire = null;
+        catchUp.EnqueueChangedFiles(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Memory.Ingested.Select(i => i.Path).ShouldContain(skipped, "the startup retry must survive a first scan that did not finish");
     }
 
     [RetryFact]

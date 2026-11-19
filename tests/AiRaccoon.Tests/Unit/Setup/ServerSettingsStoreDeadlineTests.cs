@@ -56,10 +56,14 @@ public sealed class ServerSettingsStoreDeadlineTests
     [Fact]
     public async Task GetSetting_SlowerThanTheRequestDeadline_ThrowsUnavailable()
     {
-        var store = NewStore(new DelayingHandler(SlowerThanTheDeadline), ShortDeadline);
+        // A handler that never answers: only the deadline can end the call, so a starved runner
+        // cannot let the response win the race against the deadline timer.
+        var store = NewStore(new DelayingHandler(Timeout.InfiniteTimeSpan), ShortDeadline);
 
+        // Bounded apart from the store: if the deadline stopped applying, this times out and fails.
         var error = await Should.ThrowAsync<SettingsServerUnavailableException>(
-            () => store.GetSettingAsync("sweep.threshold", TestContext.Current.CancellationToken));
+            () => store.GetSettingAsync("sweep.threshold", TestContext.Current.CancellationToken)
+                .WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
 
         error.Code.ShouldBe(ErrorCode.Reach.StoppedAnswering);
     }
@@ -127,7 +131,7 @@ public sealed class ServerSettingsStoreDeadlineTests
     }
 
     private static ServerSettingsStore NewStore(HttpMessageHandler handler, TimeSpan requestDeadline) =>
-        new(new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1:1/mcp") }, Token, requestDeadline);
+        new(new HttpClient(handler) { BaseAddress = new Uri("http://127.0.0.1:1/mcp"), Timeout = Timeout.InfiniteTimeSpan }, Token, requestDeadline);
 
     private static Task ReportAsync(ServerSettingsStore store, string kind, CancellationToken cancellationToken) =>
         kind switch
