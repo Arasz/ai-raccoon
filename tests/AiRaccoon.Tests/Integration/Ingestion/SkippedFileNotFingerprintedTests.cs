@@ -1,6 +1,8 @@
 using AiRaccoon.Core.Ingestion;
 using AiRaccoon.Core.Memory;
+using AiRaccoon.Core.Projects;
 using AiRaccoon.Infrastructure.Sqlite;
+using AiRaccoon.Infrastructure.Watch;
 using AiRaccoon.Setup;
 using Dapper;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,7 +13,10 @@ using xRetry.v3;
 
 namespace AiRaccoon.Tests.Integration.Ingestion;
 
-/// <summary>The watch digest's replace reports a skip and writes no fingerprint, so the next digest retries the file.</summary>
+/// <summary>
+///     The watch digest's replace reports a skip and stores a skip-marked stamp: catch-up treats the
+///     unchanged file as not due, and a replace still retries it because the marker matches no real hash.
+/// </summary>
 [Trait(TestCategories.Category, TestCategories.Integration)]
 [Trait(TestCategories.Speed, TestCategories.Slow)]
 public sealed class SkippedFileNotFingerprintedTests : IDisposable
@@ -21,7 +26,7 @@ public sealed class SkippedFileNotFingerprintedTests : IDisposable
     public void Dispose() => TestData.DeleteTempRoot(_dataRoot);
 
     [RetryFact]
-    public async Task ReplaceIfFileChangedAsync_UnsupportedFile_ReportsSkip_WritesNoFingerprint_AndRetriesNextTime()
+    public async Task ReplaceIfFileChangedAsync_UnsupportedFile_ReportsSkip_StoresNoRealHash_AndRetriesNextTime()
     {
         var provider = BuildProvider();
         var store = provider.GetRequiredService<IMemoryStore>();
@@ -33,9 +38,9 @@ public sealed class SkippedFileNotFingerprintedTests : IDisposable
         var first = await store.ReplaceIfFileChangedAsync("acme", file, "same-hash", TestContext.Current.CancellationToken);
 
         first.Skipped.ShouldBe(SkipReason.UnsupportedType);
-        (await CountFingerprintsAsync(provider, file)).ShouldBe(0);
+        (await StoredHashAsync(provider, file)).ShouldNotBe("same-hash", "a skip must never hash-skip the unchanged file");
         var second = await store.ReplaceIfFileChangedAsync("acme", file, "same-hash", TestContext.Current.CancellationToken);
-        second.Replaced.ShouldBeTrue("no fingerprint was written, so the unchanged file is digested again");
+        second.Replaced.ShouldBeTrue("the skip marker matches no real hash, so a digest of the unchanged file runs again");
         second.Skipped.ShouldBe(SkipReason.UnsupportedType);
     }
 
@@ -57,7 +62,7 @@ public sealed class SkippedFileNotFingerprintedTests : IDisposable
         var turned = await store.ReplaceIfFileChangedAsync("acme", file, "hash-b", TestContext.Current.CancellationToken);
 
         turned.Skipped.ShouldBe(SkipReason.Binary);
-        (await CountFingerprintsAsync(provider, file)).ShouldBe(0, "the old hash must not outlive the content it described");
+        (await StoredHashAsync(provider, file)).ShouldNotBe("hash-a", "the old hash must not outlive the content it described");
         (await CountChunksAsync(provider, file)).ShouldBe(0);
 
         await File.WriteAllTextAsync(file, original, TestContext.Current.CancellationToken);
@@ -66,6 +71,29 @@ public sealed class SkippedFileNotFingerprintedTests : IDisposable
         restored.Replaced.ShouldBeTrue("restoring the original content must not hash-skip");
         (await CountChunksAsync(provider, file)).ShouldBeGreaterThan(0);
         (await CountFingerprintsAsync(provider, file)).ShouldBe(1);
+    }
+
+    [RetryFact]
+    public async Task ReplaceIfFileChangedAsync_SkippedFile_IsNotDueOnTheNextCatchUp_UntilItChanges()
+    {
+        var provider = BuildProvider();
+        var store = provider.GetRequiredService<IMemoryStore>();
+        var file = Path.Combine(_dataRoot, "notes.md");
+        await store.SetSettingAsync(IngestScopeKeys.ScopeProject("acme"), IngestScopeKeys.Serialize([_dataRoot]),
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(file, "binary\0blob", TestContext.Current.CancellationToken);
+        File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddMinutes(-1));
+
+        (await store.ReplaceIfFileChangedAsync("acme", file, "hash-b", TestContext.Current.CancellationToken))
+            .Skipped.ShouldBe(SkipReason.Binary);
+
+        var watchStore = new WatchStore(provider.GetRequiredService<ISqliteConnectionFactory>(),
+            provider.GetRequiredService<ISharedProjectScope>());
+        var stamps = await watchStore.ListFileStampsAsync("acme", TestContext.Current.CancellationToken);
+        WatchCatchUp.IsDue(file, stamps).ShouldBeFalse("an unchanged skipped file must not be digested on every catch-up pass");
+
+        await File.WriteAllTextAsync(file, "binary\0blob grown", TestContext.Current.CancellationToken);
+        WatchCatchUp.IsDue(file, stamps).ShouldBeTrue("a changed skipped file is due again");
     }
 
     private ServiceProvider BuildProvider()
@@ -89,6 +117,14 @@ public sealed class SkippedFileNotFingerprintedTests : IDisposable
         var factory = provider.GetRequiredService<ISqliteConnectionFactory>();
         await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
         return await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM watch_files WHERE path = @path",
+            new { path = IngestPath.Normalize(path) });
+    }
+
+    private static async Task<string?> StoredHashAsync(IServiceProvider provider, string path)
+    {
+        var factory = provider.GetRequiredService<ISqliteConnectionFactory>();
+        await using var connection = await factory.OpenBankAsync(TestContext.Current.CancellationToken);
+        return await connection.ExecuteScalarAsync<string?>("SELECT file_hash FROM watch_files WHERE path = @path",
             new { path = IngestPath.Normalize(path) });
     }
 }

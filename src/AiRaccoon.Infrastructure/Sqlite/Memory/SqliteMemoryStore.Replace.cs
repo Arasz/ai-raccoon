@@ -256,6 +256,9 @@ public sealed partial class SqliteMemoryStore
         }
     }
 
+    /// <summary>Prefix of a skipped file's stored hash; no SHA-256 hex digest starts with it.</summary>
+    internal const string SkippedFileHashPrefix = "skip:";
+
     private static async Task RollbackTransaction(SqliteConnection connection) => await connection.ExecuteAsync(new CommandDefinition("ROLLBACK", cancellationToken: CancellationToken.None));
 
     private async Task<ReplaceCoreResult> ExecuteReplacementAsync(SqliteConnection connection, FileIngestResult ingestResult, string projectId, string path, string? fileHash, string? context,
@@ -283,7 +286,17 @@ public sealed partial class SqliteMemoryStore
                         }, cancellationToken));
                 break;
             case true:
-                await connection.ExecuteAsync(Def(MemorySql.DeleteWatchFile, new { projectId, path }, cancellationToken));
+                // ADR-0153: a skip-marked stamp — catch-up sees the file as unchanged, yet the marker
+                // equals no real hash, so the next digest of this path still runs the replace.
+                await connection.ExecuteAsync(
+                    Def(MemorySql.UpsertWatchFile,
+                        new
+                        {
+                            projectId,
+                            path,
+                            fileHash = SkippedFileHashPrefix + fileHash,
+                            updatedAt = timeProvider.GetUtcNow().ToUnixTimeSeconds()
+                        }, cancellationToken));
                 break;
         }
 
