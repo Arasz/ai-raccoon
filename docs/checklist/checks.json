@@ -92,6 +92,36 @@
    "anchor": "docs/adr/0121-restart-catch-up-compares-each-file-with-its-own-fingerprint.md"
   },
   {
+   "item": "watch-ignore-file-starts-no-rescan-loop",
+   "expected-result": "Watch a scratch directory whose root holds ai-raccoon.ignore (excluding skip/) plus a.md with a unique term. After the initial scan settles, the serve log gains no EventId 899 line for 30 s, and watch_files keeps the ignore file with a 64-hex file_hash. Append a rule to ai-raccoon.ignore: exactly one rescan follows (the 899 or digest lines appear once, then stop again for 30 s). (ADR-0154)",
+   "negative-control": "Same tree served by 2.10.2 from a scratch --tool-path logs EventId 899 with `0 row(s) written` about every 1.5 s.",
+   "anchor": "docs/adr/0154-the-ignore-file-keeps-a-real-fingerprint-and-a-lone-surrogate-reads-as-u-fffd.md"
+  },
+  {
+   "item": "watch-skipped-file-is-not-redigested",
+   "expected-result": "Watch a scratch directory holding bin.md (an indexed extension with NUL bytes, which ingest skips) and good.md. watch_files keeps a row for bin.md whose file_hash starts with `skip:`, and over 30 s idle the serve log gains no digest of bin.md. Rewrite bin.md: it is digested once and stays skip-marked. good.md's term is found by query. (ADR-0153)",
+   "negative-control": "Same tree served by 2.10.1 from a scratch --tool-path leaves no watch_files row for bin.md and re-digests it on each catch-up pass.",
+   "anchor": "docs/adr/0153-a-skipped-file-keeps-a-skip-marked-watch-stamp.md"
+  },
+  {
+   "item": "watch-lone-surrogate-file-is-indexed",
+   "expected-result": "Watch a scratch directory holding data.json whose property name is the escape \\uD83D next to a unique term. get_watch_status reads Healthy with no lastError, and query finds the term. (ADR-0154)",
+   "negative-control": "Same tree served by 2.10.2 from a scratch --tool-path puts the watch in retrying with a tokenizer error.",
+   "anchor": "docs/adr/0154-the-ignore-file-keeps-a-real-fingerprint-and-a-lone-surrogate-reads-as-u-fffd.md"
+  },
+  {
+   "item": "watch-add-and-remove-apply-at-once",
+   "expected-result": "add_watch over MCP on a scratch directory with a unique term: query finds the term within 5 s, not after the 10 s reconcile interval. remove_watch, then create a new file with a second unique term: it is never found within 20 s. (ADR-0152)",
+   "negative-control": "Time the add from the add_watch reply to the first hit; record the elapsed time, since a build without the wake signal takes up to 10 s.",
+   "anchor": "docs/adr/0152-ignore-rules-reload-on-a-change-token-and-watch-changes-wake-the-reconcile.md"
+  },
+  {
+   "item": "watch-ignore-rule-edit-applies",
+   "expected-result": "On a watched scratch directory, add a rule for later/ to ai-raccoon.ignore, then create later/n.md with a unique term: query never finds it within 20 s. Create kept/k.md with another term in the same window: query finds it. (ADR-0151, ADR-0152)",
+   "negative-control": "kept/k.md is the control: a watcher that stopped processing would also not find later/n.md.",
+   "anchor": "docs/adr/0152-ignore-rules-reload-on-a-change-token-and-watch-changes-wake-the-reconcile.md"
+  },
+  {
    "item": "promotion-queue-state",
    "expected-result": "get_memories_sharing_ranking reports propose-tier candidates and queue state accurately"
   },
