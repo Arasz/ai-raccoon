@@ -11,6 +11,7 @@ What's new list.
 
 Newest first; add each release's line in the same PR that adds its file.
 
+- [2.10.4 — an idle watch reads Healthy after a restart, a notebook with a lone surrogate is indexed](2.10.4-idle-watch-healthy-notebook-surrogate.md)
 - [2.10.3 — an unchanged ignore file no longer re-scans its watch](2.10.3-ignore-file-rescan-loop.md)
 - [2.10.2 — a skipped file is no longer re-ingested on every watch pass](2.10.2-skipped-file-stops-redigesting.md)
 - [2.10.1 — a watch change in this server applies at once, and the ignore rules never keep a stale parse](2.10.1-watch-change-wakes-the-reconcile.md)

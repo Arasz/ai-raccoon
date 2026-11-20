@@ -309,11 +309,16 @@ public sealed partial class EntryEmbedder(
     /// <summary>
     ///     Embeds up to <paramref name="limit" /> bank-wide pending rows (not project-scoped, like
     ///     <see cref="DrainMigrationAsync" />'s own loop) — a single bounded batch rather than a full
-    ///     drain, for <see cref="PendingEmbedJob" />'s on-demand sweep.
+    ///     drain, for <see cref="PendingEmbedJob" />'s on-demand sweep. A bank with no engine drains nothing.
     /// </summary>
     public async Task<int> EmbedPendingBatchAsync(SqliteConnection connection, int limit,
         CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(await connection.ReadSettingAsync(EmbeddingSettingsKeys.Provider, cancellationToken)))
+        {
+            return 0;
+        }
+
         var batch = (await connection.QueryAsync<EmbedRow>(Def(MemorySql.SelectAllPendingForEmbed,
             new { limit }, cancellationToken))).ToList();
         return await EmbedAsync(connection, batch, cancellationToken);

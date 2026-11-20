@@ -53,6 +53,22 @@ public sealed class EntryEmbedderPoisonRowTests : IDisposable
         (await StateOfAsync(connection, poison)).ShouldBe("pending");
     }
 
+    /// <summary>ADR-0155: a bank with no memory engine drains nothing and leaves its rows pending.</summary>
+    [RetryFact]
+    public async Task EmbedPendingBatch_NoEngineConfigured_EmbedsNothingAndLeavesTheRowPending()
+    {
+        await using var connection = await _factory.OpenBankAsync(Ct);
+        var row = await InsertAsync(connection, "no engine yet");
+        var service = new PoisonEmbeddingService();
+        var embedder = NewEmbedder(service);
+
+        var embedded = await embedder.EmbedPendingBatchAsync(connection, 32, Ct);
+
+        embedded.ShouldBe(0);
+        service.Calls.ShouldBeEmpty();
+        (await StateOfAsync(connection, row)).ShouldBe("pending");
+    }
+
     [RetryFact]
     public async Task EmbedPendingBatch_PoisonRowFailsUpToTheCeiling_IsNoLongerSelectedOrPolled()
     {
