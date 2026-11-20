@@ -150,4 +150,45 @@ public class NotebookChunkerTests
         Assert.Contains("### Title", Joined(chunks));
         Assert.Contains("#### Sub", Joined(chunks));
     }
+
+    [Fact]
+    public void ChunkWithHeadings_ReadsALoneLowSurrogateInAnArraySourceAsReplacementChar()
+    {
+        const string cells = """{"cell_type":"markdown","source":["lowmarkqz \uDE00 tail"]}""";
+
+        var text = Joined(Chunker.ChunkWithHeadings(Notebook(cells), 512));
+
+        Assert.Contains("lowmarkqz � tail", text);
+    }
+
+    [Fact]
+    public void ChunkWithHeadings_ReadsALoneHighSurrogateAtTheEndOfAStringSourceAsReplacementChar()
+    {
+        const string cells = """{"cell_type":"code","source":"highmarkqz = 1 # \uD83D"}""";
+
+        var text = Joined(Chunker.ChunkWithHeadings(Notebook(cells), 512));
+
+        Assert.Contains("highmarkqz = 1 # �", text);
+    }
+
+    [Fact]
+    public void ChunkWithHeadings_KeepsAValidPairAndAnEscapedBackslashBesideALoneSurrogate()
+    {
+        const string cells = """{"cell_type":"markdown","source":["pairmarkqz 😀 literal \\uD83D lone \uD83D end"]}""";
+
+        var text = Joined(Chunker.ChunkWithHeadings(Notebook(cells), 512));
+
+        Assert.Contains("pairmarkqz \U0001F600 literal \\uD83D lone � end", text);
+    }
+
+    [Fact]
+    public void ChunkWithHeadings_ReadsALoneSurrogateInTheKernelLanguage()
+    {
+        const string cells = """{"cell_type":"code","source":"kernmarkqz()"}""";
+
+        var text = Joined(Chunker.ChunkWithHeadings(Notebook(cells, """{"kernelspec":{"language":"py\uDE00"}}"""), 512));
+
+        Assert.Contains("kernmarkqz()", text);
+        Assert.Contains("```py�", text);
+    }
 }
