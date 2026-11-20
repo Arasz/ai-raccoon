@@ -155,6 +155,19 @@ public sealed partial class WatchPipeline(
         }
     }
 
+    /// <summary>Moves a Scanning watch to Healthy with LastSync now, after a scan that queued no digest; any other state stays.</summary>
+    public void MarkSynced(string projectId, string path)
+    {
+        var key = new WatchKey(projectId, IngestPath.Normalize(path));
+        lock (_gate)
+        {
+            if (_runtime.TryGetValue(key, out var current) && current.State == WatchState.Scanning)
+            {
+                _runtime[key] = new WatchRuntimeState(WatchState.Healthy, null, timeProvider.GetUtcNow());
+            }
+        }
+    }
+
     public IReadOnlyList<WatchStatus> GetStatuses(string projectId)
     {
         lock (_gate)
