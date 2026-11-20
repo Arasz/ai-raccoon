@@ -130,14 +130,17 @@ public sealed partial class WatchCatchUp(
         var startedAt = timeProvider.GetUtcNow();
         try
         {
+            var queued = 0;
             for (var attempt = 0; attempt < MaxRescanAttempts; attempt++)
             {
                 var ignoreRules = await ignoreRulesProvider.LoadAsync(path, cancellationToken);
-                if (!await RunOnePassAsync(projectId, path, changedOnly, ignoreRules, cancellationToken))
+                if (await RunOnePassAsync(projectId, path, changedOnly, ignoreRules, cancellationToken) is not { } passQueued)
                 {
                     // Lease lost mid-pass — already logged and released by RunOnePassAsync's caller contract.
                     return;
                 }
+
+                queued += passQueued;
 
                 // Re-read at the end of the pass: a mid-scan ignore-file edit must apply before the
                 // scan chain settles, without any new WatchScanGuard queue state (pinned H10) — the
@@ -149,6 +152,12 @@ public sealed partial class WatchCatchUp(
                 }
 
                 changedOnly = false;
+            }
+
+            // A scan that queued no digest leaves no job to settle the watch (ADR-0155).
+            if (queued == 0)
+            {
+                pipeline.MarkSynced(projectId, path);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -167,8 +176,8 @@ public sealed partial class WatchCatchUp(
         }
     }
 
-    /// <summary>One walk + reconcile pass. Returns false when the lease was lost mid-pass (caller stops).</summary>
-    private async Task<bool> RunOnePassAsync(string projectId, string path, bool changedOnly,
+    /// <summary>One walk + reconcile pass. Returns the number of events it queued, or null when the lease was lost mid-pass (caller stops).</summary>
+    private async Task<int?> RunOnePassAsync(string projectId, string path, bool changedOnly,
         IgnoreRules ignoreRules, CancellationToken cancellationToken)
     {
         var stamps = changedOnly ? await watchStore.ListFileStampsAsync(projectId, cancellationToken) : null;
@@ -183,6 +192,7 @@ public sealed partial class WatchCatchUp(
 
         var retrySkipped = changedOnly && !HasRetriedSkips(projectId, path);
         var nextRenew = timeProvider.GetUtcNow() + SqliteWatchScanLease.HeartbeatInterval;
+        var queued = 0;
         foreach (var file in EnumerateFiles(walk, path, stamps, ignoreRules, retrySkipped))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -194,22 +204,23 @@ public sealed partial class WatchCatchUp(
                 if (!await scanLease.TryRenewAsync(projectId, path, cancellationToken))
                 {
                     Log.ScanLeaseLost(logger, path);
-                    return false;
+                    return null;
                 }
 
                 nextRenew = timeProvider.GetUtcNow() + SqliteWatchScanLease.HeartbeatInterval;
             }
 
             pipeline.Enqueue(new WatchEvent(projectId, file, WatchEventKind.Created));
+            queued++;
         }
 
-        await ReconcileAsync(projectId, path, ignoreRules, cancellationToken);
+        queued += await ReconcileAsync(projectId, path, ignoreRules, cancellationToken);
         if (retrySkipped)
         {
             MarkSkipsRetried(projectId, path);
         }
 
-        return true;
+        return queued;
     }
 
     /// <summary>
@@ -218,9 +229,10 @@ public sealed partial class WatchCatchUp(
     ///     was indexed before that rule applied. Either way, enqueue Deleted so the digest's own gate
     ///     removes the stale chunks and the fingerprint.
     /// </summary>
-    private async Task ReconcileAsync(string projectId, string watchPath, IgnoreRules ignoreRules,
+    private async Task<int> ReconcileAsync(string projectId, string watchPath, IgnoreRules ignoreRules,
         CancellationToken cancellationToken)
     {
+        var queued = 0;
         foreach (var file in await watchStore.ListFilesAsync(projectId, cancellationToken))
         {
             if (!IngestPath.IsWithinScope(file, watchPath))
@@ -232,8 +244,11 @@ public sealed partial class WatchCatchUp(
                 ignoreRules.HasRules && IsIgnoredFile(ignoreRules, watchPath, file))
             {
                 pipeline.Enqueue(new WatchEvent(projectId, file, WatchEventKind.Deleted));
+                queued++;
             }
         }
+
+        return queued;
     }
 
     /// <summary>

@@ -426,7 +426,12 @@ public sealed class FileWatcherSteps(ScenarioContext scenarioContext)
     }
 
     [Given("^a watch for \"([^\"]*)\" on path \"([^\"]*)\" that is scanning$")]
-    public Task GivenWatchScanning(string projectId, string path) => SetupWatchAsync(projectId, path);
+    public Task GivenWatchScanning(string projectId, string path)
+    {
+        // A file the scan queues and no tick has digested keeps the watch scanning; an empty scan settles it (ADR-0155).
+        WriteFileAt(path, "pending.md");
+        return SetupWatchAsync(projectId, path);
+    }
 
     [Given("^a watch for \"([^\"]*)\" on path \"([^\"]*)\" with no pending changes$")]
     public Task GivenWatchNoPendingChanges(string projectId, string path) => SetupWatchAsync(projectId, path);

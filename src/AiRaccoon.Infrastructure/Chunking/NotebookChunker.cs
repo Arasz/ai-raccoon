@@ -74,7 +74,7 @@ internal sealed class NotebookChunker(IMarkdownChunker markdownChunker) : INoteb
             return;
         }
 
-        var cellType = typeElement.ValueKind == JsonValueKind.String ? typeElement.GetString() : null;
+        var cellType = typeElement.ValueKind == JsonValueKind.String ? JsonStringReader.Read(typeElement) : null;
         if (cellType is not ("code" or "markdown"))
         {
             return;
@@ -152,14 +152,14 @@ internal sealed class NotebookChunker(IMarkdownChunker markdownChunker) : INoteb
         switch (source.ValueKind)
         {
             case JsonValueKind.String:
-                return source.GetString() ?? "";
+                return JsonStringReader.Read(source);
             case JsonValueKind.Array:
                 var builder = new StringBuilder();
                 foreach (var line in source.EnumerateArray())
                 {
                     if (line.ValueKind == JsonValueKind.String)
                     {
-                        builder.Append(line.GetString());
+                        builder.Append(JsonStringReader.Read(line));
                     }
                 }
 
@@ -183,6 +183,6 @@ internal sealed class NotebookChunker(IMarkdownChunker markdownChunker) : INoteb
 
     private static string NamedString(JsonElement metadata, string section, string key) =>
         metadata.TryGetProperty(section, out var node) && node.ValueKind == JsonValueKind.Object && node.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? ""
+            ? JsonStringReader.Read(value)
             : "";
 }

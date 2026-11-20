@@ -934,4 +934,72 @@ public sealed class WatchCatchUpTests
         await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
         stack.Memory.Ingested.Select(i => i.Path).ShouldNotContain(file);
     }
+
+    /// <summary>ADR-0155: a restart scan that finds nothing due settles its watch Healthy with a LastSync.</summary>
+    [RetryFact]
+    public async Task EnqueueChangedFiles_NothingDue_SettlesTheWatchHealthy()
+    {
+        using var dir = TempDir.New("catchup-idle-settles");
+        var stack = new WatchTestStack();
+        stack.Enable();
+        stack.AllowScope(dir.Path);
+        var unchanged = dir.File("a.md");
+        await WriteAllTextAsync(unchanged, "zephyridle", TestContext.Current.CancellationToken);
+        var now = stack.Time.GetUtcNow().ToUnixTimeSeconds();
+        Stamp(unchanged, DateTimeOffset.FromUnixTimeSeconds(now - 7200));
+        await stack.Store.UpsertFileHashAsync(Project, IngestPath.Normalize(unchanged), "zephyrhash",
+            now - 3600, TestContext.Current.CancellationToken);
+        stack.Pipeline.RegisterWatch(Project, dir.Path);
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueChangedFiles(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+
+        stack.Memory.Ingested.ShouldBeEmpty();
+        var status = stack.Pipeline.GetStatuses(Project).Single();
+        status.State.ShouldBe(WatchState.Healthy);
+        status.LastSync.ShouldBe(WatchTestStack.FixedNow);
+    }
+
+    /// <summary>ADR-0155: a full scan of an empty watch also settles it.</summary>
+    [RetryFact]
+    public async Task EnqueueInitialScan_EmptyDirectory_SettlesTheWatchHealthy()
+    {
+        using var dir = TempDir.New("catchup-empty-settles");
+        var stack = new WatchTestStack();
+        stack.Pipeline.RegisterWatch(Project, dir.Path);
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueInitialScan(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+
+        var status = stack.Pipeline.GetStatuses(Project).Single();
+        status.State.ShouldBe(WatchState.Healthy);
+        status.LastSync.ShouldBe(WatchTestStack.FixedNow);
+    }
+
+    /// <summary>ADR-0155: an idle scan proves no recovery, so a Retrying watch keeps its state and error.</summary>
+    [RetryFact]
+    public async Task EnqueueChangedFiles_NothingDue_LeavesARetryingWatchRetrying()
+    {
+        using var dir = TempDir.New("catchup-idle-retrying");
+        var stack = new WatchTestStack();
+        var failing = dir.File("a.md");
+        await WriteAllTextAsync(failing, "zephyrfail", TestContext.Current.CancellationToken);
+        stack.Pipeline.RegisterWatch(Project, dir.Path);
+        stack.Memory.IngestError = new IOException("disk boom");
+        stack.Pipeline.Enqueue(new WatchEvent(Project, failing, WatchEventKind.Created));
+        await stack.Pipeline.TickOnceAsync(TestContext.Current.CancellationToken);
+        stack.Pipeline.GetStatuses(Project).Single().State.ShouldBe(WatchState.Retrying);
+        Delete(failing);
+        var catchUp = NewCatchUp(stack);
+
+        catchUp.EnqueueChangedFiles(Project, dir.Path, TestContext.Current.CancellationToken);
+        await catchUp.LastScan!;
+
+        var status = stack.Pipeline.GetStatuses(Project).Single();
+        status.State.ShouldBe(WatchState.Retrying);
+        status.LastError.ShouldNotBeNull().ShouldContain("disk boom");
+    }
 }
