@@ -84,7 +84,7 @@
   },
   {
    "item": "file-watch-status",
-   "expected-result": "get_watch_status lists live registrations and their sync state"
+   "expected-result": "get_watch_status lists live registrations and their sync state. After a server restart, every idle watch whose catch-up scan has finished reads Healthy with a lastSync, also when the scan found no due file."
   },
   {
    "item": "watch-catch-up-heals-a-missed-change",
@@ -94,19 +94,19 @@
   {
    "item": "watch-ignore-file-starts-no-rescan-loop",
    "expected-result": "Watch a scratch directory whose root holds ai-raccoon.ignore (excluding skip/) plus a.md with a unique term. After the initial scan settles, the serve log gains no EventId 899 line for 30 s, and watch_files keeps the ignore file with a 64-hex file_hash. Append a rule to ai-raccoon.ignore: exactly one rescan follows (the 899 or digest lines appear once, then stop again for 30 s). (ADR-0154)",
-   "negative-control": "Same tree served by 2.10.2 from a scratch --tool-path logs EventId 899 with `0 row(s) written` about every 1.5 s.",
+   "negative-control": "Remove a rule so that an excluded file becomes indexable: exactly one rescan indexes it, which shows the edit is seen. A 2.10.2 build on macOS (2026-11-20) did not reproduce the loop in 30 s, so the quiet window alone is not proof on macOS; the loop was reported on Windows.",
    "anchor": "docs/adr/0154-the-ignore-file-keeps-a-real-fingerprint-and-a-lone-surrogate-reads-as-u-fffd.md"
   },
   {
    "item": "watch-skipped-file-is-not-redigested",
    "expected-result": "Watch a scratch directory holding bin.md (an indexed extension with NUL bytes, which ingest skips) and good.md. watch_files keeps a row for bin.md whose file_hash starts with `skip:`, and over 30 s idle the serve log gains no digest of bin.md. Rewrite bin.md: it is digested once and stays skip-marked. good.md's term is found by query. (ADR-0153)",
-   "negative-control": "Same tree served by 2.10.1 from a scratch --tool-path leaves no watch_files row for bin.md and re-digests it on each catch-up pass.",
+   "negative-control": "Same tree served by 2.10.1 from a scratch --tool-path keeps no watch_files row for bin.md (2.10.3 keeps a skip: row).",
    "anchor": "docs/adr/0153-a-skipped-file-keeps-a-skip-marked-watch-stamp.md"
   },
   {
    "item": "watch-lone-surrogate-file-is-indexed",
-   "expected-result": "Watch a scratch directory holding data.json whose property name is the escape \\uD83D next to a unique term. get_watch_status reads Healthy with no lastError, and query finds the term. (ADR-0154)",
-   "negative-control": "Same tree served by 2.10.2 from a scratch --tool-path puts the watch in retrying with a tokenizer error.",
+   "expected-result": "Watch a scratch directory holding data.json whose property name is the escape \\uD83D, and nb.ipynb and hi.ipynb whose markdown cell sources hold \\uDE00 and \\uD83D, each next to a unique term. With the memory and code engines set, get_watch_status reads Healthy with no lastError, and query finds every term. When a digest does fail, lastError starts with the file's path. (ADR-0154)",
+   "negative-control": "Same tree served by 2.10.2 from a scratch --tool-path: lastError holds the message without the file path.",
    "anchor": "docs/adr/0154-the-ignore-file-keeps-a-real-fingerprint-and-a-lone-surrogate-reads-as-u-fffd.md"
   },
   {

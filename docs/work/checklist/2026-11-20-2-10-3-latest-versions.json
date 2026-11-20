@@ -1,0 +1,168 @@
+{
+  "run": {
+    "date": "2026-11-20",
+    "branch": "checklist/2.10.3-latest-versions",
+    "commit": "6b82b8acb76bad7a58749aed3fa5bbff3ae6d789",
+    "note": "Scoped pass over the releases since the 2.9.0 full pass: 2.9.1, 2.10.0-2.10.3. Five new items cover the 2.10.x watch fixes.",
+    "scope": [
+      "build-and-install-global-package",
+      "server-lifecycle",
+      "file-watch-status",
+      "watch-catch-up-heals-a-missed-change",
+      "watch-ignore-file-starts-no-rescan-loop",
+      "watch-skipped-file-is-not-redigested",
+      "watch-lone-surrogate-file-is-indexed",
+      "watch-add-and-remove-apply-at-once",
+      "watch-ignore-rule-edit-applies",
+      "typed-memory-only-ttl",
+      "typed-query-all-selections",
+      "observability-event-ids"
+    ]
+  },
+  "derived": {
+    "version": "2.10.3",
+    "mcp-tool-count": "43",
+    "mcp-prompt-count": "2"
+  },
+  "findings-against-prior-runs": [
+    "The 2.9.0 run listed EventId 1005 among emitted ids without remark. It is the embed drain failing on a bank with no embedding engine set: each pass logs a Warning with a full ArgumentOutOfRangeException stack ('Unknown embedding provider; expected local or openai'). Seen on 2.10.1-2.10.3 scratch banks until 'model embedding set local'. Not a defect of an item, but noisy on every fresh install.",
+    "The 2.9.0 run's watch-catch-up evidence ('get_watch_status reads Healthy') holds only for watches whose catch-up digested a file; idle watches with nothing due stay Scanning after a restart (#971).",
+    "The 2.10.3 changelog says a notebook cell with an unpaired surrogate escape no longer fails its watch; it still does (#970)."
+  ],
+  "items": [
+    {
+      "item": "build-and-install-global-package",
+      "expected-result": "Release pack succeeds; install to an isolated tool path, or force-update the global tool when requested; installed --version matches derived.version.",
+      "command": "python3 scripts/download-embedding-model.py && python3 scripts/download-mlx-runtime.py && dotnet pack src/AiRaccoon/AiRaccoon.csproj -c Release -p:RuntimeIdentifiers=osx-arm64 -o $S/pack; dotnet tool install ai-raccoon --version 2.10.3 --tool-path $S/t2.10.3 --source https://api.nuget.org/v3/index.json; $S/t2.10.3/ai-raccoon --version; shasum -a 256 of the store nupkgs (scratch and global) and of curl https://api.nuget.org/v3-flatcontainer/ai-raccoon.osx-arm64/2.10.3/ai-raccoon.osx-arm64.2.10.3.nupkg",
+      "evidence": "Successfully created package '.../pack/ai-raccoon.osx-arm64.2.10.3.nupkg' (146.4M) and '.../pack/ai-raccoon.2.10.3.nupkg'; exit=0\nTool 'ai-raccoon' (version '2.10.3') was successfully installed.\n2.10.3+284789247b627e534fa5c9f9f6a8b58cc6e4be3d\nb07ce5aa03ab92ac248b72514799d8e20b8f95448764f15b412978d1b6cd1364 scratch store ai-raccoon.osx-arm64.nupkg\nb07ce5aa03ab92ac248b72514799d8e20b8f95448764f15b412978d1b6cd1364 ~/.dotnet/tools/.store/ai-raccoon/2.10.3/ai-raccoon.osx-arm64.nupkg\nb07ce5aa03ab92ac248b72514799d8e20b8f95448764f15b412978d1b6cd1364 nuget.org flatcontainer download",
+      "observed-result": "Release pack of the tree succeeds. The published 2.10.3 installs to an isolated tool path; its --version matches derived.version 2.10.3 and its +sha 28478924 is the main commit that carries 2.10.3. The scratch install, the owner's global install and the nuget.org bytes have the same SHA-256.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Version and build identity proven by commit sha and package digest."
+    },
+    {
+      "item": "server-lifecycle",
+      "expected-result": "`serve --port 0` binds and reports its port; `serve --restart` on that port cycles the server it finds rather than attaching, and never touches port 7721",
+      "command": "$S/t2.10.3/ai-raccoon --data-root $S/d1 serve --port 0 --idle-timeout 0 (background); lsof -tiTCP:<port> -sTCP:LISTEN; $S/t2.10.3/ai-raccoon --data-root $S/d1 serve --restart --port 54828 --idle-timeout 0 (background); lsof again; ps -p <old pid>; lsof -iTCP:7721",
+      "evidence": "serve1.log: ai-raccoon: 2.10.3+284789247b627e534fa5c9f9f6a8b58cc6e4be3d serving on port 54828 from '.../t2.10.3/.store/ai-raccoon/2.10.3/...' ; listener PID=51158\nserve1r.log: ... serving on port 54828 ...\nlsof :54828 -> AiRaccoon 51485 TCP 127.0.0.1:54828 (LISTEN); ps -p 51158 -> old pid 51158 gone\nlsof :7721 -> AiRaccoon 41323 (owner's live server, not touched)",
+      "observed-result": "Port 0 binds and reports 54828. --restart on that port replaced pid 51158 with 51485 and did not attach. 7721 kept the owner's pid.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches the expected result."
+    },
+    {
+      "item": "file-watch-status",
+      "expected-result": "get_watch_status lists live registrations and their sync state. After a server restart, every idle watch whose catch-up scan has finished reads Healthy with a lastSync, also when the scan found no due file.",
+      "command": "settings ingest scope add <P> $S/w; settings watch enable <P> true; MCP add_watch x7; MCP get_watch_status; CLI `watch status <P>` and `watch registered <P>`; after a server stop + start on the same data root, poll get_watch_status 3 times 30 s apart; then write wD/p.md and read status again; ps CPU time of the server",
+      "evidence": "before restart: wD Healthy lastSync 2026-11-20T19:03:51; wB Healthy skippedCount 1 (bin.md binary)\nafter restart, 20:13:45 / 20:14:15 / 20:14:45: wA=Scanning/ wB=Healthy/19:12:35 wC=Retrying wD=Scanning/ wE=Scanning/ wF=Healthy/19:12:35 wG=Retrying\nCLI watch status: path .../w/wA state: scanning lastSync: never\nserver 61834 cpu 0:04.41 -> 0:04.44 in 10 s (idle)\nwrite wD/p.md: FOUND postrestartmarkd after 0.4s; then wD=Healthy, wA/wE still Scanning\nwatch registered lists all registrations with registered/lastChange",
+      "observed-result": "Registrations and skipped files list correctly (MCP and CLI). After a restart, an idle watch whose catch-up found nothing due stays Scanning with lastSync never until a file event; only watches where catch-up digested a file read Healthy. WatchPipeline.RunJobAsync is the only Healthy transition; WatchCatchUp.ScanCoreAsync sets none.",
+      "status": "fail",
+      "accepted": null,
+      "acceptance-reason": "Defect tracked in #971 (cause read from code, likely older than 2.10.x). Acceptance is the owner's decision."
+    },
+    {
+      "item": "watch-catch-up-heals-a-missed-change",
+      "anchor": "docs/adr/0121-restart-catch-up-compares-each-file-with-its-own-fingerprint.md",
+      "expected-result": "Watch a scratch directory (`settings ingest scope add`, `settings watch enable`, add_watch) holding x.md, w.md and y.md, plus node_modules/pkg/index.md and .git/notes.md, each with a term found nowhere else. Wait for three watch_files rows and leave node_modules readable (a `chmod 000` decoy is absent whether or not it is excluded, so that leg could never fail), wait 2 s, then edit y.md so watches.last_change_ts moves past x.md's watch_files.updated_at. Read both values while the server runs, because a stopped WAL bank will not open read-only. Stop the server. Replace one word of x.md with a new term of the same byte length and `touch -t $(date -r <t> +%Y%m%d%H%M.%S)` it, where t is between x.md's updated_at and last_change_ts. Rewrite w.md at a different size with a new term, and touch it to before its own updated_at. Restart on the same data root. Within seconds query finds both new terms, watch_files shows new updated_at and size for x.md and w.md, and get_watch_status reads Healthy. Neither the node_modules term nor the .git term is ever found. Premise: before the restart, updated_at(x.md) <= mtime(x.md) <= last_change_ts. A build without ADR-0121 finds neither new term, because it re-queues only files with mtime > last_change_ts. The 5-minute heal pass (WatchHostedService.HealInterval, event 322 at Debug) is optional: it needs a server left up for over 5 minutes (ADR-0121)",
+      "command": "Scratch dir wF with x.md (quillfernab), w.md (marbleqrs), y.md, node_modules/pkg/index.md (nodemodtermqa); add_watch; wait for 3 watch_files rows; edit y.md; read updated_at/last_change_ts while the server runs; kill server 51485; same-length swap quillfernab->emberwolfxy in x.md, touch to 1795201925; rewrite w.md 21->41 bytes (glimmerashq), touch to 1795201920; serve again on the same data root and port 54828; poll query; watch_files; get_watch_status",
+      "evidence": "premise: x.md updated_at 1795201924, mtime 1795201925 after touch, last_change_ts 1795201927 -> updated_at <= mtime <= last_change_ts; w.md mtime 1795201920 < updated_at 1795201924; sizes x 26->26, w 21->41\nbefore restart: quillfernab and marbleqrs FOUND, nodemodtermqa NOTFOUND\nafter restart: FOUND emberwolfxy after 0.7s; FOUND glimmerashq after 0.1s; NOTFOUND nodemodtermqa within 3.0s\nwatch_files: w.md|1795201955|41, x.md|1795201955|26, y.md|1795201927|30\nget_watch_status wF: Healthy",
+      "observed-result": "Restart catch-up found both missed edits (the same-size x.md by its own fingerprint, the backdated w.md by size) and the watch read Healthy; the node_modules term was never found.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0121. The dot-git decoy leg was not driven: this session's environment guard blocks writing a .git directory, and the auto-mode classifier denied a workaround. The 5-minute heal pass was not waited for (optional)."
+    },
+    {
+      "item": "watch-ignore-file-starts-no-rescan-loop",
+      "anchor": "docs/adr/0154-the-ignore-file-keeps-a-real-fingerprint-and-a-lone-surrogate-reads-as-u-fffd.md",
+      "expected-result": "Watch a scratch directory whose root holds ai-raccoon.ignore (excluding skip/) plus a.md with a unique term. After the initial scan settles, the serve log gains no EventId 899 line for 30 s, and watch_files keeps the ignore file with a 64-hex file_hash. Append a rule to ai-raccoon.ignore: exactly one rescan follows (the 899 or digest lines appear once, then stop again for 30 s). (ADR-0154)",
+      "command": "MCP add_watch $S/w/wA (ai-raccoon.ignore = 'skip/', a.md fernquiltax, skip/s.md skipdirzx); wait 8 s; count serve log lines for 30 s idle; sqlite3 -readonly watch_files for the ignore file; edit ignore to 'skip/\\nnone/' and watch 30 s; then set ignore to 'none/' (skip/ now indexable), poll query skipdirzx and read the log for 30 s more. Control: same tree on 2.10.2 (scratch --tool-path, data root d2) for 30 s idle and after an ignore edit.",
+      "evidence": "2.10.3 30 s idle: no new log lines at all\nwatch_files: wA/ai-raccoon.ignore|4882cacefde9bfbc9721b3c42945687df9261da9244159959c925a025c5bae2c|6\nafter adding none/: 0 log lines in 30 s; row -> 9aebea873d0000d7...|12|1795201562\nafter removing skip/: FOUND skipdirzx after 2.0s; log: one SqliteMemoryStore[899] 'Replace-by-path ... (1 row(s) written)', then quiet for 30 s\n2.10.2 control: 30 s idle no 899 lines; after an ignore edit exactly one 899 '(0 row(s) written)', then quiet",
+      "observed-result": "On 2.10.3 an unchanged ignore file starts no rescan, the ignore row keeps a 64-hex hash, and an edit that frees a directory starts exactly one rescan that indexes it. The 2.10.2 control did not loop on macOS either, so the quiet window is not a discriminating check on this host; the one-rescan-per-edit leg is.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Expected behaviour observed on 2.10.3. The loop was reported on Windows; this run could not reproduce it on 2.10.2/macOS, and the item's negative control now says so.",
+      "negative-control": "Remove a rule so that an excluded file becomes indexable: exactly one rescan indexes it, which shows the edit is seen. A 2.10.2 build on macOS (2026-11-20) did not reproduce the loop in 30 s, so the quiet window alone is not proof on macOS; the loop was reported on Windows."
+    },
+    {
+      "item": "watch-skipped-file-is-not-redigested",
+      "anchor": "docs/adr/0153-a-skipped-file-keeps-a-skip-marked-watch-stamp.md",
+      "expected-result": "Watch a scratch directory holding bin.md (an indexed extension with NUL bytes, which ingest skips) and good.md. watch_files keeps a row for bin.md whose file_hash starts with `skip:`, and over 30 s idle the serve log gains no digest of bin.md. Rewrite bin.md: it is digested once and stays skip-marked. good.md's term is found by query. (ADR-0153)",
+      "command": "MCP add_watch $S/w/wB (bin.md with NUL bytes, good.md goodmarkqv); sqlite3 -readonly watch_files; 30 s idle log; get_watch_status; query goodmarkqv; restart server (same data root) and read watch_files + 30 s idle log again. Control: same tree on 2.10.1 (scratch --tool-path, data root d3).",
+      "evidence": "2.10.3 watch_files: wB/bin.md|skip:aabf7fd0299ad1ee566e0b9eca9d5f992084a69f795437a273725af24f6bab15|21\nget_watch_status wB: Healthy, skippedCount 1, skipped [{path: .../wB/bin.md, reason: binary}]\n30 s idle: no log lines; FOUND goodmarkqv after 0.1s\nafter restart: wB/bin.md|skip:aabf7fd0299ad1e|1795201955 (retried once at start), then 30 s idle: no log lines\n2.10.1 control watch_files: ai-raccoon.ignore, a.md, data.json, good.md -- no row for bin.md; wB skippedCount 1",
+      "observed-result": "2.10.3 keeps a skip-marked stamp for the skipped file, lists it as skipped, and does not digest it again while idle; after a restart it is retried once and stays skip-marked. 2.10.1 keeps no stamp for the same file.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0153. The rewrite leg was not driven separately; the restart retry shows a due skipped file is digested once.",
+      "negative-control": "Same tree served by 2.10.1 from a scratch --tool-path keeps no watch_files row for bin.md (2.10.3 keeps a skip: row)."
+    },
+    {
+      "item": "watch-lone-surrogate-file-is-indexed",
+      "anchor": "docs/adr/0154-the-ignore-file-keeps-a-real-fingerprint-and-a-lone-surrogate-reads-as-u-fffd.md",
+      "expected-result": "Watch a scratch directory holding data.json whose property name is the escape \\uD83D, and nb.ipynb and hi.ipynb whose markdown cell sources hold \\uDE00 and \\uD83D, each next to a unique term. With the memory and code engines set, get_watch_status reads Healthy with no lastError, and query finds every term. When a digest does fail, lastError starts with the file's path. (ADR-0154)",
+      "command": "model embedding set local + model code set default (--port); write wC/d2.json {\"\\uD83D\": \"surrmarkjw2\", ...} and wC/nb.ipynb (markdown cell source 'nbcellmarkqz \\uDE00 tail'); new watch wG/hi.ipynb (source 'hicellmarkqz \\uD83D tail'); get_watch_status; query each term (entryType file,code); serve log WatchPipeline[304]. Control: same files on 2.10.2.",
+      "evidence": "2.10.3: FOUND surrmarkjw2 after 0.1s; NOTFOUND nbcellmarkqz within 3.0s\nwC Retrying '.../w/wC/nb.ipynb: Cannot read invalid UTF-16 JSON text as string. Invalid surrogate value: '0xDE00'.'\nwG Retrying '.../w/wG/hi.ipynb: Cannot read incomplete UTF-16 JSON text as string with missing low surrogate.'\nwarn: AiRaccoon.Infrastructure.Watch.WatchPipeline[304] Watch digest of .../nb.ipynb failed\n  at System.Text.Json.JsonReaderHelper.GetUnescapedString(...)\n  at AiRaccoon.Infrastructure.Chunking.NotebookChunker.Source(JsonElement cell)\n  at AiRaccoon.Infrastructure.Chunking.NotebookChunker.Flatten(String text)\n2.10.2 control: wC Retrying 'Cannot read invalid UTF-16 JSON text as string. Invalid surrogate value: '0xDE00'.' (no path)",
+      "observed-result": "The JSON-file leg indexes. A notebook cell with a lone surrogate (high or low) still fails its whole watch on 2.10.3: NotebookChunker.Source throws in System.Text.Json before the tokenizer fix applies. The 2.10.3 lastError now names the file (2.10.2 did not).",
+      "status": "fail",
+      "accepted": null,
+      "acceptance-reason": "Defect tracked in #970. The 2.10.3 changelog claims the notebook case is fixed. Acceptance is the owner's decision.",
+      "negative-control": "Same tree served by 2.10.2 from a scratch --tool-path: lastError holds the message without the file path."
+    },
+    {
+      "item": "watch-add-and-remove-apply-at-once",
+      "anchor": "docs/adr/0152-ignore-rules-reload-on-a-change-token-and-watch-changes-wake-the-reconcile.md",
+      "expected-result": "add_watch over MCP on a scratch directory with a unique term: query finds the term within 5 s, not after the 10 s reconcile interval. remove_watch, then create a new file with a second unique term: it is never found within 20 s. (ADR-0152)",
+      "command": "MCP add_watch {projectId, path: $S/w/wD2} (wD2/d.md holds addmarkwq), then poll MCP query addmarkwq (entryType file, vectorWeight 0) every 0.25 s; MCP remove_watch wD2; write wD2/n.md (removedmarkkt) and, as a control, wD/c.md (controlmarkgv) on a still-watched dir; poll both 20 s; sqlite3 -readonly watch_files where path like '%wD2%'",
+      "evidence": "add_watch reply after 0.06s: {\"data\":{\"projectId\":\"01a1fa57-...\",\"path\":\".../w/wD2\"...\nFOUND addmarkwq after 0.2s (0.4s since add_watch call)\nremove_watch -> {\"data\":{...\"path\":\".../w/wD2\",\"removed\":true...\nFOUND controlmarkgv after 0.7s\nNOTFOUND removedmarkkt within 20.0s\nwatch_files rows for wD2 after remove: none",
+      "observed-result": "The new watch indexed its file 0.4 s after the add_watch call, well under the 10 s reconcile interval. After remove_watch a new file in that directory was not indexed in 20 s, while a new file in a still-watched directory was indexed in 0.7 s.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Add applies at once (0.4 s < 5 s) and remove stops the watcher; the control proves the watcher was still working.",
+      "negative-control": "Time the add from the add_watch reply to the first hit; record the elapsed time, since a build without the wake signal takes up to 10 s."
+    },
+    {
+      "item": "watch-ignore-rule-edit-applies",
+      "anchor": "docs/adr/0152-ignore-rules-reload-on-a-change-token-and-watch-changes-wake-the-reconcile.md",
+      "expected-result": "On a watched scratch directory, add a rule for later/ to ai-raccoon.ignore, then create later/n.md with a unique term: query never finds it within 20 s. Create kept/k.md with another term in the same window: query finds it. (ADR-0151, ADR-0152)",
+      "command": "MCP add_watch $S/w/wE (e.md edirmarkqp); write ai-raccoon.ignore 'later/'; after 2 s create later/n.md (latermarkvb) and kept/k.md (keptmarkhd); poll query 20 s each; sqlite3 -readonly watch_files for wE",
+      "evidence": "FOUND edirmarkqp after 0.7s\nFOUND keptmarkhd after 1.2s\nNOTFOUND latermarkvb within 20.0s\nwatch_files: wE/ai-raccoon.ignore, wE/e.md, wE/kept/k.md (no later/n.md)",
+      "observed-result": "A rule added to the ignore file applies to files created after it; the control file in a non-ignored directory was indexed in the same window.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0151/0152; the control proves the watcher was live.",
+      "negative-control": "kept/k.md is the control: a watcher that stopped processing would also not find later/n.md."
+    },
+    {
+      "item": "observability-event-ids",
+      "anchor": "docs/reference/logging-event-ids.md",
+      "expected-result": "emitted [LoggerMessage] event ids resolve against docs/reference/logging-event-ids.md",
+      "command": "python: collect '<level>: AiRaccoon...[id]' from every scratch serve log ($S/serve*.log, 2.10.1/2.10.2/2.10.3) and resolve each id against the single ids and ranges in the first column of docs/reference/logging-event-ids.md",
+      "evidence": "emitted AiRaccoon ids: [304, 428, 446, 447, 448, 450, 510, 525, 601, 650, 651, 660, 672, 673, 674, 675, 692, 899, 910, 911, 1003, 1005, 1008]\nunresolved: []\nframework ids ignored: [0, 14]\ndoc rows cover 212 ids",
+      "observed-result": "Every emitted id, including the new 304 (digest failure with its file), resolves to a documented row.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches the expected result. 896 (skip at Debug) was not emitted at the default log level."
+    },
+    {
+      "item": "typed-query-all-selections",
+      "anchor": "docs/adr/0141-typed-vector-partitions.md",
+      "expected-result": "Seed distinguishable Memory/File/Code plus an unclassified control. Drive all seven nonempty entryType subsets and omitted default, including mixed case/spacing. Narrow sets return only declared selected types; any selection naming both memory and file (default/all included) also returns unclassified rows. Confirm kind_mask exactly 1..7. (2.1.0 changelog, ADR-0141)",
+      "command": "add_memory (memmarkerxq) and a second note (nonemarkerxq) set to entry_type 'none' by sqlite UPDATE on the scratch bank, then re-embedded through vec0 (embed_state pending + embed_deferred_entries) so its vector partition matches; ingest_file doc.md (filemarkerxq) and code.py (codemarkerxq); MCP query 'plumquatz' with each entryType selection; sqlite3 -readonly search_quality.kind_mask",
+      "evidence": "'memory'            memory-leg=[('memory','memmarkerxq')] code=[]\n'file'              memory-leg=[('file','filemarkerxq')] code=[]\n'code'              memory-leg=[] code=['codemarkerxq']\n'memory,file'       memory-leg=[file, memory, ('none','nonemarkerxq')] code=[]\n'memory,code'       memory-leg=[('memory','memmarkerxq')] code=['codemarkerxq']\n'file,code'         memory-leg=[('file','filemarkerxq')] code=['codemarkerxq']\n'memory,file,code'  memory-leg=[file, memory, none] code=['codemarkerxq']\nNone                memory-leg=[file, memory, none] code=['codemarkerxq']\n' Memory , FILE '   memory-leg=[file, memory, none] code=[]\n'CODE,memory'       memory-leg=[('memory','memmarkerxq')] code=['codemarkerxq']\nkind_mask this session in order: 1,4,2,5,3,6,7,7,5,3; distinct across bank: 1,2,3,4,5,6,7",
+      "observed-result": "Narrow selections return only their declared kinds; every selection naming both memory and file (and the default) also returns the unclassified row; kind_mask values are exactly 1..7.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches the 2.9.1 wording. Before the re-embed, 'memory' also returned the unclassified row through the vector leg because a hand-unclassified row keeps its old vector partition; that is a substrate artifact of the seeding, not product behaviour."
+    },
+    {
+      "item": "typed-memory-only-ttl",
+      "anchor": "docs/adr/0148-bank-guards-memory-only-ttl-and-the-kind-domain.md",
+      "expected-result": "In full access mode set/clear Memory TTL; refuse setting and clearing File, unclassified and Code-only hashes, and retain negative controls. (2.1.0 changelog, ADR-0148, ADR-0150)",
+      "command": "set_memory_ttl in default access mode; settings access set <P> full; set_memory_ttl set/clear on Memory, File, unclassified and Code hashes and an unknown hash; sqlite3 -readonly entries.ttl_days after each",
+      "evidence": "default mode: access-denied: set_memory_ttl requires mode full (current rw)\nset memory 30: {...ttlDays:30...} | db=30\nclear memory: {...} | db=NULL\nset memory 7: {...ttlDays:7...} | db=7\nset file 30: not-a-memory-entry ... | db=NULL\nclear file: not-a-memory-entry ... | db=NULL\nset none 30: not-a-memory-entry ... | db=NULL\nclear none: not-a-memory-entry ... | db=NULL\nset code 30: unknown-hash ...\nclear code: unknown-hash ...\nunknown: unknown-hash ...",
+      "observed-result": "Memory TTL set/clear/set works and is stored. Setting and clearing are both refused on File and unclassified rows; Code hashes are unknown to the memory TTL tool. The 2.9.0 run saw 'clear file' succeed; 2.9.1 now refuses it.",
+      "status": "pass",
+      "accepted": true,
+      "acceptance-reason": "Matches ADR-0148/ADR-0150; the 2.9.0 result is the negative control."
+    }
+  ]
+}
